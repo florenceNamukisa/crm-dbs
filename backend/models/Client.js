@@ -4,52 +4,88 @@ const clientSchema = new mongoose.Schema({
   // Personal Information
   name: {
     type: String,
-    required: true,
+    required: [true, 'Client name is required'],
     trim: true
   },
   dateOfBirth: Date,
   gender: {
     type: String,
-    enum: ['male', 'female', 'other', 'prefer_not_to_say']
+    enum: ['male', 'female', 'other', 'prefer_not_to_say'],
+    default: ''
   },
   nin: {
     type: String,
-    required: true,
-    unique: true
+    required: [true, 'NIN is required'],
+    unique: true,
+    trim: true
   },
   idType: {
     type: String,
     enum: ['passport', 'national_id', 'drivers_license', 'other'],
-    required: true
+    default: 'national_id'
   },
-  idDocument: String, // File path or URL
   
   // Contact Information
   email: {
     type: String,
-    required: true,
-    lowercase: true
+    required: [true, 'Email is required'],
+    lowercase: true,
+    trim: true
   },
   phone: {
     type: String,
-    required: true
+    required: [true, 'Phone number is required'],
+    trim: true
   },
-  address: String,
-  city: String,
-  state: String,
-  postalCode: String,
-  country: String,
+  address: {
+    type: String,
+    default: ''
+  },
+  city: {
+    type: String,
+    default: ''
+  },
+  state: {
+    type: String,
+    default: ''
+  },
+  postalCode: {
+    type: String,
+    default: ''
+  },
+  country: {
+    type: String,
+    default: ''
+  },
   
   // Company/Professional Info
-  company: String,
-  position: String,
-  industry: String,
+  company: {
+    type: String,
+    default: ''
+  },
+  position: {
+    type: String,
+    default: ''
+  },
+  industry: {
+    type: String,
+    default: ''
+  },
   
   // Emergency Contact
   emergencyContact: {
-    name: String,
-    phone: String,
-    relationship: String
+    name: {
+      type: String,
+      default: ''
+    },
+    phone: {
+      type: String,
+      default: ''
+    },
+    relationship: {
+      type: String,
+      default: ''
+    }
   },
   
   // CRM-Specific Fields
@@ -69,58 +105,45 @@ const clientSchema = new mongoose.Schema({
     min: 0,
     max: 100
   },
-  tags: [String],
-  notes: String,
+  tags: {
+    type: [String],
+    default: []
+  },
+  notes: {
+    type: String,
+    default: ''
+  },
   agent: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    required: [true, 'Agent is required']
   },
   
   // Contact Persons
-  contacts: [{
-    name: String,
-    position: String,
-    email: String,
-    phone: String,
-    isPrimary: Boolean
-  }],
-  
-  // Interaction Tracking
-  lastContact: {
-    date: Date,
-    type: {
-      type: String,
-      enum: ['call', 'email', 'meeting', 'other']
-    },
-    summary: String
-  },
-  
-  // Documents
-  documents: [{
-    name: String,
-    filePath: String,
-    uploadDate: {
-      type: Date,
-      default: Date.now
-    },
-    type: String
-  }],
-  
-  // System Fields
-  createdAt: {
-    type: Date,
-    default: Date.now
-  },
-  updatedAt: {
-    type: Date,
-    default: Date.now
+  contacts: {
+    type: [{
+      name: String,
+      position: {
+        type: String,
+        default: ''
+      },
+      email: {
+        type: String,
+        default: ''
+      },
+      phone: {
+        type: String,
+        default: ''
+      },
+      isPrimary: {
+        type: Boolean,
+        default: false
+      }
+    }],
+    default: []
   }
-});
-
-clientSchema.pre('save', function(next) {
-  this.updatedAt = Date.now();
-  next();
+}, {
+  timestamps: true
 });
 
 export default mongoose.model('Client', clientSchema);

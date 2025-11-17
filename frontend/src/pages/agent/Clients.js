@@ -17,12 +17,16 @@ import {
   Eye,
   Users,
   FileText,
-  Tag
+  Tag,
+  ChevronDown,
+  ChevronUp,
+  MoreVertical
 } from 'lucide-react';
 import { clientsAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext'; 
 import toast from 'react-hot-toast';
-import ClientRegistrationForm from './ClientRegistrationForm'; 
+import ClientRegistrationForm from './ClientRegistrationForm';
+
 const Clients = () => {
   const { user } = useAuth();
   const [clients, setClients] = useState([]);
@@ -39,10 +43,13 @@ const Clients = () => {
     totalPages: 1,
     total: 0
   });
+  const [sortConfig, setSortConfig] = useState({ key: 'createdAt', direction: 'desc' });
+  const [selectedClients, setSelectedClients] = useState([]);
+  const [actionMenu, setActionMenu] = useState(null);
 
   useEffect(() => {
     loadClients();
-  }, [filters, pagination.page]);
+  }, [filters, pagination.page, sortConfig]);
 
   const loadClients = async () => {
     try {
@@ -54,7 +61,9 @@ const Clients = () => {
         priority: filters.priority,
         tags: filters.tags,
         page: pagination.page,
-        limit: 12
+        limit: 12,
+        sortBy: sortConfig.key,
+        sortOrder: sortConfig.direction
       };
 
       const response = await clientsAPI.getAll(params);
@@ -73,6 +82,29 @@ const Clients = () => {
     }
   };
 
+  const handleSort = (key) => {
+    setSortConfig(prev => ({
+      key,
+      direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc'
+    }));
+  };
+
+  const handleSelectClient = (clientId) => {
+    setSelectedClients(prev =>
+      prev.includes(clientId)
+        ? prev.filter(id => id !== clientId)
+        : [...prev, clientId]
+    );
+  };
+
+  const handleSelectAll = () => {
+    setSelectedClients(
+      selectedClients.length === clients.length
+        ? []
+        : clients.map(client => client._id)
+    );
+  };
+
   const handleDeleteClient = async (clientId, clientName) => {
     if (window.confirm(`Are you sure you want to delete ${clientName}? This action cannot be undone.`)) {
       try {
@@ -85,10 +117,29 @@ const Clients = () => {
     }
   };
 
+  const handleBulkDelete = async () => {
+    if (selectedClients.length === 0) return;
+    
+    const clientNames = clients
+      .filter(client => selectedClients.includes(client._id))
+      .map(client => client.name)
+      .join(', ');
+
+    if (window.confirm(`Are you sure you want to delete ${selectedClients.length} client(s)? This action cannot be undone.\n\nClients: ${clientNames}`)) {
+      try {
+        await Promise.all(selectedClients.map(id => clientsAPI.delete(id)));
+        toast.success(`${selectedClients.length} client(s) deleted successfully`);
+        setSelectedClients([]);
+        loadClients();
+      } catch (error) {
+        toast.error('Failed to delete some clients');
+      }
+    }
+  };
+
   const handleExportClients = async () => {
     try {
       const response = await clientsAPI.exportCSV();
-      // Create download link
       const blob = new Blob([response.data], { type: 'text/csv' });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -125,138 +176,50 @@ const Clients = () => {
     return colors[priority] || 'bg-gray-100 text-gray-800';
   };
 
-  const ClientCard = ({ client }) => (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="bg-white rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-all duration-200"
-    >
-      <div className="p-6">
-        {/* Header */}
-        <div className="flex items-start justify-between mb-4">
-          <div className="flex items-center space-x-3">
-            <div className="w-12 h-12 bg-gradient-to-br from-orange-100 to-orange-200 rounded-full flex items-center justify-center">
-              <User className="w-6 h-6 text-orange-600" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-gray-900 text-lg">{client.name}</h3>
-              <p className="text-sm text-gray-600 capitalize">{client.position}</p>
-            </div>
-          </div>
-          <div className="flex items-center space-x-1">
-            <button className="p-2 text-gray-400 hover:text-blue-500 transition-colors">
-              <Eye className="w-4 h-4" />
-            </button>
-            <button className="p-2 text-gray-400 hover:text-orange-500 transition-colors">
-              <Edit className="w-4 h-4" />
-            </button>
-            <button 
-              onClick={() => handleDeleteClient(client._id, client.name)}
-              className="p-2 text-gray-400 hover:text-red-500 transition-colors"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
+  const SortIcon = ({ columnKey }) => {
+    if (sortConfig.key !== columnKey) {
+      return <ChevronDown className="w-4 h-4 opacity-30" />;
+    }
+    return sortConfig.direction === 'asc' 
+      ? <ChevronUp className="w-4 h-4" />
+      : <ChevronDown className="w-4 h-4" />;
+  };
 
-        {/* Company Info */}
-        {client.company && (
-          <div className="flex items-center space-x-2 text-sm text-gray-600 mb-3">
-            <Building className="w-4 h-4" />
-            <span>{client.company}</span>
-          </div>
-        )}
-
-        {/* Contact Info */}
-        <div className="space-y-2 mb-4">
-          <div className="flex items-center space-x-2 text-sm text-gray-600">
-            <Mail className="w-4 h-4" />
-            <span className="truncate">{client.email}</span>
-          </div>
-          <div className="flex items-center space-x-2 text-sm text-gray-600">
-            <Phone className="w-4 h-4" />
-            <span>{client.phone}</span>
-          </div>
-          {client.address && (
-            <div className="flex items-center space-x-2 text-sm text-gray-600">
-              <MapPin className="w-4 h-4" />
-              <span className="truncate">{client.address}</span>
-            </div>
-          )}
-        </div>
-
-        {/* Status & Priority */}
-        <div className="flex items-center justify-between mb-4">
-          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(client.status)}`}>
-            {client.status.replace('_', ' ')}
-          </span>
-          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(client.priority)}`}>
-            {client.priority}
-          </span>
-        </div>
-
-        {/* Engagement Score */}
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-sm text-gray-600">Engagement</span>
-          <div className="flex items-center space-x-2">
-            <Star className="w-4 h-4 text-yellow-500 fill-current" />
-            <span className="text-sm font-medium">{client.engagementScore}/100</span>
-          </div>
-        </div>
-
-        {/* Progress Bar */}
-        <div className="w-full bg-gray-200 rounded-full h-2 mb-4">
-          <div 
-            className="bg-orange-500 h-2 rounded-full transition-all duration-300"
-            style={{ width: `${client.engagementScore}%` }}
-          ></div>
-        </div>
-
-        {/* Tags */}
-        {client.tags && client.tags.length > 0 && (
-          <div className="flex flex-wrap gap-1 mb-4">
-            {client.tags.slice(0, 3).map((tag, index) => (
-              <span key={index} className="inline-flex items-center px-2 py-1 rounded-md text-xs bg-blue-50 text-blue-700">
-                <Tag className="w-3 h-3 mr-1" />
-                {tag}
-              </span>
-            ))}
-            {client.tags.length > 3 && (
-              <span className="inline-flex items-center px-2 py-1 rounded-md text-xs bg-gray-50 text-gray-600">
-                +{client.tags.length - 3} more
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* Footer */}
-        <div className="flex items-center justify-between pt-4 border-t border-gray-100">
-          <div className="flex items-center space-x-4 text-xs text-gray-500">
-            <div className="flex items-center space-x-1">
-              <Users className="w-3 h-3" />
-              <span>{client.contacts?.length || 0} contacts</span>
-            </div>
-            <div className="flex items-center space-x-1">
-              <FileText className="w-3 h-3" />
-              <span>{client.documents?.length || 0} docs</span>
-            </div>
-          </div>
-          <div className="text-xs text-gray-500">
-            {new Date(client.createdAt).toLocaleDateString()}
-          </div>
-        </div>
-
-        {/* Last Contact */}
-        {client.lastContact && (
-          <div className="mt-3 pt-3 border-t border-gray-100">
-            <div className="flex items-center space-x-2 text-xs text-gray-600">
-              <Calendar className="w-3 h-3" />
-              <span>Last contact: {new Date(client.lastContact.date).toLocaleDateString()}</span>
-            </div>
-          </div>
-        )}
-      </div>
-    </motion.div>
+  const ActionMenu = ({ client, onClose }) => (
+    <div className="absolute right-0 top-8 bg-white border border-gray-200 rounded-lg shadow-lg z-10 min-w-48">
+      <button
+        onClick={() => {
+          // Implement view details
+          toast.success(`Viewing ${client.name}`);
+          onClose();
+        }}
+        className="w-full flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg"
+      >
+        <Eye className="w-4 h-4" />
+        <span>View Details</span>
+      </button>
+      <button
+        onClick={() => {
+          // Implement edit functionality
+          toast.success(`Editing ${client.name}`);
+          onClose();
+        }}
+        className="w-full flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+      >
+        <Edit className="w-4 h-4" />
+        <span>Edit Client</span>
+      </button>
+      <button
+        onClick={() => {
+          handleDeleteClient(client._id, client.name);
+          onClose();
+        }}
+        className="w-full flex items-center space-x-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+      >
+        <Trash2 className="w-4 h-4" />
+        <span>Delete</span>
+      </button>
+    </div>
   );
 
   if (loading && clients.length === 0) {
@@ -279,6 +242,15 @@ const Clients = () => {
           <p className="text-gray-600 mt-1">Manage your client relationships and contacts</p>
         </div>
         <div className="flex items-center space-x-3">
+          {selectedClients.length > 0 && (
+            <button
+              onClick={handleBulkDelete}
+              className="flex items-center space-x-2 px-4 py-2 border border-red-300 text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>Delete Selected ({selectedClients.length})</span>
+            </button>
+          )}
           <button
             onClick={handleExportClients}
             className="flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
@@ -411,54 +383,228 @@ const Clients = () => {
         </div>
       </div>
 
-      {/* Clients Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-        {clients.length > 0 ? (
-          clients.map((client) => (
-            <ClientCard key={client._id} client={client} />
-          ))
-        ) : (
-          <div className="col-span-full text-center py-12">
-            <User className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">
-              {searchTerm || filters.status || filters.priority ? 'No clients found' : 'No clients yet'}
-            </h3>
-            <p className="text-gray-600 mb-6 max-w-md mx-auto">
-              {searchTerm || filters.status || filters.priority 
-                ? 'Try adjusting your search terms or filters'
-                : 'Get started by adding your first client to the system'
-              }
-            </p>
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="bg-orange-500 text-white px-6 py-3 rounded-lg hover:bg-orange-600 transition-colors"
-            >
-              Add First Client
-            </button>
-          </div>
-        )}
+      {/* Clients Table */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th className="w-12 px-6 py-4">
+                  <input
+                    type="checkbox"
+                    checked={selectedClients.length === clients.length && clients.length > 0}
+                    onChange={handleSelectAll}
+                    className="rounded border-gray-300 text-orange-500 focus:ring-orange-500"
+                  />
+                </th>
+                <th 
+                  className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
+                  onClick={() => handleSort('name')}
+                >
+                  <div className="flex items-center space-x-1">
+                    <span>Client</span>
+                    <SortIcon columnKey="name" />
+                  </div>
+                </th>
+                <th 
+                  className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
+                  onClick={() => handleSort('company')}
+                >
+                  <div className="flex items-center space-x-1">
+                    <span>Company</span>
+                    <SortIcon columnKey="company" />
+                  </div>
+                </th>
+                <th 
+                  className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
+                  onClick={() => handleSort('email')}
+                >
+                  <div className="flex items-center space-x-1">
+                    <span>Contact</span>
+                    <SortIcon columnKey="email" />
+                  </div>
+                </th>
+                <th 
+                  className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
+                  onClick={() => handleSort('status')}
+                >
+                  <div className="flex items-center space-x-1">
+                    <span>Status</span>
+                    <SortIcon columnKey="status" />
+                  </div>
+                </th>
+                <th 
+                  className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
+                  onClick={() => handleSort('priority')}
+                >
+                  <div className="flex items-center space-x-1">
+                    <span>Priority</span>
+                    <SortIcon columnKey="priority" />
+                  </div>
+                </th>
+                <th 
+                  className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
+                  onClick={() => handleSort('engagementScore')}
+                >
+                  <div className="flex items-center space-x-1">
+                    <span>Engagement</span>
+                    <SortIcon columnKey="engagementScore" />
+                  </div>
+                </th>
+                <th 
+                  className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
+                  onClick={() => handleSort('createdAt')}
+                >
+                  <div className="flex items-center space-x-1">
+                    <span>Created</span>
+                    <SortIcon columnKey="createdAt" />
+                  </div>
+                </th>
+                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {clients.length > 0 ? (
+                clients.map((client) => (
+                  <motion.tr
+                    key={client._id}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="hover:bg-gray-50 transition-colors"
+                  >
+                    <td className="px-6 py-4">
+                      <input
+                        type="checkbox"
+                        checked={selectedClients.includes(client._id)}
+                        onChange={() => handleSelectClient(client._id)}
+                        className="rounded border-gray-300 text-orange-500 focus:ring-orange-500"
+                      />
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-10 h-10 bg-gradient-to-br from-orange-100 to-orange-200 rounded-full flex items-center justify-center">
+                          <User className="w-5 h-5 text-orange-600" />
+                        </div>
+                        <div>
+                          <div className="font-medium text-gray-900">{client.name}</div>
+                          <div className="text-sm text-gray-500 capitalize">{client.position}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center space-x-2">
+                        <Building className="w-4 h-4 text-gray-400" />
+                        <span className="text-sm text-gray-900">{client.company || 'N/A'}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center space-x-2">
+                          <Mail className="w-4 h-4 text-gray-400" />
+                          <span className="text-sm text-gray-900">{client.email}</span>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Phone className="w-4 h-4 text-gray-400" />
+                          <span className="text-sm text-gray-600">{client.phone}</span>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(client.status)}`}>
+                        {client.status.replace('_', ' ')}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(client.priority)}`}>
+                        {client.priority}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center space-x-2">
+                        <div className="w-16 bg-gray-200 rounded-full h-2">
+                          <div 
+                            className="bg-orange-500 h-2 rounded-full transition-all duration-300"
+                            style={{ width: `${client.engagementScore}%` }}
+                          ></div>
+                        </div>
+                        <span className="text-sm font-medium w-8">{client.engagementScore}%</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-500">
+                      {new Date(client.createdAt).toLocaleDateString()}
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="relative">
+                        <button
+                          onClick={() => setActionMenu(actionMenu === client._id ? null : client._id)}
+                          className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
+                        >
+                          <MoreVertical className="w-4 h-4" />
+                        </button>
+                        {actionMenu === client._id && (
+                          <ActionMenu 
+                            client={client} 
+                            onClose={() => setActionMenu(null)}
+                          />
+                        )}
+                      </div>
+                    </td>
+                  </motion.tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="9" className="px-6 py-24 text-center">
+                    <User className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                      {searchTerm || filters.status || filters.priority ? 'No clients found' : 'No clients yet'}
+                    </h3>
+                    <p className="text-gray-600 mb-6 max-w-md mx-auto">
+                      {searchTerm || filters.status || filters.priority 
+                        ? 'Try adjusting your search terms or filters'
+                        : 'Get started by adding your first client to the system'
+                      }
+                    </p>
+                    <button
+                      onClick={() => setShowAddModal(true)}
+                      className="bg-orange-500 text-white px-6 py-3 rounded-lg hover:bg-orange-600 transition-colors"
+                    >
+                      Add First Client
+                    </button>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Pagination */}
       {pagination.totalPages > 1 && (
-        <div className="flex justify-center items-center space-x-4">
-          <button
-            onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
-            disabled={pagination.page === 1}
-            className="px-4 py-2 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-          >
-            Previous
-          </button>
-          <span className="text-sm text-gray-600">
-            Page {pagination.page} of {pagination.totalPages}
-          </span>
-          <button
-            onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
-            disabled={pagination.page === pagination.totalPages}
-            className="px-4 py-2 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-          >
-            Next
-          </button>
+        <div className="flex justify-between items-center">
+          <div className="text-sm text-gray-600">
+            Showing {((pagination.page - 1) * 12) + 1} to {Math.min(pagination.page * 12, pagination.total)} of {pagination.total} clients
+          </div>
+          <div className="flex items-center space-x-4">
+            <button
+              onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
+              disabled={pagination.page === 1}
+              className="px-4 py-2 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+            >
+              Previous
+            </button>
+            <span className="text-sm text-gray-600">
+              Page {pagination.page} of {pagination.totalPages}
+            </span>
+            <button
+              onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
+              disabled={pagination.page === pagination.totalPages}
+              className="px-4 py-2 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+            >
+              Next
+            </button>
+          </div>
         </div>
       )}
 

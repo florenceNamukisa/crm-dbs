@@ -8,13 +8,10 @@ import {
   Phone, 
   MapPin, 
   Building, 
-  IdCard, 
   Calendar,
   Users,
-  Shield,
   FileText,
-  CheckCircle,
-  AlertCircle
+  CheckCircle
 } from 'lucide-react';
 import { clientsAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -27,15 +24,11 @@ const ClientRegistrationForm = ({ onClose, onSuccess }) => {
   const [uploadedFiles, setUploadedFiles] = useState([]);
 
   const [formData, setFormData] = useState({
-    // Personal Information
     name: '',
     dateOfBirth: '',
     gender: '',
     nin: '',
     idType: 'national_id',
-    idDocument: '',
-    
-    // Contact Information
     email: '',
     phone: '',
     address: '',
@@ -43,28 +36,19 @@ const ClientRegistrationForm = ({ onClose, onSuccess }) => {
     state: '',
     postalCode: '',
     country: '',
-    
-    // Company/Professional Info
     company: '',
     position: '',
     industry: '',
-    
-    // Emergency Contact
     emergencyContact: {
       name: '',
       phone: '',
       relationship: ''
     },
-    
-    // CRM Fields
     status: 'prospect',
     priority: 'medium',
     engagementScore: 0,
     tags: [],
     notes: '',
-    agent: user?.id,
-    
-    // Contacts
     contacts: []
   });
 
@@ -89,10 +73,6 @@ const ClientRegistrationForm = ({ onClose, onSuccess }) => {
       if (!formData.phone.trim()) newErrors.phone = 'Phone number is required';
     }
 
-    if (step === 2 && formData.contacts.length === 0) {
-      newErrors.contacts = 'At least one contact person is required';
-    }
-
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -114,7 +94,6 @@ const ClientRegistrationForm = ({ onClose, onSuccess }) => {
       }));
     }
 
-    // Clear error when user starts typing
     if (errors[field]) {
       setErrors(prev => ({
         ...prev,
@@ -141,7 +120,7 @@ const ClientRegistrationForm = ({ onClose, onSuccess }) => {
   };
 
   const handleAddContact = () => {
-    if (newContact.name.trim() && newContact.email.trim()) {
+    if (newContact.name.trim()) {
       setFormData(prev => ({
         ...prev,
         contacts: [...prev.contacts, { ...newContact }]
@@ -165,7 +144,6 @@ const ClientRegistrationForm = ({ onClose, onSuccess }) => {
 
   const handleFileUpload = (event) => {
     const files = Array.from(event.target.files);
-    // Simulate file upload - in real app, you'd upload to server
     const newFiles = files.map(file => ({
       name: file.name,
       type: file.type,
@@ -174,16 +152,7 @@ const ClientRegistrationForm = ({ onClose, onSuccess }) => {
     }));
     setUploadedFiles(prev => [...prev, ...newFiles]);
     
-    // Auto-fill simulation (in real app, use OCR service)
-    if (files.length > 0) {
-      toast.success('Document uploaded successfully. Auto-filling fields...');
-      // Simulate auto-fill delay
-      setTimeout(() => {
-        // This is where you'd process the document with OCR
-        // For now, we'll just show a success message
-        toast.success('Fields auto-filled from document! Please verify the information.');
-      }, 2000);
-    }
+    toast.success('Document uploaded successfully');
   };
 
   const handleSubmit = async (e) => {
@@ -199,17 +168,59 @@ const ClientRegistrationForm = ({ onClose, onSuccess }) => {
       return;
     }
 
+    // Check if user ID is available
+    if (!user?.id) {
+      toast.error('User authentication error. Please log in again.');
+      return;
+    }
+
     setLoading(true);
     try {
-      await clientsAPI.create(formData);
+      const submissionData = {
+        // Required fields
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone,
+        nin: formData.nin,
+        agent: user.id,
+        
+        // Basic optional fields
+        idType: formData.idType,
+        status: formData.status,
+        priority: formData.priority,
+        engagementScore: formData.engagementScore,
+        tags: formData.tags,
+        notes: formData.notes,
+        contacts: formData.contacts,
+        emergencyContact: formData.emergencyContact
+      };
+
+      // Add optional fields only if they have values
+      if (formData.dateOfBirth) submissionData.dateOfBirth = formData.dateOfBirth;
+      if (formData.gender) submissionData.gender = formData.gender;
+      if (formData.company) submissionData.company = formData.company;
+      if (formData.position) submissionData.position = formData.position;
+      if (formData.industry) submissionData.industry = formData.industry;
+      if (formData.address) submissionData.address = formData.address;
+      if (formData.city) submissionData.city = formData.city;
+      if (formData.state) submissionData.state = formData.state;
+      if (formData.postalCode) submissionData.postalCode = formData.postalCode;
+      if (formData.country) submissionData.country = formData.country;
+
+      await clientsAPI.create(submissionData);
       toast.success('Client registered successfully! 🎉');
       onSuccess();
     } catch (error) {
-      console.error('Registration error:', error);
-      if (error.response?.data?.message?.includes('already exists')) {
-        toast.error('A client with this NIN already exists');
+      if (error.response?.data?.message) {
+        if (error.response.data.message.includes('already exists')) {
+          toast.error('A client with this NIN already exists');
+        } else if (error.response.data.errors) {
+          error.response.data.errors.forEach(err => toast.error(err));
+        } else {
+          toast.error(error.response.data.message);
+        }
       } else {
-        toast.error(error.response?.data?.message || 'Failed to register client');
+        toast.error('Failed to register client. Please try again.');
       }
     } finally {
       setLoading(false);
@@ -269,7 +280,6 @@ const ClientRegistrationForm = ({ onClose, onSuccess }) => {
         animate={{ opacity: 1, scale: 1 }}
         className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden"
       >
-        {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <div>
             <h2 className="text-2xl font-bold text-gray-900">Register New Client</h2>
@@ -287,7 +297,6 @@ const ClientRegistrationForm = ({ onClose, onSuccess }) => {
           <StepIndicator />
 
           <form onSubmit={handleSubmit}>
-            {/* Step 1: Personal Information */}
             {currentStep === 1 && (
               <motion.div
                 initial={{ opacity: 0, x: 20 }}
@@ -295,7 +304,6 @@ const ClientRegistrationForm = ({ onClose, onSuccess }) => {
                 className="space-y-6"
               >
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Name */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Full Name *
@@ -314,7 +322,6 @@ const ClientRegistrationForm = ({ onClose, onSuccess }) => {
                     )}
                   </div>
 
-                  {/* Date of Birth */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Date of Birth
@@ -327,7 +334,6 @@ const ClientRegistrationForm = ({ onClose, onSuccess }) => {
                     />
                   </div>
 
-                  {/* Gender */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Gender
@@ -345,7 +351,6 @@ const ClientRegistrationForm = ({ onClose, onSuccess }) => {
                     </select>
                   </div>
 
-                  {/* NIN */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       NIN (National Identification Number) *
@@ -364,7 +369,6 @@ const ClientRegistrationForm = ({ onClose, onSuccess }) => {
                     )}
                   </div>
 
-                  {/* ID Type */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       ID Type *
@@ -381,7 +385,6 @@ const ClientRegistrationForm = ({ onClose, onSuccess }) => {
                     </select>
                   </div>
 
-                  {/* Email */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Email Address *
@@ -400,7 +403,6 @@ const ClientRegistrationForm = ({ onClose, onSuccess }) => {
                     )}
                   </div>
 
-                  {/* Phone */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Phone Number *
@@ -420,14 +422,13 @@ const ClientRegistrationForm = ({ onClose, onSuccess }) => {
                   </div>
                 </div>
 
-                {/* Document Upload */}
                 <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
                   <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                   <h3 className="text-lg font-semibold text-gray-900 mb-2">
                     Upload ID Document
                   </h3>
                   <p className="text-gray-600 mb-4">
-                    Upload ID document for auto-filling fields (optional)
+                    Upload ID document for reference (optional)
                   </p>
                   <input
                     type="file"
@@ -440,11 +441,10 @@ const ClientRegistrationForm = ({ onClose, onSuccess }) => {
                     htmlFor="document-upload"
                     className="bg-orange-500 text-white px-6 py-3 rounded-lg hover:bg-orange-600 transition-colors cursor-pointer inline-block"
                   >
-                    Choose Files
+                    Choose Document
                   </label>
                 </div>
 
-                {/* Uploaded Files Preview */}
                 {uploadedFiles.length > 0 && (
                   <div className="space-y-2">
                     <h4 className="font-medium text-gray-900">Uploaded Documents:</h4>
@@ -464,14 +464,12 @@ const ClientRegistrationForm = ({ onClose, onSuccess }) => {
               </motion.div>
             )}
 
-            {/* Step 2: Contacts & Company */}
             {currentStep === 2 && (
               <motion.div
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 className="space-y-6"
               >
-                {/* Company Information */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -513,7 +511,6 @@ const ClientRegistrationForm = ({ onClose, onSuccess }) => {
                   </div>
                 </div>
 
-                {/* Address Information */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -581,20 +578,16 @@ const ClientRegistrationForm = ({ onClose, onSuccess }) => {
                   </div>
                 </div>
 
-                {/* Contact Persons */}
                 <div>
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-semibold text-gray-900">Contact Persons</h3>
-                    {errors.contacts && (
-                      <p className="text-red-500 text-sm">{errors.contacts}</p>
-                    )}
+                    <p className="text-sm text-gray-500">(Optional)</p>
                   </div>
 
-                  {/* Add Contact Form */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 p-4 bg-gray-50 rounded-lg">
                     <input
                       type="text"
-                      placeholder="Contact Name *"
+                      placeholder="Contact Name"
                       value={newContact.name}
                       onChange={(e) => setNewContact(prev => ({ ...prev, name: e.target.value }))}
                       className="p-2 border border-gray-300 rounded focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
@@ -608,7 +601,7 @@ const ClientRegistrationForm = ({ onClose, onSuccess }) => {
                     />
                     <input
                       type="email"
-                      placeholder="Email *"
+                      placeholder="Email"
                       value={newContact.email}
                       onChange={(e) => setNewContact(prev => ({ ...prev, email: e.target.value }))}
                       className="p-2 border border-gray-300 rounded focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
@@ -633,7 +626,7 @@ const ClientRegistrationForm = ({ onClose, onSuccess }) => {
                       <button
                         type="button"
                         onClick={handleAddContact}
-                        disabled={!newContact.name.trim() || !newContact.email.trim()}
+                        disabled={!newContact.name.trim()}
                         className="bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       >
                         Add Contact
@@ -641,7 +634,6 @@ const ClientRegistrationForm = ({ onClose, onSuccess }) => {
                     </div>
                   </div>
 
-                  {/* Contacts List */}
                   {formData.contacts.map((contact, index) => (
                     <div key={index} className="flex items-center justify-between p-3 bg-white border border-gray-200 rounded-lg mb-2">
                       <div className="flex-1">
@@ -654,7 +646,7 @@ const ClientRegistrationForm = ({ onClose, onSuccess }) => {
                           )}
                         </div>
                         <div className="text-sm text-gray-600">
-                          {contact.position} • {contact.email} • {contact.phone}
+                          {contact.position && `${contact.position} • `}{contact.email && `${contact.email} • `}{contact.phone}
                         </div>
                       </div>
                       <button
@@ -670,7 +662,6 @@ const ClientRegistrationForm = ({ onClose, onSuccess }) => {
               </motion.div>
             )}
 
-            {/* Step 3: CRM Details */}
             {currentStep === 3 && (
               <motion.div
                 initial={{ opacity: 0, x: 20 }}
@@ -678,7 +669,6 @@ const ClientRegistrationForm = ({ onClose, onSuccess }) => {
                 className="space-y-6"
               >
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Status */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Client Status
@@ -695,7 +685,6 @@ const ClientRegistrationForm = ({ onClose, onSuccess }) => {
                     </select>
                   </div>
 
-                  {/* Priority */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Priority Level
@@ -712,10 +701,9 @@ const ClientRegistrationForm = ({ onClose, onSuccess }) => {
                     </select>
                   </div>
 
-                  {/* Engagement Score */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Engagement Score
+                      Engagement Score: {formData.engagementScore}%
                     </label>
                     <input
                       type="range"
@@ -725,13 +713,9 @@ const ClientRegistrationForm = ({ onClose, onSuccess }) => {
                       onChange={(e) => handleInputChange('engagementScore', parseInt(e.target.value))}
                       className="w-full"
                     />
-                    <div className="text-center text-sm text-gray-600 mt-2">
-                      {formData.engagementScore}%
-                    </div>
                   </div>
                 </div>
 
-                {/* Tags */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Tags
@@ -772,7 +756,6 @@ const ClientRegistrationForm = ({ onClose, onSuccess }) => {
                   </div>
                 </div>
 
-                {/* Notes */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Notes
@@ -786,7 +769,6 @@ const ClientRegistrationForm = ({ onClose, onSuccess }) => {
                   />
                 </div>
 
-                {/* Emergency Contact */}
                 <div className="border-t pt-6">
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">Emergency Contact (Optional)</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -831,7 +813,6 @@ const ClientRegistrationForm = ({ onClose, onSuccess }) => {
               </motion.div>
             )}
 
-            {/* Navigation Buttons */}
             <div className="flex justify-between pt-6 border-t border-gray-200">
               <button
                 type="button"
