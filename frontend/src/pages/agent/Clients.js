@@ -20,7 +20,6 @@ import {
   Tag,
   ChevronDown,
   ChevronUp,
-  MoreVertical,
   X,
   Globe,
   Briefcase,
@@ -29,7 +28,7 @@ import {
   Clock,
   Award
 } from 'lucide-react';
-import { clientsAPI } from '../../services/api';
+import { clientsAPI, uploadAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext'; 
 import toast from 'react-hot-toast';
 import ClientRegistrationForm from './ClientRegistrationForm';
@@ -40,6 +39,7 @@ const Clients = () => {
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [selectedClient, setSelectedClient] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState({
@@ -54,7 +54,7 @@ const Clients = () => {
   });
   const [sortConfig, setSortConfig] = useState({ key: 'createdAt', direction: 'desc' });
   const [selectedClients, setSelectedClients] = useState([]);
-  const [actionMenu, setActionMenu] = useState(null);
+  
 
   useEffect(() => {
     loadClients();
@@ -119,16 +119,23 @@ const Clients = () => {
       const response = await clientsAPI.getById(clientId);
       setSelectedClient(response.data);
       setShowProfileModal(true);
-      setActionMenu(null);
     } catch (error) {
       toast.error('Failed to load client profile');
     }
   };
 
-  const handleEditClient = (client) => {
-    // For now, we'll show a toast. You can implement a proper edit modal
-    toast.success(`Edit client: ${client.name}`);
-    setActionMenu(null);
+  const handleEditClient = async (client) => {
+    try {
+      // Fetch full client details to ensure we have all fields
+      const res = await clientsAPI.getById(client._id || client.id || client);
+      setSelectedClient(res.data);
+      setShowEditModal(true);
+    } catch (err) {
+      // Fallback to provided client object
+      setSelectedClient(client);
+      setShowEditModal(true);
+    } finally {
+    }
   };
 
   const handleDeleteClient = async (clientId, clientName) => {
@@ -145,7 +152,6 @@ const Clients = () => {
         toast.error(error.response?.data?.message || 'Failed to delete client');
       }
     }
-    setActionMenu(null);
   };
 
   const handleBulkDelete = async () => {
@@ -227,32 +233,6 @@ const Clients = () => {
       : <ChevronDown className="w-4 h-4" />;
   };
 
-  const ActionMenu = ({ client, onClose }) => (
-    <div className="absolute right-0 top-8 bg-white border border-gray-200 rounded-lg shadow-lg z-10 min-w-48">
-      <button
-        onClick={() => handleViewProfile(client._id)}
-        className="w-full flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 first:rounded-t-lg"
-      >
-        <Eye className="w-4 h-4" />
-        <span>View Profile</span>
-      </button>
-      <button
-        onClick={() => handleEditClient(client)}
-        className="w-full flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-      >
-        <Edit className="w-4 h-4" />
-        <span>Edit Client</span>
-      </button>
-      <button
-        onClick={() => handleDeleteClient(client._id, client.name)}
-        className="w-full flex items-center space-x-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 last:rounded-b-lg"
-      >
-        <Trash2 className="w-4 h-4" />
-        <span>Delete</span>
-      </button>
-    </div>
-  );
-
   const ClientProfileModal = ({ client, onClose }) => {
     if (!client) return null;
 
@@ -274,13 +254,6 @@ const Clients = () => {
               </div>
             </div>
             <div className="flex items-center space-x-2">
-              <button
-                onClick={() => handleEditClient(client)}
-                className="flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
-              >
-                <Edit className="w-4 h-4" />
-                <span>Edit</span>
-              </button>
               <button
                 onClick={onClose}
                 className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
@@ -423,6 +396,71 @@ const Clients = () => {
                   </div>
                 </div>
 
+                {/* Contacts List */}
+                <div className="bg-white border border-gray-200 rounded-lg p-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center space-x-2">
+                    <Users className="w-5 h-5 text-gray-600" />
+                    <span>Contacts ({client.contacts ? client.contacts.length : 0})</span>
+                  </h3>
+                  <div className="space-y-3">
+                    {(client.contacts || []).map((c, idx) => (
+                      <div key={idx} className="flex items-center justify-between">
+                        <div>
+                          <div className="font-medium text-gray-900">{c.name || '—'}</div>
+                          <div className="text-sm text-gray-500">{c.position} • {c.phone} • {c.email}</div>
+                        </div>
+                        <div className="text-sm text-gray-500">{c.isPrimary ? 'Primary' : ''}</div>
+                      </div>
+                    ))}
+                    {(!client.contacts || client.contacts.length === 0) && (
+                      <p className="text-sm text-gray-500">No contact persons added yet.</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Interaction History */}
+                <div className="bg-white border border-gray-200 rounded-lg p-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center space-x-2">
+                    <FileText className="w-5 h-5 text-gray-600" />
+                    <span>Interaction History</span>
+                  </h3>
+                  <div className="space-y-4">
+                    {(client.interactions || []).slice().reverse().map((it, i) => (
+                      <div key={i} className="p-3 rounded-lg bg-gray-50">
+                        <div className="flex items-center justify-between">
+                          <div className="text-sm font-medium text-gray-800">{it.type}</div>
+                          <div className="text-xs text-gray-500">{new Date(it.date).toLocaleString()}</div>
+                        </div>
+                        <div className="text-sm text-gray-700 mt-2 whitespace-pre-wrap">{it.notes}</div>
+                      </div>
+                    ))}
+                    {(!client.interactions || client.interactions.length === 0) && (
+                      <p className="text-sm text-gray-500">No interactions logged yet.</p>
+                    )}
+
+                    {/* Interactions are read-only in profile view. Use Edit to add or modify interactions. */}
+                  </div>
+                </div>
+
+                {/* Attachments */}
+                <div className="bg-white border border-gray-200 rounded-lg p-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center space-x-2">
+                    <FileText className="w-5 h-5 text-gray-600" />
+                    <span>Attachments ({(client.attachments || []).length})</span>
+                  </h3>
+                  <div className="space-y-3">
+                    {(client.attachments || []).map((att, i) => (
+                      <div key={i} className="flex items-center justify-between">
+                        <div className="text-sm text-gray-900">{att.filename}</div>
+                        <div className="flex items-center space-x-2">
+                          <a href={att.url} target="_blank" rel="noreferrer" className="text-sm text-orange-600">Download</a>
+                        </div>
+                      </div>
+                    ))}
+                    <div className="pt-2 text-sm text-gray-500">Attachments are read-only here. Use Edit to upload or remove files.</div>
+                  </div>
+                </div>
+
                 {/* Tags */}
                 {client.tags && client.tags.length > 0 && (
                   <div className="bg-white border border-gray-200 rounded-lg p-6">
@@ -478,6 +516,185 @@ const Clients = () => {
               </div>
             )}
           </div>
+        </motion.div>
+      </div>
+    );
+  };
+
+  const EditClientModal = ({ client, onClose }) => {
+    const [form, setForm] = useState({
+      name: client?.name || '',
+      email: client?.email || '',
+      phone: client?.phone || '',
+      company: client?.company || '',
+      position: client?.position || '',
+      status: client?.status || 'prospect',
+      priority: client?.priority || 'medium',
+      engagementScore: client?.engagementScore || 0,
+      tags: client?.tags || [],
+      notes: client?.notes || '',
+      address: client?.address || ''
+    });
+    const [saving, setSaving] = useState(false);
+
+    useEffect(() => {
+      setForm({
+        name: client?.name || '',
+        email: client?.email || '',
+        phone: client?.phone || '',
+        company: client?.company || '',
+        position: client?.position || '',
+        status: client?.status || 'prospect',
+        priority: client?.priority || 'medium',
+        engagementScore: client?.engagementScore || 0,
+        tags: client?.tags || [],
+        notes: client?.notes || '',
+        address: client?.address || ''
+      });
+    }, [client]);
+
+    const handleChange = (field, value) => {
+      setForm(prev => ({ ...prev, [field]: value }));
+    };
+
+    const handleSave = async (e) => {
+      e.preventDefault();
+      if (!client) return;
+      // Basic validation
+      if (!form.name.trim()) {
+        toast.error('Name is required');
+        return;
+      }
+      if (!form.email.trim() || !/\S+@\S+\.\S+/.test(form.email)) {
+        toast.error('Valid email is required');
+        return;
+      }
+
+      setSaving(true);
+      try {
+        const payload = {
+          name: form.name,
+          email: form.email,
+          phone: form.phone,
+          company: form.company,
+          position: form.position,
+          address: form.address || '',
+          status: form.status,
+          priority: form.priority,
+          engagementScore: form.engagementScore,
+          tags: form.tags,
+          notes: form.notes
+        };
+        await clientsAPI.update(client._id, payload);
+        toast.success('Client updated successfully');
+        onClose();
+        // Refresh list and profile
+        await loadClients();
+        const updated = await clientsAPI.getById(client._id);
+        setSelectedClient(updated.data);
+        setShowProfileModal(true);
+      } catch (error) {
+        toast.error(error.response?.data?.message || 'Failed to update client');
+      } finally {
+        setSaving(false);
+      }
+    };
+
+    if (!client) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-2xl shadow-xl w-full max-w-2xl p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold">Edit Client</h3>
+            <button onClick={onClose} className="p-2 rounded hover:bg-gray-100"><X className="w-5 h-5" /></button>
+          </div>
+
+          <form onSubmit={handleSave} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Full Name</label>
+                <input value={form.name} onChange={(e) => handleChange('name', e.target.value)} className="w-full p-2 border rounded" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Email</label>
+                <input type="email" value={form.email} onChange={(e) => handleChange('email', e.target.value)} className="w-full p-2 border rounded" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Phone</label>
+                <input value={form.phone} onChange={(e) => handleChange('phone', e.target.value)} className="w-full p-2 border rounded" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Company</label>
+                <input value={form.company} onChange={(e) => handleChange('company', e.target.value)} className="w-full p-2 border rounded" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Position</label>
+                <input value={form.position} onChange={(e) => handleChange('position', e.target.value)} className="w-full p-2 border rounded" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Status</label>
+                <select value={form.status} onChange={(e) => handleChange('status', e.target.value)} className="w-full p-2 border rounded">
+                  <option value="prospect">Prospect</option>
+                  <option value="active">Active</option>
+                  <option value="vip">VIP</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Notes</label>
+              <textarea value={form.notes} onChange={(e) => handleChange('notes', e.target.value)} className="w-full p-2 border rounded" rows={4} />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Address</label>
+              <input value={form.address || ''} onChange={(e) => handleChange('address', e.target.value)} className="w-full p-2 border rounded" />
+            </div>
+
+            {/* Contact persons editor */}
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-sm font-medium">Contact Persons</div>
+                <button type="button" onClick={() => handleChange('contacts', [...(form.contacts || []), { name: '', position: '', email: '', phone: '', isPrimary: false }])} className="text-sm text-orange-600">Add contact</button>
+              </div>
+              <div className="space-y-2">
+                {(form.contacts || []).map((c, idx) => (
+                  <div key={idx} className="grid grid-cols-12 gap-2 items-center">
+                    <input className="col-span-3 p-2 border rounded" placeholder="Name" value={c.name} onChange={(e) => {
+                      const updated = [...form.contacts]; updated[idx].name = e.target.value; handleChange('contacts', updated);
+                    }} />
+                    <input className="col-span-3 p-2 border rounded" placeholder="Position" value={c.position} onChange={(e) => {
+                      const updated = [...form.contacts]; updated[idx].position = e.target.value; handleChange('contacts', updated);
+                    }} />
+                    <input className="col-span-3 p-2 border rounded" placeholder="Email" value={c.email} onChange={(e) => {
+                      const updated = [...form.contacts]; updated[idx].email = e.target.value; handleChange('contacts', updated);
+                    }} />
+                    <div className="col-span-2 flex items-center space-x-2">
+                      <input className="p-2 border rounded flex-1" placeholder="Phone" value={c.phone} onChange={(e) => {
+                        const updated = [...form.contacts]; updated[idx].phone = e.target.value; handleChange('contacts', updated);
+                      }} />
+                      <button type="button" onClick={() => {
+                        const updated = form.contacts.filter((_, i) => i !== idx); handleChange('contacts', updated);
+                      }} className="text-red-600">Remove</button>
+                    </div>
+                  </div>
+                ))}
+                {(form.contacts || []).length === 0 && (<div className="text-sm text-gray-500">No contact persons added.</div>)}
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-2">
+              <button type="button" onClick={onClose} className="px-4 py-2 border rounded">Cancel</button>
+              <button type="submit" disabled={saving} className="px-4 py-2 bg-orange-600 text-white rounded">
+                {saving ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </form>
         </motion.div>
       </div>
     );
@@ -668,6 +885,7 @@ const Clients = () => {
                     <SortIcon columnKey="name" />
                   </div>
                 </th>
+
                 <th 
                   className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
                   onClick={() => handleSort('company')}
@@ -730,7 +948,6 @@ const Clients = () => {
                 </th>
                 <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   <div className="flex items-center space-x-1">
-                    <MoreVertical className="w-4 h-4" />
                     <span>Actions</span>
                   </div>
                 </th>
@@ -764,7 +981,7 @@ const Clients = () => {
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4">
+                      <td className="px-6 py-4">
                       <div className="flex items-center space-x-2">
                         <Building className="w-4 h-4 text-gray-400" />
                         <span className="text-sm text-gray-900">{client.company || 'N/A'}</span>
@@ -813,19 +1030,16 @@ const Clients = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="relative">
-                        <button
-                          onClick={() => setActionMenu(actionMenu === client._id ? null : client._id)}
-                          className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
-                        >
-                          <MoreVertical className="w-4 h-4" />
+                      <div className="flex items-center space-x-2">
+                        <button onClick={() => handleViewProfile(client._id)} className="p-2 text-gray-500 hover:text-gray-700 rounded-lg" aria-label={`View ${client.name}`}>
+                          <Eye className="w-4 h-4" />
                         </button>
-                        {actionMenu === client._id && (
-                          <ActionMenu 
-                            client={client} 
-                            onClose={() => setActionMenu(null)}
-                          />
-                        )}
+                        <button onClick={() => handleEditClient(client)} className="p-2 text-gray-500 hover:text-gray-700 rounded-lg" aria-label={`Edit ${client.name}`}>
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => handleDeleteClient(client._id, client.name)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" aria-label={`Delete ${client.name}`}>
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
                     </td>
                   </motion.tr>
@@ -907,8 +1121,105 @@ const Clients = () => {
           }}
         />
       )}
+      {/* Edit Client Modal */}
+      {showEditModal && selectedClient && (
+        <EditClientModal
+          client={selectedClient}
+          onClose={() => {
+            setShowEditModal(false);
+            setSelectedClient(null);
+          }}
+        />
+      )}
     </div>
   );
 };
 
 export default Clients;
+
+// --- Helper subcomponents for interactions and attachments ---
+const AddInteractionForm = ({ clientId, onAdded }) => {
+  const [type, setType] = useState('call');
+  const [date, setDate] = useState('');
+  const [notes, setNotes] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!clientId) return;
+    setSaving(true);
+    try {
+      const resp = await clientsAPI.getById(clientId);
+      const client = resp.data;
+      const interactions = client.interactions || [];
+      interactions.push({ type, date: date ? new Date(date) : new Date(), notes });
+      await clientsAPI.update(clientId, { interactions, lastContact: { date: date || new Date(), type } });
+      toast.success('Interaction logged');
+      setType('call'); setDate(''); setNotes('');
+      if (onAdded) await onAdded();
+    } catch (err) {
+      toast.error('Failed to log interaction');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <form onSubmit={submit} className="mt-3 grid grid-cols-1 md:grid-cols-4 gap-2">
+      <select value={type} onChange={(e) => setType(e.target.value)} className="p-2 border rounded">
+        <option value="call">Call</option>
+        <option value="email">Email</option>
+        <option value="meeting">Meeting</option>
+        <option value="ticket">Ticket</option>
+        <option value="other">Other</option>
+      </select>
+      <input type="datetime-local" value={date} onChange={(e) => setDate(e.target.value)} className="p-2 border rounded" />
+      <input placeholder="Notes" value={notes} onChange={(e) => setNotes(e.target.value)} className="p-2 border rounded" />
+      <div className="flex items-center">
+        <button type="submit" disabled={saving} className="px-3 py-2 bg-orange-600 text-white rounded">
+          {saving ? 'Saving...' : 'Add'}
+        </button>
+      </div>
+    </form>
+  );
+};
+
+const AttachmentUploader = ({ clientId, onUploaded }) => {
+  const [file, setFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
+
+  const handleUpload = async (e) => {
+    e.preventDefault();
+    if (!file || !clientId) return;
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await uploadAPI.uploadFile(fd);
+      // Expecting { filename, url }
+      const fileMeta = res.data;
+      const resp = await clientsAPI.getById(clientId);
+      const client = resp.data;
+      const attachments = client.attachments || [];
+      attachments.push({ filename: fileMeta.filename || file.name, url: fileMeta.url || fileMeta.path || fileMeta, uploadedAt: new Date() });
+      await clientsAPI.update(clientId, { attachments });
+      toast.success('Attachment uploaded');
+      setFile(null);
+      if (onUploaded) await onUploaded();
+    } catch (err) {
+      console.error(err);
+      toast.error('Upload failed');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleUpload} className="flex items-center gap-2">
+      <input type="file" onChange={(e) => setFile(e.target.files[0])} />
+      <button type="submit" disabled={uploading || !file} className="px-3 py-1 bg-orange-500 text-white rounded">
+        {uploading ? 'Uploading...' : 'Upload'}
+      </button>
+    </form>
+  );
+};
