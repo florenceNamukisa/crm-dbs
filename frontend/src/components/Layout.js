@@ -94,23 +94,23 @@ const Layout = ({ children }) => {
         onClick={onClick}
         className={`flex items-center space-x-4 px-4 py-3 rounded-xl text-sm font-medium transition-all group ${
           isActive
-            ? 'bg-orange-50 text-orange-600 border-r-2 border-orange-500 shadow-sm'
-            : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+            ? 'bg-orange-700 text-white shadow-md'
+            : 'text-white hover:bg-orange-500/90'
         }`}
       >
         <div className={`p-2 rounded-lg ${
-          isActive 
-            ? 'bg-orange-100 text-orange-600' 
-            : 'bg-gray-100 text-gray-500 group-hover:bg-orange-50 group-hover:text-orange-500'
+          isActive
+            ? 'bg-orange-800 text-white'
+            : 'bg-orange-600/20 text-white'
         }`}>
           <Icon className="w-4 h-4" />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="font-medium">{item.label}</div>
-          <div className="text-xs text-gray-500 mt-1">{item.description}</div>
+          <div className="font-medium text-white">{item.label}</div>
+          <div className="text-xs text-white/90 mt-1">{item.description}</div>
         </div>
         {isActive && (
-          <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
+          <div className="w-2 h-2 bg-white rounded-full"></div>
         )}
       </Link>
     );
@@ -120,16 +120,16 @@ const Layout = ({ children }) => {
     <div className="flex h-screen bg-gray-50">
       {/* Desktop Sidebar - Always Visible */}
       <div className="hidden lg:flex lg:flex-shrink-0">
-        <div className="w-64 flex flex-col bg-white shadow-xl border-r border-gray-200">
+        <div className="w-64 flex flex-col bg-orange-600 shadow-xl border-r border-orange-700 text-white">
           {/* Header */}
-          <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200">
+          <div className="flex items-center justify-between h-16 px-6 border-b border-orange-700">
             <div className="flex items-center space-x-3">
               <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl flex items-center justify-center shadow-sm">
                 <Building className="w-6 h-6 text-white" />
               </div>
               <div>
-                <span className="text-xl font-bold text-gray-900">CRM Pro</span>
-                <p className="text-xs text-orange-500 font-medium">
+                <span className="text-xl font-bold text-white">CRM Pro</span>
+                <p className="text-xs text-white text-opacity-90 font-medium">
                   {isAdmin ? 'Admin Portal' : 'Sales Portal'}
                 </p>
               </div>
@@ -137,19 +137,19 @@ const Layout = ({ children }) => {
           </div>
 
           {/* User Info */}
-          <div className="px-6 py-4 border-b border-gray-200">
+          <div className="px-6 py-4 border-b border-orange-700">
             <div className="flex items-center space-x-3">
-              <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center">
-                <User className="w-6 h-6 text-orange-600" />
+              <div className="w-12 h-12 bg-orange-800 rounded-full flex items-center justify-center">
+                <User className="w-6 h-6 text-white" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-gray-900 truncate">
+                <p className="text-sm font-semibold text-white truncate">
                   {user?.name}
                 </p>
-                <p className="text-sm text-gray-500 capitalize">
+                <p className="text-sm text-white text-opacity-90 capitalize">
                   {user?.role}
                 </p>
-                <p className="text-xs text-gray-400 truncate">
+                <p className="text-xs text-white text-opacity-80 truncate">
                   {user?.email}
                 </p>
               </div>
@@ -159,7 +159,7 @@ const Layout = ({ children }) => {
           {/* Navigation */}
           <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
             <div className="px-3 mb-2">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+              <p className="text-xs font-semibold text-white uppercase tracking-wider text-opacity-90">
                 Navigation
               </p>
             </div>
@@ -177,20 +177,20 @@ const Layout = ({ children }) => {
           </nav>
 
           {/* Footer */}
-          <div className="border-t border-gray-200 p-6 space-y-4">
+          <div className="border-t border-orange-700 p-6 space-y-4">
             <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-500">Status</span>
+              <span className="text-white text-opacity-90">Status</span>
               <span className="flex items-center space-x-1">
                 <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-                <span className="text-green-600 font-medium">Online</span>
+                <span className="text-white font-medium">Online</span>
               </span>
             </div>
             
             <button
               onClick={handleLogout}
-              className="flex items-center space-x-3 w-full px-4 py-3 rounded-lg text-sm font-medium text-gray-600 hover:bg-red-50 hover:text-red-600 transition-colors group"
+              className="flex items-center space-x-3 w-full px-4 py-3 rounded-lg text-sm font-medium text-white hover:bg-orange-700 transition-colors group"
             >
-              <LogOut className="w-4 h-4 group-hover:text-red-600" />
+              <LogOut className="w-4 h-4 text-white" />
               <span>Sign Out</span>
             </button>
           </div>
@@ -205,7 +205,7 @@ const Layout = ({ children }) => {
               className="fixed inset-0 bg-gray-600 bg-opacity-75"
               onClick={() => setSidebarOpen(false)}
             />
-            <div className="relative flex-1 flex flex-col max-w-xs w-full bg-white shadow-xl">
+            <div className="relative flex-1 flex flex-col max-w-xs w-full bg-orange-600 shadow-xl text-white">
               <div className="absolute top-0 right-0 -mr-12 pt-2">
                 <button
                   className="ml-1 flex items-center justify-center h-10 w-10 rounded-full focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white"
@@ -216,34 +216,34 @@ const Layout = ({ children }) => {
               </div>
               <div className="flex-1 h-0 overflow-y-auto">
                 {/* Mobile Header */}
-                <div className="flex items-center h-16 px-6 border-b border-gray-200">
+                  <div className="flex items-center h-16 px-6 border-b border-orange-700 bg-orange-600 text-white">
                   <div className="flex items-center space-x-3">
                     <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl flex items-center justify-center shadow-sm">
                       <Building className="w-6 h-6 text-white" />
                     </div>
                     <div>
-                      <span className="text-xl font-bold text-gray-900">CRM Pro</span>
-                      <p className="text-xs text-orange-500 font-medium">
-                        {isAdmin ? 'Admin Portal' : 'Sales Portal'}
-                      </p>
+                        <span className="text-xl font-bold text-white">CRM Pro</span>
+                        <p className="text-xs text-white text-opacity-90 font-medium">
+                          {isAdmin ? 'Admin Portal' : 'Sales Portal'}
+                        </p>
                     </div>
                   </div>
                 </div>
 
                 {/* Mobile User Info */}
-                <div className="px-6 py-4 border-b border-gray-200">
+                <div className="px-6 py-4 border-b border-orange-700">
                   <div className="flex items-center space-x-3">
-                    <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center">
-                      <User className="w-6 h-6 text-orange-600" />
+                    <div className="w-12 h-12 bg-orange-800 rounded-full flex items-center justify-center">
+                      <User className="w-6 h-6 text-white" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-gray-900 truncate">
+                      <p className="text-sm font-semibold text-white truncate">
                         {user?.name}
                       </p>
-                      <p className="text-sm text-gray-500 capitalize">
+                      <p className="text-sm text-white text-opacity-90 capitalize">
                         {user?.role}
                       </p>
-                      <p className="text-xs text-gray-400 truncate">
+                      <p className="text-xs text-white text-opacity-80 truncate">
                         {user?.email}
                       </p>
                     </div>
@@ -253,7 +253,7 @@ const Layout = ({ children }) => {
                 {/* Mobile Navigation */}
                 <nav className="px-4 py-6 space-y-2">
                   <div className="px-3 mb-2">
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    <p className="text-xs font-semibold text-white uppercase tracking-wider text-opacity-90">
                       Navigation
                     </p>
                   </div>
@@ -272,20 +272,20 @@ const Layout = ({ children }) => {
               </div>
 
               {/* Mobile Footer */}
-              <div className="border-t border-gray-200 p-6 space-y-4">
+              <div className="border-t border-orange-700 p-6 space-y-4 text-white">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-500">Status</span>
+                  <span className="text-white text-opacity-90">Status</span>
                   <span className="flex items-center space-x-1">
                     <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-                    <span className="text-green-600 font-medium">Online</span>
+                    <span className="text-white font-medium">Online</span>
                   </span>
                 </div>
                 
                 <button
                   onClick={handleLogout}
-                  className="flex items-center space-x-3 w-full px-4 py-3 rounded-lg text-sm font-medium text-gray-600 hover:bg-red-50 hover:text-red-600 transition-colors group"
+                  className="flex items-center space-x-3 w-full px-4 py-3 rounded-lg text-sm font-medium text-white hover:bg-orange-700 transition-colors group"
                 >
-                  <LogOut className="w-4 h-4 group-hover:text-red-600" />
+                  <LogOut className="w-4 h-4 text-white" />
                   <span>Sign Out</span>
                 </button>
               </div>
