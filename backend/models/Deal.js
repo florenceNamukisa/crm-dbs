@@ -1,3 +1,4 @@
+// models/Deal.js
 import mongoose from 'mongoose';
 
 const dealSchema = new mongoose.Schema({
@@ -21,10 +22,25 @@ const dealSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
-  status: {
+  teamMembers: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }],
+  stage: {
     type: String,
-    enum: ['pending', 'successful', 'failed', 'closed'],
-    default: 'pending'
+    enum: ['lead', 'qualification', 'proposal', 'negotiation', 'won', 'lost'],
+    default: 'lead'
+  },
+  probability: {
+    type: Number,
+    min: 0,
+    max: 100,
+    default: 0
+  },
+  expectedCloseDate: Date,
+  lastActivityDate: {
+    type: Date,
+    default: Date.now
   },
   closedAt: Date,
   rating: {
@@ -32,28 +48,75 @@ const dealSchema = new mongoose.Schema({
     min: 1,
     max: 5
   },
-  notes: String,
+  notes: [{
+    content: String,
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
+  documents: [{
+    filename: String,
+    originalName: String,
+    fileType: String,
+    fileSize: Number,
+    url: String,
+    uploadedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    uploadedAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
+  tasks: [{
+    title: String,
+    description: String,
+    dueDate: Date,
+    assignedTo: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    status: {
+      type: String,
+      enum: ['pending', 'in-progress', 'completed'],
+      default: 'pending'
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
+  activities: [{
+    type: {
+      type: String,
+      enum: ['call', 'email', 'meeting', 'note', 'document_upload']
+    },
+    description: String,
+    date: {
+      type: Date,
+      default: Date.now
+    },
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    }
+  }],
   createdAt: {
     type: Date,
     default: Date.now
   }
 });
 
-// Update agent performance when deal is saved
-dealSchema.post('save', async function() {
-  const User = mongoose.model('User');
-  const agent = await User.findById(this.agent);
-  
-  if (this.status === 'successful') {
-    agent.successfulDeals += 1;
-    agent.performanceScore += 10;
-  } else if (this.status === 'failed') {
-    agent.failedDeals += 1;
-    agent.performanceScore = Math.max(0, agent.performanceScore - 5);
-  }
-  
-  agent.totalDeals = agent.successfulDeals + agent.failedDeals;
-  await agent.save();
+// Update last activity date when deal is modified
+dealSchema.pre('save', function(next) {
+  this.lastActivityDate = new Date();
+  next();
 });
 
 export default mongoose.model('Deal', dealSchema);

@@ -36,25 +36,33 @@ const AgentDashboard = () => {
   const [progress, setProgress] = useState(0);
 
   useEffect(() => {
-    loadDashboardData();
-  }, []);
+    if (user) loadDashboardData();
+  }, [user]);
 
   const loadDashboardData = async () => {
     try {
-      // Load performance data
-      const performanceResponse = await performanceAPI.getAgentPerformance(user.id);
-      setPerformance(performanceResponse.data);
-      
-      // Calculate progress (simplified)
-      const progressValue = performanceResponse.data.progress || 0;
-      setProgress(progressValue);
+      const userId = user?._id || user?.id;
+      if (!userId) return;
 
-      // Update stats
+      // Fetch performance, deals stats and clients in parallel
+      const [performanceResponse, dealsStatsResponse, clientsResponse] = await Promise.all([
+        performanceAPI.getAgentPerformance(userId),
+        dealsAPI.getStats({ agent: userId }),
+        clientsAPI.getAll({ agent: userId })
+      ]);
+
+      const perf = performanceResponse?.data || {};
+      const dealsStats = dealsStatsResponse?.data || {};
+      const clients = clientsResponse?.data || clientsResponse || [];
+
+      setPerformance(perf);
+      setProgress(perf.progress || 0);
+
       setStats({
-        clientsMet: performanceResponse.data.clientsMet || 0,
-        dealsClosed: performanceResponse.data.closedDeals || 0,
-        pendingDeals: performanceResponse.data.pendingDeals || 0,
-        scheduledMeetings: 5 // Sample data
+        clientsMet: Array.isArray(clients) ? clients.length : (perf.clientsMet || 0),
+        dealsClosed: dealsStats.closedDeals || perf.closedDeals || 0,
+        pendingDeals: dealsStats.pendingDeals || perf.pendingDeals || 0,
+        scheduledMeetings: perf.scheduledMeetings || 0
       });
 
     } catch (error) {
@@ -62,24 +70,18 @@ const AgentDashboard = () => {
     }
   };
 
-  const monthlyProgressData = [
-    { month: 'Jan', progress: 45 },
-    { month: 'Feb', progress: 60 },
-    { month: 'Mar', progress: 55 },
-    { month: 'Apr', progress: 75 },
-    { month: 'May', progress: 80 },
-    { month: 'Jun', progress: 65 },
-    { month: 'Jul', progress: 85 },
-    { month: 'Aug', progress: 70 },
-    { month: 'Sep', progress: 90 },
-    { month: 'Oct', progress: 75 },
-    { month: 'Nov', progress: 95 },
-    { month: 'Dec', progress: progress },
-  ];
+  // Build monthly progress from API data if available; otherwise fall back to zeros
+  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const monthlyProgressData = monthNames.map((m, idx) => {
+    const source = performance.monthlyProgress && Array.isArray(performance.monthlyProgress)
+      ? performance.monthlyProgress[idx]
+      : null;
+    return { month: m, progress: source?.progress ?? 0 };
+  });
 
   const dealStatusData = [
-    { name: 'Closed', value: stats.dealsClosed },
-    { name: 'Pending', value: stats.pendingDeals }
+    { name: 'Closed', value: stats.dealsClosed || 0 },
+    { name: 'Pending', value: stats.pendingDeals || 0 }
   ];
 
   const COLORS = ['#ff8c00', '#ffa94d'];
@@ -96,8 +98,8 @@ const AgentDashboard = () => {
           <p className="text-2xl font-bold text-gray-900 mt-2">{value}</p>
           {subtitle && <p className="text-sm text-gray-500 mt-1">{subtitle}</p>}
         </div>
-        <div className={`p-3 rounded-full bg-${color}-100`}>
-          <Icon className={`w-6 h-6 text-${color}-500`} />
+        <div className="p-3 rounded-full" style={{ backgroundColor: color === 'orange' ? '#fff7ed' : '#f3f4f6' }}>
+          <Icon className="w-6 h-6 text-orange-500" />
         </div>
       </div>
     </motion.div>

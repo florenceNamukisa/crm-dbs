@@ -113,6 +113,64 @@ const clientSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  // Interaction history (calls, emails, meetings, tickets)
+  interactions: {
+    type: [
+      {
+        type: {
+          type: String,
+          enum: ['call', 'email', 'meeting', 'ticket', 'other'],
+          default: 'other'
+        },
+        date: { type: Date, default: Date.now },
+        notes: { type: String, default: '' },
+        createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+      }
+    ],
+    default: []
+  },
+  // Attachments/documents linked to the client
+  attachments: {
+    type: [
+      {
+        filename: String,
+        url: String,
+        uploadedAt: { type: Date, default: Date.now },
+        uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+      }
+    ],
+    default: []
+  },
+  // Upcoming tasks / follow-ups
+  tasks: {
+    type: [
+      {
+        title: String,
+        description: { type: String, default: '' },
+        dueDate: Date,
+        dueTime: String,
+        completed: { type: Boolean, default: false },
+        assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        createdAt: { type: Date, default: Date.now }
+      }
+    ],
+    default: []
+  },
+  // Associated deals
+  deals: {
+    type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Deal' }],
+    default: []
+  },
+  // Assigned agents (supporting multiple agents)
+  assignedAgents: {
+    type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+    default: []
+  },
+  // Last contact summary
+  lastContact: {
+    date: Date,
+    type: { type: String, enum: ['call', 'email', 'meeting', 'ticket', 'other'] }
+  },
   agent: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
