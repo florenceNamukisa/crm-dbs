@@ -12,6 +12,7 @@ import { clientRoutes } from './routes/clients.js';
 import { dealRoutes } from './routes/deals.js';
 import { scheduleRoutes } from './routes/schedules.js';
 import { performanceRoutes } from './routes/performance.js';
+import { salesRoutes } from './routes/sales.js';
 
 dotenv.config();
 
@@ -48,6 +49,7 @@ app.use('/api/clients', clientRoutes);
 app.use('/api/deals', dealRoutes);
 app.use('/api/schedules', scheduleRoutes);
 app.use('/api/performance', performanceRoutes);
+app.use('/api/sales', salesRoutes);
 
 // Serve frontend
 app.use(express.static(path.join(__dirname, '../frontend/dist')));

@@ -72,7 +72,12 @@ export const dealsAPI = {
   delete: (id) => api.delete(`/deals/${id}`),
   getById: (id) => api.get(`/deals/${id}`),
   updateStatus: (id, status) => api.patch(`/deals/${id}/status`, { status }),
-  getStats: () => api.get('/deals/stats'),
+  getStats: (params = {}) => api.get('/deals/stats', { params }),
+};
+
+// Sales API
+export const salesAPI = {
+  getStats: (params = {}) => api.get('/sales', { params })
 };
 
 // Performance API

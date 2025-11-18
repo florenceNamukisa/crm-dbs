@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
-import { Mail, Lock, Eye, EyeOff, Building2, Sparkles } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, Sparkles } from 'lucide-react';
+import logo from '../assets/logo.png';
 
 const Login = () => {
   const [formData, setFormData] = useState({
@@ -70,8 +71,8 @@ const Login = () => {
           {/* Header */}
           <div className="text-center lg:text-left">
             <div className="flex items-center justify-center lg:justify-start space-x-3 mb-8">
-              <div className="bg-gradient-to-r from-orange-500 to-orange-600 p-2 rounded-xl">
-                <Building2 className="w-8 h-8 text-white" />
+              <div className="bg-gradient-to-r from-orange-500 to-orange-600 p-2 rounded-xl flex items-center justify-center">
+                <img src={logo} alt="Logo" className="w-8 h-8 object-contain" />
               </div>
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">CRM Pro</h1>
@@ -196,8 +197,8 @@ const Login = () => {
             transition={{ duration: 0.7, delay: 0.2 }}
             className="text-center text-white"
           >
-            <div className="mb-8">
-              <Building2 className="w-24 h-24 mx-auto mb-6 opacity-90" />
+              <div className="mb-8">
+              <img src={logo} alt="Logo" className="w-24 h-24 mx-auto mb-6 opacity-90 object-contain" />
               <h3 className="text-4xl font-bold mb-4">CRM Pro System</h3>
               <p className="text-orange-100 text-lg max-w-md mx-auto">
                 Streamline your sales process, manage clients efficiently, and boost your team's performance with our powerful CRM solution.

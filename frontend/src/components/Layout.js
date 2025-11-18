@@ -13,9 +13,10 @@ import {
   PieChart,
   UserPlus,
   Bell,
-  Building
+  TrendingUp
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import logo from '../assets/logo.png';
 
 const Layout = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -30,25 +31,25 @@ const Layout = ({ children }) => {
       path: '/admin', 
       icon: Home, 
       label: 'Dashboard', 
-      description: 'Overview & Analytics' 
+     
     },
     { 
       path: '/admin/users', 
       icon: UserPlus, 
       label: 'User Management', 
-      description: 'Manage Team Members' 
+   
     },
     { 
       path: '/admin/reports', 
       icon: PieChart, 
       label: 'Reports', 
-      description: 'Analytics & Insights' 
+     
     },
     { 
       path: '/admin/settings', 
       icon: Settings, 
       label: 'Settings', 
-      description: 'System Configuration' 
+  
     },
   ];
 
@@ -57,25 +58,31 @@ const Layout = ({ children }) => {
       path: '/agent', 
       icon: Home, 
       label: 'Dashboard', 
-      description: 'Performance Overview' 
+       
     },
     { 
       path: '/agent/clients', 
       icon: Users, 
       label: 'Clients', 
-      description: 'Manage Contacts' 
+    
     },
     { 
       path: '/agent/deals', 
       icon: Target, 
       label: 'Deals', 
-      description: 'Sales Pipeline' 
+   
+    },
+    { 
+      path: '/agent/sales', 
+      icon: TrendingUp, 
+      label: 'Sales', 
+   
     },
     { 
       path: '/agent/schedules', 
       icon: Calendar, 
       label: 'Schedules', 
-      description: 'Meetings & Calendar' 
+     
     },
   ];
 
@@ -124,14 +131,9 @@ const Layout = ({ children }) => {
           {/* Header */}
           <div className="flex items-center justify-between h-16 px-6 border-b border-orange-700">
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl flex items-center justify-center shadow-sm">
-                <Building className="w-6 h-6 text-white" />
-              </div>
+              <img src={logo} alt="Logo" className="w-10 h-10 object-contain" />
               <div>
-                <span className="text-xl font-bold text-white">CRM Pro</span>
-                <p className="text-xs text-white text-opacity-90 font-medium">
-                  {isAdmin ? 'Admin Portal' : 'Sales Portal'}
-                </p>
+                <span className="text-xl font-bold text-white">CRM</span>
               </div>
             </div>
           </div>
@@ -158,11 +160,6 @@ const Layout = ({ children }) => {
 
           {/* Navigation */}
           <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
-            <div className="px-3 mb-2">
-              <p className="text-xs font-semibold text-white uppercase tracking-wider text-opacity-90">
-                Navigation
-              </p>
-            </div>
             {navItems.map((item) => {
               const isActive = location.pathname === item.path;
               return (
@@ -218,14 +215,14 @@ const Layout = ({ children }) => {
                 {/* Mobile Header */}
                   <div className="flex items-center h-16 px-6 border-b border-orange-700 bg-orange-600 text-white">
                   <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl flex items-center justify-center shadow-sm">
-                      <Building className="w-6 h-6 text-white" />
-                    </div>
+                    <svg className="w-10 h-10" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M125 93L175 43L175 143L125 93Z" fill="white"/>
+                      <path d="M75 93L125 43L125 143L75 93Z" fill="white"/>
+                      <path d="M75 93L25 143L125 143L75 93Z" fill="white"/>
+                      <path d="M125 93L125 43L25 143L125 143Z" fill="white"/>
+                    </svg>
                     <div>
-                        <span className="text-xl font-bold text-white">CRM Pro</span>
-                        <p className="text-xs text-white text-opacity-90 font-medium">
-                          {isAdmin ? 'Admin Portal' : 'Sales Portal'}
-                        </p>
+                        <span className="text-xl font-bold text-white">CRM</span>
                     </div>
                   </div>
                 </div>
@@ -252,11 +249,6 @@ const Layout = ({ children }) => {
 
                 {/* Mobile Navigation */}
                 <nav className="px-4 py-6 space-y-2">
-                  <div className="px-3 mb-2">
-                    <p className="text-xs font-semibold text-white uppercase tracking-wider text-opacity-90">
-                      Navigation
-                    </p>
-                  </div>
                   {navItems.map((item) => {
                     const isActive = location.pathname === item.path;
                     return (

@@ -227,7 +227,14 @@ router.post('/', async (req, res) => {
 // Get deal statistics
 router.get('/stats', async (req, res) => {
   try {
+    const { agent } = req.query;
+
+    const match = {};
+    if (agent) match.agent = agent;
+
+    // stage level aggregation (optionally filtered by agent)
     const stageStats = await Deal.aggregate([
+      { $match: match },
       {
         $group: {
           _id: '$stage',
@@ -239,28 +246,38 @@ router.get('/stats', async (req, res) => {
       { $sort: { _id: 1 } }
     ]);
 
-    const totalDeals = await Deal.countDocuments();
-    const totalValue = await Deal.aggregate([
+    // overall totals
+    const totalDeals = await Deal.countDocuments(match);
+    const totalValueAgg = await Deal.aggregate([
+      { $match: match },
       { $group: { _id: null, total: { $sum: '$value' } } }
     ]);
 
-    const wonValue = await Deal.aggregate([
-      { $match: { stage: 'won' } },
-      { $group: { _id: null, total: { $sum: '$value' } } }
+    const wonAgg = await Deal.aggregate([
+      { $match: { ...match, stage: 'won' } },
+      { $group: { _id: null, total: { $sum: '$value' }, count: { $sum: 1 } } }
     ]);
 
-    const lostValue = await Deal.aggregate([
-      { $match: { stage: 'lost' } },
-      { $group: { _id: null, total: { $sum: '$value' } } }
+    const lostAgg = await Deal.aggregate([
+      { $match: { ...match, stage: 'lost' } },
+      { $group: { _id: null, total: { $sum: '$value' }, count: { $sum: 1 } } }
+    ]);
+
+    const pendingAgg = await Deal.aggregate([
+      { $match: { ...match, stage: 'pending' } },
+      { $group: { _id: null, count: { $sum: 1 } } }
     ]);
 
     res.json({
       stageStats,
       totalStats: {
         totalDeals,
-        totalValue: totalValue[0]?.total || 0,
-        wonValue: wonValue[0]?.total || 0,
-        lostValue: lostValue[0]?.total || 0
+        totalValue: totalValueAgg[0]?.total || 0,
+        wonValue: wonAgg[0]?.total || 0,
+        wonCount: wonAgg[0]?.count || 0,
+        lostValue: lostAgg[0]?.total || 0,
+        lostCount: lostAgg[0]?.count || 0,
+        pendingCount: pendingAgg[0]?.count || 0
       }
     });
   } catch (error) {
