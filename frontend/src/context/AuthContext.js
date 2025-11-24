@@ -68,10 +68,10 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    setToken(null);
-    setUser(null);
+    authAPI.logout().finally(() => {
+      setToken(null);
+      setUser(null);
+    });
   };
 
   const updateUser = (userData) => {

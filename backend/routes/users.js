@@ -18,7 +18,7 @@ router.get('/', async (req, res) => {
 // Create new agent with OTP (admin only)
 router.post('/', async (req, res) => {
   try {
-    const { name, email, phone, role = 'agent' } = req.body;
+    const { name, email, phone, role = 'agent', nin = null } = req.body;
     
     // Check if user already exists
     const existingUser = await User.findOne({ email });
@@ -35,11 +35,12 @@ router.post('/', async (req, res) => {
       name,
       email,
       phone,
+      nin,
       password: otp, // OTP is the initial password
       role,
       isFirstLogin: true,
       otp: otp,
-      otpExpires: new Date(Date.now() + 24 * 60 * 60 * 1000) // OTP expires in 24 hours
+      otpExpires: new Date(Date.now() + 12 * 60 * 60 * 1000) // OTP expires in 12 hours
     });
 
     await user.save();
@@ -97,7 +98,7 @@ router.post('/:id/resend-otp', async (req, res) => {
     // Update user with new OTP
     user.password = newOTP;
     user.otp = newOTP;
-    user.otpExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    user.otpExpires = new Date(Date.now() + 12 * 60 * 60 * 1000);
     user.isFirstLogin = true;
     
     await user.save();
@@ -123,11 +124,20 @@ router.post('/:id/resend-otp', async (req, res) => {
 // Update user profile
 router.put('/:id', async (req, res) => {
   try {
-    const { name, phone, profileImage } = req.body;
-    
+    const { name, phone, profileImage, nin, isActive, status } = req.body;
+
+    const update = { name, phone, profileImage };
+    if (typeof nin !== 'undefined') update.nin = nin;
+    if (typeof isActive !== 'undefined') {
+      update.isActive = isActive;
+      // if admin deactivates the account, ensure status becomes offline immediately
+      if (isActive === false) update.status = 'offline';
+    }
+    if (typeof status !== 'undefined') update.status = status;
+
     const user = await User.findByIdAndUpdate(
       req.params.id,
-      { name, phone, profileImage },
+      update,
       { new: true, runValidators: true }
     ).select('-password -otp');
 

@@ -12,7 +12,8 @@ import { clientRoutes } from './routes/clients.js';
 import { dealRoutes } from './routes/deals.js';
 import { scheduleRoutes } from './routes/schedules.js';
 import { performanceRoutes } from './routes/performance.js';
-import { salesRoutes } from './routes/sales.js';
+import { reportsRoutes } from './routes/reports.js';
+
 
 dotenv.config();
 
@@ -23,7 +24,7 @@ const app = express();
 
 // Middleware
 app.use(cors({
-  origin: 'http://localhost:3000', // Your React app URL
+  origin: ['http://localhost:3000', 'https://crm-tool-ebon.vercel.app'], // React app URLs (dev and production)
   credentials: true
 }));
 app.use(express.json());
@@ -49,7 +50,8 @@ app.use('/api/clients', clientRoutes);
 app.use('/api/deals', dealRoutes);
 app.use('/api/schedules', scheduleRoutes);
 app.use('/api/performance', performanceRoutes);
-app.use('/api/sales', salesRoutes);
+app.use('/api/reports', reportsRoutes);
+
 
 // Serve frontend
 app.use(express.static(path.join(__dirname, '../frontend/dist')));

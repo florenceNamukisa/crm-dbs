@@ -178,8 +178,8 @@ const Layout = ({ children }) => {
             <div className="flex items-center justify-between text-sm">
               <span className="text-white text-opacity-90">Status</span>
               <span className="flex items-center space-x-1">
-                <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-                <span className="text-white font-medium">Online</span>
+                <div className={`w-2 h-2 rounded-full ${user?.status === 'online' ? 'bg-green-400' : 'bg-gray-400'}`}></div>
+                <span className="text-white font-medium capitalize">{user?.status || 'offline'}</span>
               </span>
             </div>
             

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Search, Mail, Phone, Edit, Trash2, User, UserPlus, Shield, RefreshCw } from 'lucide-react';
+import { Plus, Search, Mail, Phone, Edit, Trash2, User, UserPlus, Shield, RefreshCw, UserX } from 'lucide-react';
 import { usersAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
@@ -17,8 +17,17 @@ const UserManagement = () => {
     name: '',
     email: '',
     phone: '',
-    role: 'agent'
+    role: 'agent',
+    nin: ''
   });
+
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successInfo, setSuccessInfo] = useState({});
+
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editUser, setEditUser] = useState(null);
+  const [showDeactivateModal, setShowDeactivateModal] = useState(false);
+  const [deactivateTarget, setDeactivateTarget] = useState(null);
 
   const [formErrors, setFormErrors] = useState({});
 
@@ -57,6 +66,10 @@ const UserManagement = () => {
       errors.phone = 'Phone number is invalid';
     }
 
+    if (newUser.nin && newUser.nin.trim().length < 6) {
+      errors.nin = 'NIN looks too short';
+    }
+
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -72,29 +85,18 @@ const UserManagement = () => {
     setFormLoading(true);
     try {
       const response = await usersAPI.registerAgent(newUser);
-      
-      if (response.data.emailSent) {
-        toast.success(
-          <div>
-            <p>Agent registered successfully! 🎉</p>
-            <p className="text-sm mt-1">Welcome email with OTP sent to {newUser.email}</p>
-          </div>,
-          { duration: 5000 }
-        );
-      } else {
-        toast.success(
-          <div>
-            <p>Agent registered successfully! 🎉</p>
-            <p className="text-sm mt-1 text-yellow-600">
-              User created but email failed. OTP: {response.data.otp}
-            </p>
-          </div>,
-          { duration: 8000 }
-        );
-      }
-      
+
+      // Show a nicer modal with result and OTP if available
+      setSuccessInfo({
+        emailSent: response.data.emailSent,
+        otp: response.data.otp || null,
+        email: newUser.email,
+        name: newUser.name
+      });
+      setShowSuccessModal(true);
+
       setShowAddModal(false);
-      setNewUser({ name: '', email: '', phone: '', role: 'agent' });
+      setNewUser({ name: '', email: '', phone: '', role: 'agent', nin: '' });
       setFormErrors({});
       loadUsers(); // Refresh the user list
     } catch (error) {
@@ -134,6 +136,54 @@ const UserManagement = () => {
       } catch (error) {
         toast.error(error.response?.data?.message || 'Failed to delete user');
       }
+    }
+  };
+
+  const handleEditClick = (user) => {
+    setEditUser({ ...user });
+    setShowEditModal(true);
+  };
+
+  const openDeactivateModal = (user) => {
+    setDeactivateTarget(user);
+    setShowDeactivateModal(true);
+  };
+
+  const handleToggleActive = async () => {
+    if (!deactivateTarget) return;
+    const id = deactivateTarget._id;
+    const newActive = deactivateTarget.isActive === false ? true : false;
+    try {
+      await usersAPI.update(id, { isActive: newActive });
+      toast.success(newActive ? 'User activated successfully' : 'User deactivated successfully');
+      setShowDeactivateModal(false);
+      setDeactivateTarget(null);
+      loadUsers();
+    } catch (error) {
+      console.error('Toggle active error:', error);
+      toast.error(error.response?.data?.message || 'Failed to update user status');
+    }
+  };
+
+  const handleUpdateUser = async (e) => {
+    e.preventDefault();
+    if (!editUser) return;
+    try {
+      const payload = {
+        name: editUser.name,
+        phone: editUser.phone,
+        nin: editUser.nin,
+        isActive: editUser.isActive,
+        status: editUser.status
+      };
+      await usersAPI.update(editUser._id, payload);
+      toast.success('User updated successfully');
+      setShowEditModal(false);
+      setEditUser(null);
+      loadUsers();
+    } catch (error) {
+      console.error('Update user error:', error);
+      toast.error(error.response?.data?.message || 'Failed to update user');
     }
   };
 
@@ -182,10 +232,18 @@ const UserManagement = () => {
             </button>
           )}
           <button 
+            onClick={() => handleEditClick(user)}
             className="p-2 text-gray-400 hover:text-blue-500 transition-colors"
             title="Edit User"
           >
             <Edit className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => openDeactivateModal(user)}
+            className="p-2 text-gray-400 hover:text-red-500 transition-colors"
+            title={user.isActive === false ? 'Activate User' : 'Deactivate User'}
+          >
+            <UserX className="w-4 h-4" />
           </button>
           {user.role !== 'admin' && (
             <button 
@@ -396,10 +454,20 @@ const UserManagement = () => {
                 )}
               </div>
 
-              <div className="bg-blue-50 p-4 rounded-lg">
-                <p className="text-sm text-blue-700">
-                  <strong>Note:</strong> The agent will receive a One-Time Password (OTP) via email that they must use for first login and then set a new password.
-                </p>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">National ID (NIN)</label>
+                <input
+                  type="text"
+                  className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 ${
+                    formErrors.nin ? 'border-red-300' : 'border-gray-300'
+                  }`}
+                  placeholder="Enter national ID number"
+                  value={newUser.nin}
+                  onChange={(e) => setNewUser({ ...newUser, nin: e.target.value })}
+                />
+                {formErrors.nin && (
+                  <p className="text-red-500 text-sm mt-1">{formErrors.nin}</p>
+                )}
               </div>
 
               <div className="flex space-x-3 pt-4">
@@ -430,6 +498,84 @@ const UserManagement = () => {
                 </button>
               </div>
             </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Success Modal after registration */}
+      {showSuccessModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-xl shadow-lg max-w-md w-full p-6">
+            <h3 className="text-lg font-semibold text-gray-900">Agent Registered</h3>
+            <p className="mt-2 text-sm text-gray-600">{successInfo.name} ({successInfo.email}) has been created.</p>
+            {successInfo.emailSent ? (
+              <p className="mt-3 text-sm text-green-600">A welcome email with OTP was sent to the agent.</p>
+            ) : (
+              <div className="mt-3 text-sm text-yellow-700">
+                <p>User created but email failed to send.</p>
+                {successInfo.otp && <p className="mt-2 font-mono bg-gray-100 p-2 rounded">OTP: {successInfo.otp}</p>}
+                <p className="mt-2 text-xs text-gray-500">Please share the OTP with the agent manually.</p>
+              </div>
+            )}
+            <div className="mt-6 text-right">
+              <button onClick={() => setShowSuccessModal(false)} className="px-4 py-2 bg-orange-500 text-white rounded-lg">Close</button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Edit User Modal */}
+      {showEditModal && editUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-xl shadow-lg max-w-md w-full p-6">
+            <h3 className="text-lg font-semibold text-gray-900">Edit User</h3>
+            <form onSubmit={handleUpdateUser} className="space-y-4 mt-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Full Name</label>
+                <input value={editUser.name} onChange={(e) => setEditUser({ ...editUser, name: e.target.value })} className="w-full p-3 border rounded-lg" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
+                <input value={editUser.phone || ''} onChange={(e) => setEditUser({ ...editUser, phone: e.target.value })} className="w-full p-3 border rounded-lg" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">NIN</label>
+                <input value={editUser.nin || ''} onChange={(e) => setEditUser({ ...editUser, nin: e.target.value })} className="w-full p-3 border rounded-lg" />
+              </div>
+              <div className="flex items-center space-x-3">
+                <label className="flex items-center space-x-2 text-sm">
+                  <input type="checkbox" checked={editUser.isActive !== false} onChange={(e) => setEditUser({ ...editUser, isActive: e.target.checked })} />
+                  <span>Active</span>
+                </label>
+                <label className="flex items-center space-x-2 text-sm">
+                  <select value={editUser.status || 'offline'} onChange={(e) => setEditUser({ ...editUser, status: e.target.value })} className="p-2 border rounded">
+                    <option value="offline">Offline</option>
+                    <option value="online">Online</option>
+                  </select>
+                </label>
+              </div>
+              <div className="flex justify-end space-x-3 pt-4">
+                <button type="button" onClick={() => { setShowEditModal(false); setEditUser(null); }} className="py-2 px-4 border rounded">Cancel</button>
+                <button type="submit" className="py-2 px-4 bg-orange-500 text-white rounded">Save</button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Deactivate / Activate Confirmation Modal */}
+      {showDeactivateModal && deactivateTarget && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-xl shadow-lg max-w-md w-full p-6">
+            <h3 className="text-lg font-semibold text-gray-900">{deactivateTarget.isActive === false ? 'Activate User' : 'Deactivate User'}</h3>
+            <p className="mt-2 text-sm text-gray-600">Are you sure you want to {deactivateTarget.isActive === false ? 'activate' : 'deactivate'} <strong>{deactivateTarget.name}</strong>?</p>
+            <p className="mt-3 text-sm text-gray-500">{deactivateTarget.isActive === false ? 'Activating will allow this agent to access the system again.' : 'Deactivating will immediately prevent this agent from logging in.'}</p>
+            <div className="mt-6 flex justify-end space-x-3">
+              <button onClick={() => { setShowDeactivateModal(false); setDeactivateTarget(null); }} className="px-4 py-2 border rounded">Cancel</button>
+              <button onClick={handleToggleActive} className={`px-4 py-2 rounded text-white ${deactivateTarget.isActive === false ? 'bg-green-600' : 'bg-red-600'}`}>
+                {deactivateTarget.isActive === false ? 'Activate' : 'Deactivate'}
+              </button>
+            </div>
           </motion.div>
         </div>
       )}

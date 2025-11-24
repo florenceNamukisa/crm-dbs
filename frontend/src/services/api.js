@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
+const API_URL = process.env.REACT_APP_API_URL || 'https://crm-dbs.onrender.com/api';
 
 const api = axios.create({
   baseURL: API_URL,
@@ -38,7 +38,12 @@ export const authAPI = {
   login: (email, password) => api.post('/auth/login', { email, password }),
   changePassword: (data) => api.post('/auth/change-password', data),
   getMe: () => api.get('/auth/me'),
-  logout: () => {
+  logout: async () => {
+    try {
+      await api.post('/auth/logout');
+    } catch (e) {
+      // ignore
+    }
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     return Promise.resolve();
@@ -116,6 +121,8 @@ export const reportsAPI = {
   generateReport: (reportData) => api.post('/reports/generate', reportData),
   getReportTemplates: () => api.get('/reports/templates'),
   downloadReport: (reportId) => api.get(`/reports/download/${reportId}`, { responseType: 'blob' }),
+  share: (payload) => api.post('/reports/share', payload),
+  importFile: (formData) => api.post('/reports/import', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
 };
 
 // File Upload API

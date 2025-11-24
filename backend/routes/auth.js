@@ -16,6 +16,11 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ message: 'Invalid email or password' });
     }
 
+    // Prevent deactivated users from logging in
+    if (user.isActive === false) {
+      return res.status(403).json({ message: 'Account has been deactivated. Please contact your administrator.' });
+    }
+
     // Check password/OTP
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
@@ -36,6 +41,14 @@ router.post('/login', async (req, res) => {
       { expiresIn: '24h' }
     );
 
+    // Mark user as online
+    try {
+      user.status = 'online';
+      await user.save();
+    } catch (err) {
+      console.warn('Could not update user status:', err.message);
+    }
+
     // Return user data without password
     const userResponse = {
       id: user._id,
@@ -43,7 +56,10 @@ router.post('/login', async (req, res) => {
       email: user.email,
       role: user.role,
       phone: user.phone,
+      nin: user.nin || null,
       isFirstLogin: user.isFirstLogin,
+      isActive: user.isActive,
+      status: user.status,
       performanceScore: user.performanceScore,
       totalDeals: user.totalDeals,
       successfulDeals: user.successfulDeals,
@@ -122,15 +138,39 @@ router.get('/me', async (req, res) => {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret');
     const user = await User.findById(decoded.userId).select('-password -otp');
-    
+
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (user.isActive === false) {
+      return res.status(403).json({ message: 'Account has been deactivated' });
     }
 
     res.json(user);
   } catch (error) {
     console.error('Get current user error:', error);
     res.status(401).json({ message: 'Invalid token' });
+  }
+});
+
+// Logout: mark user offline (optional)
+router.post('/logout', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) return res.status(200).json({ message: 'Logged out' });
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret');
+    const user = await User.findById(decoded.userId);
+    if (user) {
+      user.status = 'offline';
+      await user.save();
+    }
+
+    res.json({ message: 'Logged out' });
+  } catch (error) {
+    console.error('Logout error:', error);
+    res.status(200).json({ message: 'Logged out' });
   }
 });
 

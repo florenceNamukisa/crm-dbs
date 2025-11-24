@@ -26,6 +26,20 @@ const userSchema = new mongoose.Schema({
     enum: ['admin', 'agent'],
     default: 'agent'
   },
+  nin: {
+    type: String,
+    trim: true,
+    default: null
+  },
+  isActive: {
+    type: Boolean,
+    default: true
+  },
+  status: {
+    type: String,
+    enum: ['online', 'offline'],
+    default: 'offline'
+  },
   isFirstLogin: {
     type: Boolean,
     default: true

@@ -181,3 +181,29 @@ export const testEmailConfig = async () => {
     return false;
   }
 };
+
+// Send email with attachment
+export const sendEmailWithAttachment = async (to, subject, htmlContent, attachments = []) => {
+  try {
+    const transporter = createTransporter();
+
+    const mailOptions = {
+      from: process.env.EMAIL_FROM || '"CRM System" <noreply@crm-system.com>',
+      to,
+      subject,
+      html: htmlContent || '<p>Please find the attached report.</p>',
+      attachments
+    };
+
+    const result = await transporter.sendMail(mailOptions);
+    if (process.env.NODE_ENV === 'development' && result.messageId) {
+      const previewUrl = nodemailer.getTestMessageUrl(result);
+      console.log('📧 Email sent! Preview URL:', previewUrl);
+    }
+
+    return { success: true, messageId: result.messageId };
+  } catch (error) {
+    console.error('❌ sendEmailWithAttachment error:', error);
+    return { success: false, error: error.message };
+  }
+};

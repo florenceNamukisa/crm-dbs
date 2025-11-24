@@ -13,6 +13,7 @@ import Schedules from './pages/agent/Schedules';
 import UserManagement from './pages/admin/UserManagement';
 import Reports from './pages/admin/Reports';
 import Settings from './pages/admin/Settings';
+import ChangePassword from './pages/ChangePassword';
 
 // Components
 import Layout from './components/Layout';
@@ -87,6 +88,11 @@ function App() {
             } />
             
             {/* Agent Routes */}
+            <Route path="/change-password" element={
+              <ProtectedRoute>
+                <ChangePassword />
+              </ProtectedRoute>
+            } />
             <Route path="/agent" element={
               <ProtectedRoute allowedRoles={['agent']}>
                 <AgentDashboard />
