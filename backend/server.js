@@ -22,10 +22,17 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
+// CORS configuration with environment support
+const corsOrigins = process.env.CORS_ORIGINS 
+  ? process.env.CORS_ORIGINS.split(',')
+  : ['http://localhost:3000', 'http://localhost:3001', 'https://crm-tool-ebon.vercel.app'];
+
 // Middleware
 app.use(cors({
-  origin: ['http://localhost:3000', 'https://crm-tool-ebon.vercel.app'], // React app URLs (dev and production)
-  credentials: true
+  origin: corsOrigins,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
