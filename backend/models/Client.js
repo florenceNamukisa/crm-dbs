@@ -7,7 +7,6 @@ const clientSchema = new mongoose.Schema({
     required: [true, 'Client name is required'],
     trim: true
   },
-  dateOfBirth: Date,
   gender: {
     type: String,
     enum: ['male', 'female', 'other', 'prefer_not_to_say'],
@@ -96,7 +95,7 @@ const clientSchema = new mongoose.Schema({
   },
   priority: {
     type: String,
-    enum: ['low', 'medium', 'high', 'critical'],
+    enum: ['low', 'medium', 'high'],
     default: 'medium'
   },
   engagementScore: {

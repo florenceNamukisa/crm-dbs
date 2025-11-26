@@ -6,17 +6,24 @@ const router = express.Router();
 // Get all clients
 router.get('/', async (req, res) => {
   try {
-    const { agentId, search, page = 1, limit = 10 } = req.query;
-    
+    const { agentId, search, page = 1, limit = 10, start, end } = req.query;
+
     let query = {};
     if (agentId) query.agent = agentId;
-    
+
     if (search) {
       query.$or = [
         { name: { $regex: search, $options: 'i' } },
         { email: { $regex: search, $options: 'i' } },
         { company: { $regex: search, $options: 'i' } }
       ];
+    }
+
+    // Add date filtering
+    if (start || end) {
+      query.createdAt = {};
+      if (start) query.createdAt.$gte = new Date(start);
+      if (end) query.createdAt.$lte = new Date(end);
     }
     
     const clients = await Client.find(query)

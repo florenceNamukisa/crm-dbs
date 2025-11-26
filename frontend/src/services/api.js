@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = process.env.REACT_APP_API_URL || 'https://crm-dbs.onrender.com/api';
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
 const api = axios.create({
   baseURL: API_URL,
@@ -80,10 +80,6 @@ export const dealsAPI = {
   getStats: (params = {}) => api.get('/deals/stats', { params }),
 };
 
-// Sales API
-export const salesAPI = {
-  getStats: (params = {}) => api.get('/sales', { params })
-};
 
 // Performance API
 export const performanceAPI = {
@@ -123,6 +119,29 @@ export const reportsAPI = {
   downloadReport: (reportId) => api.get(`/reports/download/${reportId}`, { responseType: 'blob' }),
   share: (payload) => api.post('/reports/share', payload),
   importFile: (formData) => api.post('/reports/import', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
+};
+
+// Sales API
+export const salesAPI = {
+  getAll: (params = {}) => api.get('/sales', { params }),
+  getSummary: (period = 'daily') => api.get(`/sales/summary?period=${period}`),
+  getStats: (params = {}) => api.get('/sales/stats', { params }),
+  create: (saleData) => api.post('/sales', saleData),
+  getById: (id) => api.get(`/sales/${id}`),
+  update: (id, saleData) => api.put(`/sales/${id}`, saleData),
+  recordPayment: (id, paymentData) => api.post(`/sales/${id}/payment`, paymentData),
+  getRecent: (limit = 5) => api.get(`/sales/recent/list?limit=${limit}`)
+};
+
+// Stock API
+export const stockAPI = {
+  getAll: (params = {}) => api.get('/stock', { params }),
+  getAlerts: () => api.get('/stock/alerts'),
+  create: (stockData) => api.post('/stock', stockData),
+  update: (id, stockData) => api.put(`/stock/${id}`, stockData),
+  delete: (id) => api.delete(`/stock/${id}`),
+  updateStock: (id, quantity, operation) => api.patch(`/stock/${id}/stock`, { quantity, operation }),
+  getStats: () => api.get('/stock/stats/overview')
 };
 
 // File Upload API

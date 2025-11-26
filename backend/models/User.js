@@ -71,6 +71,30 @@ const userSchema = new mongoose.Schema({
   failedDeals: {
     type: Number,
     default: 0
+  },
+  totalSales: {
+    type: Number,
+    default: 0
+  },
+  totalSalesAmount: {
+    type: Number,
+    default: 0
+  },
+  monthlySales: {
+    type: Number,
+    default: 0
+  },
+  monthlySalesAmount: {
+    type: Number,
+    default: 0
+  },
+  agentRank: {
+    type: Number,
+    default: 0
+  },
+  lastRankUpdate: {
+    type: Date,
+    default: Date.now
   }
 }, {
   timestamps: true

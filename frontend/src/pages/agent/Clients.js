@@ -1,16 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { 
-  Plus, 
-  Search, 
-  Filter, 
-  Download, 
-  Mail, 
-  Phone, 
-  MapPin, 
-  Building, 
-  User, 
-  Star, 
+import {
+  Plus,
+  Search,
+  Filter,
+  Download,
+  Mail,
+  Phone,
+  MapPin,
+  Building,
+  User,
+  Star,
   Calendar,
   Edit,
   Trash2,
@@ -18,6 +18,7 @@ import {
   Users,
   FileText,
   Tag,
+  MessageCircle,
   ChevronDown,
   ChevronUp,
   X,
@@ -219,7 +220,6 @@ const Clients = () => {
       low: 'bg-green-100 text-green-800',
       medium: 'bg-yellow-100 text-yellow-800',
       high: 'bg-orange-100 text-orange-800',
-      critical: 'bg-red-100 text-red-800'
     };
     return colors[priority] || 'bg-gray-100 text-gray-800';
   };
@@ -847,7 +847,6 @@ const Clients = () => {
               <option value="low">Low</option>
               <option value="medium">Medium</option>
               <option value="high">High</option>
-              <option value="critical">Critical</option>
             </select>
 
             <button
@@ -1031,6 +1030,32 @@ const Clients = () => {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center space-x-2">
+                        {client.phone && (
+                          <button
+                            onClick={() => window.open(`tel:${client.phone}`, '_self')}
+                            className="p-2 text-green-600 hover:bg-green-50 rounded-lg"
+                            aria-label={`Call ${client.name}`}
+                            title="Call"
+                          >
+                            <Phone className="w-4 h-4" />
+                          </button>
+                        )}
+                        {(client.phone || client.email) && (
+                          <button
+                            onClick={() => {
+                              if (client.phone) {
+                                window.open(`https://wa.me/${client.phone.replace(/\D/g, '')}?text=Hello ${client.name}, this is regarding our recent conversation.`, '_blank');
+                              } else if (client.email) {
+                                window.open(`mailto:${client.email}?subject=Follow-up&body=Hello ${client.name},`, '_blank');
+                              }
+                            }}
+                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
+                            aria-label={`Chat with ${client.name}`}
+                            title="Chat/Message"
+                          >
+                            <MessageCircle className="w-4 h-4" />
+                          </button>
+                        )}
                         <button onClick={() => handleViewProfile(client._id)} className="p-2 text-gray-500 hover:text-gray-700 rounded-lg" aria-label={`View ${client.name}`}>
                           <Eye className="w-4 h-4" />
                         </button>

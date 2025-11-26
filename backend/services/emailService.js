@@ -3,41 +3,84 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-// Create transporter
-const createTransporter = () => {
-  // Always use Ethereal for development to avoid Gmail authentication issues
-  if (process.env.NODE_ENV === 'development') {
-    return nodemailer.createTransport({
-      host: 'smtp.ethereal.email',
-      port: 587,
-      auth: {
-        user: process.env.ETHEREAL_USER || 'your-ethreal-user',
-        pass: process.env.ETHEREAL_PASS || 'your-ethreal-password'
-      }
-    });
-  }
+let cachedTransporter = null;
+let cachedConfigSummary = null;
+let cachedEtherealAccount = null;
 
-  // Use Gmail for production if EMAIL_USER is configured
-  if (process.env.EMAIL_USER) {
-    return nodemailer.createTransport({
-      service: 'gmail',
+const logEmailConfig = () => {
+  if (!cachedConfigSummary) return;
+  console.log(
+    `✉️  Email transport ready → provider: ${cachedConfigSummary.provider}, user: ${cachedConfigSummary.user}`
+  );
+  if (cachedConfigSummary.provider === 'ethereal:auto') {
+    console.log(
+      'ℹ️  Using auto-generated Ethereal inbox. Emails will stay in preview mode until real SMTP credentials are provided.'
+    );
+  }
+};
+
+const createTransporter = async () => {
+  if (cachedTransporter) return cachedTransporter;
+
+  // Prefer real SMTP credentials when provided
+  if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+    const service = process.env.EMAIL_SERVICE;
+    const host = process.env.EMAIL_HOST;
+    const port = process.env.EMAIL_PORT ? Number(process.env.EMAIL_PORT) : undefined;
+    const secure = process.env.EMAIL_SECURE === 'true';
+
+    const transportConfig = {
       auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS
       }
-    });
+    };
+
+    if (host) {
+      transportConfig.host = host;
+      transportConfig.port = port || 587;
+      transportConfig.secure = secure;
+    } else {
+      transportConfig.service = service || 'gmail';
+    }
+
+    cachedTransporter = nodemailer.createTransport(transportConfig);
+    cachedConfigSummary = {
+      provider: transportConfig.service || transportConfig.host || 'custom',
+      user: process.env.EMAIL_USER
+    };
+    logEmailConfig();
+    return cachedTransporter;
   }
 
-  // Fallback to Ethereal if no email configuration
-  return nodemailer.createTransport({
+  // Fall back to Ethereal (auto-generate account when not supplied)
+  if (!cachedEtherealAccount) {
+    if (process.env.ETHEREAL_USER && process.env.ETHEREAL_PASS) {
+      cachedEtherealAccount = {
+        user: process.env.ETHEREAL_USER,
+        pass: process.env.ETHEREAL_PASS
+      };
+      cachedConfigSummary = { provider: 'ethereal:env', user: cachedEtherealAccount.user };
+    } else {
+      cachedEtherealAccount = await nodemailer.createTestAccount();
+      cachedConfigSummary = { provider: 'ethereal:auto', user: cachedEtherealAccount.user };
+      console.log('⚠️  No SMTP credentials supplied – generated temporary Ethereal account.');
+      console.log(`   Username: ${cachedEtherealAccount.user}`);
+      console.log(`   Password: ${cachedEtherealAccount.pass}`);
+    }
+  }
+
+  cachedTransporter = nodemailer.createTransport({
     host: 'smtp.ethereal.email',
     port: 587,
-    auth: {
-      user: process.env.ETHEREAL_USER || 'your-ethreal-user',
-      pass: process.env.ETHEREAL_PASS || 'your-ethreal-password'
-    }
+    auth: cachedEtherealAccount
   });
+
+  logEmailConfig();
+  return cachedTransporter;
 };
+
+export const getEmailConfigSummary = () => cachedConfigSummary;
 
 // Generate OTP (6-digit numeric code)
 export const generateOTP = () => {
@@ -148,7 +191,7 @@ const emailTemplates = {
 // Send email function - FIXED: Proper template calling
 export const sendEmail = async (to, templateName, templateData) => {
   try {
-    const transporter = createTransporter();
+    const transporter = await createTransporter();
     const template = emailTemplates[templateName];
     
     if (!template) {
@@ -170,13 +213,13 @@ export const sendEmail = async (to, templateName, templateData) => {
     
     const result = await transporter.sendMail(mailOptions);
 
-    if (process.env.NODE_ENV === 'development' && result.messageId) {
-      const previewUrl = nodemailer.getTestMessageUrl(result);
+    const previewUrl = nodemailer.getTestMessageUrl(result);
+    if (previewUrl) {
       console.log('📧 Email sent! Preview URL:', previewUrl);
     }
 
     console.log(`✅ Email sent successfully to ${to}`);
-    return { success: true, messageId: result.messageId };
+    return { success: true, messageId: result.messageId, previewUrl };
   } catch (error) {
     console.error('❌ Email sending error:', error);
     return { success: false, error: error.message };
@@ -186,7 +229,7 @@ export const sendEmail = async (to, templateName, templateData) => {
 // Test email configuration
 export const testEmailConfig = async () => {
   try {
-    const transporter = createTransporter();
+    const transporter = await createTransporter();
     await transporter.verify();
     console.log('✅ Email server is ready to send messages');
     return true;
@@ -199,7 +242,7 @@ export const testEmailConfig = async () => {
 // Send email with attachment
 export const sendEmailWithAttachment = async (to, subject, htmlContent, attachments = []) => {
   try {
-    const transporter = createTransporter();
+    const transporter = await createTransporter();
 
     const mailOptions = {
       from: process.env.EMAIL_FROM || '"CRM System" <noreply@crm-system.com>',
@@ -210,8 +253,8 @@ export const sendEmailWithAttachment = async (to, subject, htmlContent, attachme
     };
 
     const result = await transporter.sendMail(mailOptions);
-    if (process.env.NODE_ENV === 'development' && result.messageId) {
-      const previewUrl = nodemailer.getTestMessageUrl(result);
+    const previewUrl = nodemailer.getTestMessageUrl(result);
+    if (previewUrl) {
       console.log('📧 Email sent! Preview URL:', previewUrl);
     }
 

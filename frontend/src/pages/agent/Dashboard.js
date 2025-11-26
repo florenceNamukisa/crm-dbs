@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { 
-  Users, 
-  Target, 
+import {
+  Users,
+  Target,
   Calendar,
   TrendingUp,
   Phone,
-  Mail
+  Mail,
+  DollarSign,
+  CheckCircle,
+  CreditCard
 } from 'lucide-react';
 import { 
   LineChart, 
@@ -20,7 +23,7 @@ import {
   Tooltip, 
   ResponsiveContainer 
 } from 'recharts';
-import { performanceAPI, dealsAPI, clientsAPI } from '../../services/api';
+import { performanceAPI, dealsAPI, clientsAPI, salesAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
@@ -37,6 +40,7 @@ const AgentDashboard = () => {
   const [progress, setProgress] = useState(0);
   const [salesTotal, setSalesTotal] = useState(0);
   const [monthlySalesData, setMonthlySalesData] = useState([]);
+  const [timeFilter, setTimeFilter] = useState('monthly');
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -47,27 +51,27 @@ const AgentDashboard = () => {
       loadDashboardData();
     }, 60000);
     return () => clearInterval(timer);
-  }, [user]);
+  }, [user, timeFilter]);
 
   const loadDashboardData = async () => {
     try {
       const userId = user?._id || user?.id;
       if (!userId) return;
 
-      // Fetch performance, deals stats and clients in parallel
-      const [performanceResponse, dealsStatsResponse, clientsResponse, dealsResponse, allDealsResponse] = await Promise.all([
+      // Fetch performance, deals stats, clients, sales, and deals in parallel
+      const [performanceResponse, dealsStatsResponse, clientsResponse, dealsResponse, salesResponse] = await Promise.all([
         performanceAPI.getAgentPerformance(userId),
         dealsAPI.getStats({ agent: userId }),
         clientsAPI.getAll({ agent: userId }),
         dealsAPI.getAll({ agent: userId }),
-        dealsAPI.getAll()
+        salesAPI.getSummary(timeFilter)
       ]);
 
       const perf = performanceResponse?.data || {};
       const dealsStats = dealsStatsResponse?.data || {};
       const clients = clientsResponse?.data?.clients || clientsResponse?.clients || [];
       const deals = dealsResponse?.data || dealsResponse || [];
-      const allDeals = allDealsResponse?.data || allDealsResponse || [];
+      const salesSummary = salesResponse?.data || {};
 
       // compute sales by month from deals (use closedAt/createdAt fallback)
       const salesByMonth = new Array(12).fill(0);
@@ -116,10 +120,14 @@ const AgentDashboard = () => {
         clientsMet: Array.isArray(clients) ? clients.length : (perf.clientsMet || 0),
         dealsWon: wonDeals.length || (dealsStats?.totalStats?.wonCount || 0),
         pendingDeals: pendingDealsCount || (dealsStats?.totalStats?.pendingCount || 0),
-        scheduledMeetings: perf.scheduledMeetings || 0
+        scheduledMeetings: perf.scheduledMeetings || 0,
+        totalSales: salesSummary.totalSales || 0,
+        totalSalesAmount: salesSummary.totalAmount || 0,
+        cashSales: salesSummary.cashSales || 0,
+        creditSales: salesSummary.creditSales || 0
       });
 
-      setSalesTotal(totalSales);
+      setSalesTotal(salesSummary.totalAmount || totalSales);
       setMonthlySalesData(salesByMonth.map((value, idx) => ({ month: monthNames[idx], sales: value })));
 
     } catch (error) {
@@ -193,8 +201,29 @@ const AgentDashboard = () => {
         </div>
       </div>
 
+      {/* Time Period Filter */}
+      <div className="bg-white p-4 rounded-lg shadow-sm border">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <label className="text-sm font-medium text-gray-700">Time Period:</label>
+            <select
+              value={timeFilter}
+              onChange={(e) => setTimeFilter(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+            >
+              <option value="daily">Today</option>
+              <option value="weekly">This Week</option>
+              <option value="monthly">This Month</option>
+            </select>
+          </div>
+          <div className="text-sm text-gray-600">
+            Data shown for: <span className="font-medium capitalize">{timeFilter}</span>
+          </div>
+        </div>
+      </div>
+
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6">
         <StatCard
           icon={Users}
           title="Clients Met"
@@ -215,9 +244,27 @@ const AgentDashboard = () => {
         />
         <StatCard
           icon={Target}
-          title="Sales"
-          value={'UGX —'}
-          subtitle="Total won value (placeholder)"
+          title="Total Sales"
+          value={stats.totalSales || 0}
+          subtitle="Transactions"
+        />
+        <StatCard
+          icon={DollarSign}
+          title="Sales Amount"
+          value={`$${stats.totalSalesAmount?.toFixed(2) || '0.00'}`}
+          subtitle="Total revenue"
+        />
+        <StatCard
+          icon={CheckCircle}
+          title="Cash Sales"
+          value={stats.cashSales || 0}
+          subtitle="Paid in cash"
+        />
+        <StatCard
+          icon={CreditCard}
+          title="Credit Sales"
+          value={stats.creditSales || 0}
+          subtitle="On credit"
         />
       </div>
 

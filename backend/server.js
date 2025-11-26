@@ -13,6 +13,9 @@ import { dealRoutes } from './routes/deals.js';
 import { scheduleRoutes } from './routes/schedules.js';
 import { performanceRoutes } from './routes/performance.js';
 import { reportsRoutes } from './routes/reports.js';
+import { salesRoutes } from './routes/sales.js';
+import { stockRoutes } from './routes/stock.js';
+import { testEmailConfig } from './services/emailService.js';
 
 
 dotenv.config();
@@ -58,6 +61,8 @@ app.use('/api/deals', dealRoutes);
 app.use('/api/schedules', scheduleRoutes);
 app.use('/api/performance', performanceRoutes);
 app.use('/api/reports', reportsRoutes);
+app.use('/api/sales', salesRoutes);
+app.use('/api/stock', stockRoutes);
 
 
 // Serve frontend
@@ -73,7 +78,7 @@ const createDefaultAdmin = async () => {
   const User = await import('./models/User.js');
   try {
     const adminExists = await User.default.findOne({ role: 'admin' });
-    
+
     if (!adminExists) {
       await User.default.create({
         name: 'System Administrator',
@@ -84,21 +89,73 @@ const createDefaultAdmin = async () => {
       });
       console.log('Default admin user created: admin@crm.com / admin123');
     }
-
-    // Create demo agent if doesn't exist
-    const agentExists = await User.default.findOne({ email: 'agent@crm.com' });
-    if (!agentExists) {
-      await User.default.create({
-        name: 'Demo Agent',
-        email: 'agent@crm.com',
-        password: 'agent123',
-        role: 'agent',
-        isFirstLogin: false
-      });
-      console.log('Demo agent created: agent@crm.com / agent123');
-    }
   } catch (error) {
     console.error('Error creating default users:', error);
+  }
+};
+
+// Update agent rankings based on performance
+const updateAgentRankings = async () => {
+  try {
+    const User = await import('./models/User.js');
+    const Deal = await import('./models/Deal.js');
+    const Sale = await import('./models/Sale.js');
+
+    // Get all agents
+    const agents = await User.default.find({ role: 'agent', isActive: true });
+
+    // Calculate performance scores for each agent
+    const agentPerformances = await Promise.all(
+      agents.map(async (agent) => {
+        // Get deals stats
+        const deals = await Deal.default.find({
+          agent: agent._id,
+          stage: 'won'
+        });
+
+        // Get sales stats for the current month
+        const now = new Date();
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const sales = await Sale.default.find({
+          agent: agent._id,
+          saleDate: { $gte: startOfMonth },
+          status: 'completed'
+        });
+
+        const totalSalesAmount = sales.reduce((sum, sale) => sum + sale.finalAmount, 0);
+
+        // Calculate performance score (weighted combination)
+        const performanceScore = (deals.length * 100) + (totalSalesAmount * 0.1);
+
+        return {
+          agentId: agent._id,
+          performanceScore,
+          successfulDeals: deals.length,
+          monthlySalesAmount: totalSalesAmount,
+          totalSales: sales.length
+        };
+      })
+    );
+
+    // Sort by performance score (descending)
+    agentPerformances.sort((a, b) => b.performanceScore - a.performanceScore);
+
+    // Update rankings
+    for (let i = 0; i < agentPerformances.length; i++) {
+      const performance = agentPerformances[i];
+      await User.default.findByIdAndUpdate(performance.agentId, {
+        agentRank: i + 1,
+        performanceScore: performance.performanceScore,
+        successfulDeals: performance.successfulDeals,
+        monthlySalesAmount: performance.monthlySalesAmount,
+        totalSales: performance.totalSales,
+        lastRankUpdate: new Date()
+      });
+    }
+
+    console.log('✅ Agent rankings updated successfully');
+  } catch (error) {
+    console.error('❌ Error updating agent rankings:', error);
   }
 };
 
@@ -106,5 +163,20 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Login URL: http://localhost:${PORT}`);
+
+  // Test email configuration
+  const emailTest = await testEmailConfig();
+  if (emailTest) {
+    console.log('✅ Email service is configured and ready');
+  } else {
+    console.log('⚠️  Email service configuration issue detected');
+  }
+
   await createDefaultAdmin();
+
+  // Update agent rankings every 6 hours
+  setInterval(updateAgentRankings, 6 * 60 * 60 * 1000);
+
+  // Update rankings immediately on startup
+  updateAgentRankings();
 });

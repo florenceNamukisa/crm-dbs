@@ -49,27 +49,36 @@ const upload = multer({
 // Get all deals with filtering and search
 router.get('/', async (req, res) => {
   try {
-    const { 
-      agentId, 
-      clientId, 
-      stage, 
-      search, 
-      minValue, 
+    const {
+      agentId,
+      clientId,
+      stage,
+      search,
+      minValue,
       maxValue,
-      probability 
+      probability,
+      start,
+      end
     } = req.query;
-    
+
     let query = {};
-    
+
     if (agentId) query.agent = agentId;
     if (clientId) query.client = clientId;
     if (stage) query.stage = stage;
     if (probability) query.probability = { $gte: parseInt(probability) };
-    
+
     if (minValue || maxValue) {
       query.value = {};
       if (minValue) query.value.$gte = parseInt(minValue);
       if (maxValue) query.value.$lte = parseInt(maxValue);
+    }
+
+    // Add date filtering
+    if (start || end) {
+      query.createdAt = {};
+      if (start) query.createdAt.$gte = new Date(start);
+      if (end) query.createdAt.$lte = new Date(end);
     }
     
     if (search) {

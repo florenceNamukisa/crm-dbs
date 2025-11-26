@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Download, Filter, Calendar, Users, TrendingUp, BarChart3, Star } from 'lucide-react';
+import { Download, Filter, Calendar, Users, TrendingUp, BarChart3, Star, Share2, ChevronDown, MessageCircle, Mail, Copy } from 'lucide-react';
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { dealsAPI, usersAPI, clientsAPI, schedulesAPI, salesAPI } from '../../services/api';
 import api, { reportsAPI } from '../../services/api';
@@ -78,7 +78,8 @@ const Reports = () => {
   };
 
   const [showShareModal, setShowShareModal] = useState(false);
-  const [shareProvider, setShareProvider] = useState(null); // 'email', 'gmail', 'outlook', 'whatsapp'
+  const [showShareDropdown, setShowShareDropdown] = useState(false);
+  const [shareProvider, setShareProvider] = useState(''); // 'email', 'gmail', 'outlook', 'whatsapp', 'copy'
   const [shareEmail, setShareEmail] = useState('');
   const [sharePhone, setSharePhone] = useState('');
   const [shareSubject, setShareSubject] = useState('CRM Report');
@@ -115,7 +116,7 @@ const Reports = () => {
     }
   };
 
-  const handleShare = async () => {
+  const handleShare = async (provider = '') => {
     const csv = buildCSVFromAgents(agentPerformance || []);
     if (!csv) {
       toast.error('No data to share');
@@ -123,9 +124,38 @@ const Reports = () => {
     }
 
     try {
-      // Check if Web Share API is supported
-      if (navigator.share) {
-        // Create a Blob from the CSV data
+      if (provider === 'whatsapp') {
+        if (!sharePhone.trim()) {
+          toast.error('Please enter a phone number');
+          return;
+        }
+        // WhatsApp sharing via URL
+        const message = encodeURIComponent(`CRM Report: ${shareSubject}\n\n${csv.substring(0, 1000)}...`);
+        const whatsappUrl = `https://wa.me/${sharePhone.replace(/\D/g, '')}?text=${message}`;
+        window.open(whatsappUrl, '_blank');
+        toast.success('Opening WhatsApp...');
+        return;
+      }
+
+      if (provider === 'gmail') {
+        // Gmail sharing via mailto
+        const subject = encodeURIComponent(shareSubject);
+        const body = encodeURIComponent(`CRM Report Data:\n\n${csv}`);
+        const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=&su=${subject}&body=${body}`;
+        window.open(gmailUrl, '_blank');
+        toast.success('Opening Gmail...');
+        return;
+      }
+
+      if (provider === 'copy') {
+        // Copy to clipboard
+        await navigator.clipboard.writeText(csv);
+        toast.success('Report data copied to clipboard');
+        return;
+      }
+
+      // Check if Web Share API is supported for native sharing
+      if (navigator.share && !provider) {
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
         const file = new File([blob], `crm-report-${new Date().toISOString().slice(0, 10)}.csv`, { type: 'text/csv' });
 
@@ -137,9 +167,12 @@ const Reports = () => {
         });
         toast.success('Report shared successfully');
       } else {
-        // Fallback: if Web Share API not supported, show custom modal
+        // Fallback: show custom modal for email
+        setShareProvider(provider || 'email');
         setShowShareModal(true);
-        toast.info('Web Share not supported on this device. Use the form below.');
+        if (!navigator.share) {
+          toast.info('Web Share not supported on this device. Use the form below.');
+        }
       }
     } catch (err) {
       if (err.name === 'AbortError') {
@@ -427,10 +460,51 @@ const Reports = () => {
             <input type="file" accept=".csv,.xlsx,.xls,.json" onChange={handleImportFile} className="hidden" />
             <span>Import</span>
           </label>
-          <button onClick={() => setShowShareModal(true)} className="bg-orange-500 text-white px-3 py-2 rounded-lg flex items-center space-x-2 hover:bg-orange-600 transition-colors">
-            <Download className="w-4 h-4" />
-            <span>Share</span>
-          </button>
+          <div className="relative">
+            <button
+              onClick={() => setShowShareDropdown(!showShareDropdown)}
+              className="bg-orange-500 text-white px-3 py-2 rounded-lg flex items-center space-x-2 hover:bg-orange-600 transition-colors"
+            >
+              <Share2 className="w-4 h-4" />
+              <span>Share</span>
+              <ChevronDown className="w-4 h-4" />
+            </button>
+
+            {showShareDropdown && (
+              <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-10 border">
+                <div className="py-1">
+                  <button
+                    onClick={() => { handleShare('whatsapp'); setShowShareDropdown(false); }}
+                    className="flex items-center space-x-2 w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  >
+                    <MessageCircle className="w-4 h-4 text-green-600" />
+                    <span>WhatsApp</span>
+                  </button>
+                  <button
+                    onClick={() => { handleShare('gmail'); setShowShareDropdown(false); }}
+                    className="flex items-center space-x-2 w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  >
+                    <Mail className="w-4 h-4 text-red-600" />
+                    <span>Gmail</span>
+                  </button>
+                  <button
+                    onClick={() => { handleShare('copy'); setShowShareDropdown(false); }}
+                    className="flex items-center space-x-2 w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  >
+                    <Copy className="w-4 h-4 text-blue-600" />
+                    <span>Copy to Clipboard</span>
+                  </button>
+                  <button
+                    onClick={() => { setShowShareModal(true); setShareProvider('email'); setShowShareDropdown(false); }}
+                    className="flex items-center space-x-2 w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  >
+                    <Mail className="w-4 h-4 text-gray-600" />
+                    <span>Email (Custom)</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -659,25 +733,44 @@ const Reports = () => {
           </table>
         </div>
       </motion.div>
-      {/* Share Modal (Fallback for browsers without Web Share API) */}
+      {/* Share Modal */}
       {showShareModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-xl shadow-lg max-w-md w-full p-6">
-            <h3 className="text-lg font-semibold text-gray-900">Share Report via Email</h3>
-            <p className="text-sm text-gray-600 mt-2">Your device doesn't support native sharing. Send the report via email instead.</p>
-            
+            <h3 className="text-lg font-semibold text-gray-900">
+              Share Report via {shareProvider === 'email' ? 'Email' : 'Custom Email'}
+            </h3>
+            <p className="text-sm text-gray-600 mt-2">
+              {shareProvider === 'email'
+                ? "Send the report via email"
+                : "Enter recipient details to share the report"
+              }
+            </p>
+
             <div className="mt-4 space-y-3">
-              <input 
-                value={shareEmail} 
-                onChange={(e) => setShareEmail(e.target.value)} 
-                placeholder="recipient@example.com" 
-                className="w-full p-3 border rounded" 
-              />
-              <input 
-                value={shareSubject} 
-                onChange={(e) => setShareSubject(e.target.value)} 
-                placeholder="Email subject" 
-                className="w-full p-3 border rounded" 
+              {(shareProvider === 'email' || shareProvider === 'gmail') && (
+                <input
+                  value={shareEmail}
+                  onChange={(e) => setShareEmail(e.target.value)}
+                  placeholder="recipient@example.com"
+                  className="w-full p-3 border rounded"
+                  type="email"
+                />
+              )}
+              {shareProvider === 'whatsapp' && (
+                <input
+                  value={sharePhone}
+                  onChange={(e) => setSharePhone(e.target.value)}
+                  placeholder="+1234567890"
+                  className="w-full p-3 border rounded"
+                  type="tel"
+                />
+              )}
+              <input
+                value={shareSubject}
+                onChange={(e) => setShareSubject(e.target.value)}
+                placeholder="Report subject/title"
+                className="w-full p-3 border rounded"
               />
             </div>
             
@@ -688,24 +781,37 @@ const Reports = () => {
               >
                 Cancel
               </button>
-              <button 
+              <button
                 onClick={async () => {
-                  if (!shareEmail) {
+                  if (shareProvider === 'whatsapp' && !sharePhone.trim()) {
+                    toast.error('Please provide a phone number');
+                    return;
+                  }
+                  if ((shareProvider === 'email' || shareProvider === 'gmail') && !shareEmail.trim()) {
                     toast.error('Please provide an email address');
                     return;
                   }
+
                   try {
-                    const csv = buildCSVFromAgents(agentPerformance || []);
-                    await reportsAPI.share({ to: shareEmail, subject: shareSubject, csv, filename: `crm-report-${Date.now()}.csv` });
-                    toast.success('Report shared successfully via email');
+                    if (shareProvider === 'whatsapp') {
+                      handleShare('whatsapp');
+                    } else if (shareProvider === 'gmail') {
+                      handleShare('gmail');
+                    } else {
+                      // Custom email via API
+                      const csv = buildCSVFromAgents(agentPerformance || []);
+                      await reportsAPI.share({ to: shareEmail, subject: shareSubject, csv, filename: `crm-report-${Date.now()}.csv` });
+                      toast.success('Report shared successfully via email');
+                    }
                     setShowShareModal(false);
                     setShareEmail('');
-                    setShareProvider(null);
+                    setSharePhone('');
+                    setShareProvider('');
                   } catch (err) {
-                    console.error('Email share failed', err);
-                    toast.error('Failed to send email');
+                    console.error('Share failed', err);
+                    toast.error('Failed to share report');
                   }
-                }} 
+                }}
                 className="px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600"
               >
                 Send Email

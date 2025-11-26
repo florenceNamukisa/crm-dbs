@@ -10,9 +10,9 @@ router.get('/agent/:agentId', async (req, res) => {
     const { agentId } = req.params;
 
     const deals = await Deal.find({ agent: agentId });
-    const wonDeals = deals.filter(d => (d.stage && String(d.stage).toLowerCase() === 'won'));
-    const lostDeals = deals.filter(d => (d.stage && String(d.stage).toLowerCase() === 'lost'));
-    const pendingDeals = deals.filter(d => (d.stage && String(d.stage).toLowerCase() === 'pending'));
+    const wonDeals = deals.filter(d => d.stage === 'won');
+    const lostDeals = deals.filter(d => d.stage === 'lost');
+    const pendingDeals = deals.filter(d => !['won', 'lost'].includes(d.stage));
 
     const totalValue = wonDeals.reduce((sum, deal) => sum + (Number(deal.value) || 0), 0);
     const successRate = deals.length > 0 ? (wonDeals.length / deals.length * 100) : 0;
@@ -47,14 +47,14 @@ router.get('/overall', async (req, res) => {
     const agents = await User.find({ role: 'agent' });
     const deals = await Deal.find().populate('agent');
     
-    const totalSuccessful = deals.filter(d => d.status === 'successful').length;
-    const totalFailed = deals.filter(d => d.status === 'failed').length;
-    const totalValue = deals.filter(d => d.status === 'successful')
-      .reduce((sum, deal) => sum + deal.value, 0);
+    const totalSuccessful = deals.filter(d => d.stage === 'won').length;
+    const totalFailed = deals.filter(d => d.stage === 'lost').length;
+    const totalValue = deals.filter(d => d.stage === 'won')
+      .reduce((sum, deal) => sum + (deal.value || 0), 0);
     
     const agentPerformance = agents.map(agent => {
-      const agentDeals = deals.filter(d => d.agent._id.toString() === agent._id.toString());
-      const agentSuccessful = agentDeals.filter(d => d.status === 'successful').length;
+      const agentDeals = deals.filter(d => d.agent && d.agent._id.toString() === agent._id.toString());
+      const agentSuccessful = agentDeals.filter(d => d.stage === 'won').length;
       
       return {
         agent: {

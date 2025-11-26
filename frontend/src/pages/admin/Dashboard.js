@@ -78,10 +78,11 @@ const AdminDashboard = () => {
       const range = computeRange(period);
 
       // fetch in parallel with individual chart period ranges
+      const salesRange = computeRange(salesPeriod);
       const [salesRes, dealsRes, schedulesRes, clientsRes, usersRes, perfRes] = await Promise.all([
-        salesAPI.getStats(computeRange(salesPeriod)).catch(e => ({ data: {} })),
+        salesAPI.getStats({ startDate: salesRange.start, endDate: salesRange.end }).catch(e => ({ data: {} })),
         dealsAPI.getAll(computeRange(dealsPeriod)).catch(e => ({ data: [] })),
-        schedulesAPI.getAll(range).catch(e => ({ data: [] })),
+        schedulesAPI.getAll({ startDate: range.start, endDate: range.end }).catch(e => ({ data: [] })),
         clientsAPI.getAll(computeRange(clientsPeriod)).catch(e => ({ data: [] })),
         usersAPI.getAll().catch(e => ({ data: [] })),
         performanceAPI.getAllPerformance().catch(e => ({ data: {} }))

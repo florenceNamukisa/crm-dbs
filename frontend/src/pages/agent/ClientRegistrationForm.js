@@ -25,7 +25,6 @@ const ClientRegistrationForm = ({ onClose, onSuccess }) => {
 
   const [formData, setFormData] = useState({
     name: '',
-    dateOfBirth: '',
     gender: '',
     nin: '',
     idType: 'national_id',
@@ -196,7 +195,6 @@ const ClientRegistrationForm = ({ onClose, onSuccess }) => {
       };
 
       // Add optional fields only if they have values
-      if (formData.dateOfBirth) submissionData.dateOfBirth = formData.dateOfBirth;
       if (formData.gender) submissionData.gender = formData.gender;
       if (formData.company) submissionData.company = formData.company;
       if (formData.position) submissionData.position = formData.position;
@@ -322,17 +320,6 @@ const ClientRegistrationForm = ({ onClose, onSuccess }) => {
                     )}
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Date of Birth
-                    </label>
-                    <input
-                      type="date"
-                      value={formData.dateOfBirth}
-                      onChange={(e) => handleInputChange('dateOfBirth', e.target.value)}
-                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                    />
-                  </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -697,7 +684,6 @@ const ClientRegistrationForm = ({ onClose, onSuccess }) => {
                       <option value="low">Low</option>
                       <option value="medium">Medium</option>
                       <option value="high">High</option>
-                      <option value="critical">Critical</option>
                     </select>
                   </div>
 
