@@ -34,5 +34,4 @@ const authorize = (...roles) => {
     next();
   };
 };
-
 module.exports = { auth, authorize };

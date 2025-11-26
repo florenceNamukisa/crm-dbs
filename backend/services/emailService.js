@@ -5,7 +5,8 @@ dotenv.config();
 
 // Create transporter
 const createTransporter = () => {
-  if (process.env.NODE_ENV === 'development' || !process.env.EMAIL_USER) {
+  // Always use Ethereal for development to avoid Gmail authentication issues
+  if (process.env.NODE_ENV === 'development') {
     return nodemailer.createTransport({
       host: 'smtp.ethereal.email',
       port: 587,
@@ -16,11 +17,24 @@ const createTransporter = () => {
     });
   }
 
+  // Use Gmail for production if EMAIL_USER is configured
+  if (process.env.EMAIL_USER) {
+    return nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
+      }
+    });
+  }
+
+  // Fallback to Ethereal if no email configuration
   return nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.ethereal.email',
+    port: 587,
     auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS
+      user: process.env.ETHEREAL_USER || 'your-ethreal-user',
+      pass: process.env.ETHEREAL_PASS || 'your-ethreal-password'
     }
   });
 };
