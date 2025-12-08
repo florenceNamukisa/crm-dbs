@@ -117,27 +117,49 @@ router.post('/', getCurrentUser, async (req, res) => {
   try {
     const clientData = {
       ...req.body,
-      agent: req.user.role === 'agent' ? req.user.userId : req.body.agent
+      agent: req.user.userId // Always use the authenticated user's ID
     };
 
     const client = new Client(clientData);
-    await client.save();
+    try {
+      await client.save();
+    } catch (validationError) {
+      if (validationError.name === 'ValidationError') {
+        const errors = Object.values(validationError.errors).map(err => err.message);
+        return res.status(400).json({
+          message: 'Validation failed',
+          errors: errors
+        });
+      }
+      if (validationError.code === 11000) { // Duplicate key error
+        const field = Object.keys(validationError.keyValue)[0];
+        return res.status(400).json({
+          message: `${field.charAt(0).toUpperCase() + field.slice(1)} already exists`
+        });
+      }
+      throw validationError;
+    }
 
     const populatedClient = await Client.findById(client._id)
       .populate('agent', 'name email');
 
-    // Create notification for admins
-    await createNotification({
-      type: 'client_created',
-      actorId: req.user.userId,
-      entityType: 'Client',
-      entityId: client._id,
-      metadata: {
-        clientName: clientData.name,
-        clientEmail: clientData.email,
-        clientPhone: clientData.phone
-      }
-    });
+    // Create notification for admins (don't fail if notification fails)
+    try {
+      await createNotification({
+        type: 'client_created',
+        actorId: req.user.userId,
+        entityType: 'Client',
+        entityId: client._id,
+        metadata: {
+          clientName: clientData.name,
+          clientEmail: clientData.email,
+          clientPhone: clientData.phone
+        }
+      });
+    } catch (notificationError) {
+      console.warn('Failed to create client notification:', notificationError.message);
+      // Don't fail the client creation if notification fails
+    }
 
     res.status(201).json(populatedClient);
   } catch (error) {

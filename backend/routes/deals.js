@@ -26,7 +26,7 @@ const getCurrentUser = async (req, res, next) => {
 // Get all deals (admin sees all, agents see their own)
 router.get('/', getCurrentUser, async (req, res) => {
   try {
-    const { page = 1, limit = 10, stage, client, agent } = req.query;
+    const { page = 1, limit = 10, stage, client, agent, search, minValue, maxValue } = req.query;
 
     let query = {};
 
@@ -45,6 +45,21 @@ router.get('/', getCurrentUser, async (req, res) => {
 
     if (client) {
       query.client = client;
+    }
+
+    // Search filter
+    if (search) {
+      query.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    // Value range filters
+    if (minValue || maxValue) {
+      query.value = {};
+      if (minValue) query.value.$gte = parseFloat(minValue);
+      if (maxValue) query.value.$lte = parseFloat(maxValue);
     }
 
     const skip = (page - 1) * limit;

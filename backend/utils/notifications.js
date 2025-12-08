@@ -7,6 +7,7 @@ export const createNotification = async (data) => {
 
     // Find all admin users
     const admins = await User.find({ role: 'admin' });
+    console.log(`Found ${admins.length} admin users for notification`);
 
     if (admins.length === 0) {
       console.warn('No admin users found to send notifications');
@@ -37,6 +38,7 @@ export const createNotification = async (data) => {
     }));
 
     await Notification.insertMany(notifications);
+    console.log(`Created ${notifications.length} notifications of type '${type}' for admins`);
 
     return { success: true, count: notifications.length };
   } catch (error) {
