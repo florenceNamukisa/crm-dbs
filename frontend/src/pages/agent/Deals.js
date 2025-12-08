@@ -48,6 +48,14 @@ const Deals = () => {
     maxValue: ''
   });
 
+  // Filter deals for pipeline view (exclude won/lost)
+  const pipelineDeals = deals.filter(deal => deal.stage !== 'won' && deal.stage !== 'lost');
+
+  // Determine which deals to display based on filters
+  // If no stage filter (All Stages), show all deals
+  // If specific stage filter, show deals matching that stage
+  const displayDeals = deals;
+
 
   useEffect(() => {
     loadDeals();
@@ -124,13 +132,24 @@ const Deals = () => {
 
   const handleUpdateDealStage = async (dealId, newStage) => {
     try {
+      // Optimistically update local state for immediate UI feedback
+      setDeals(prevDeals =>
+        prevDeals.map(deal =>
+          deal._id === dealId ? { ...deal, stage: newStage } : deal
+        )
+      );
+
       await dealsAPI.update(dealId, { stage: newStage });
       toast.success('Deal updated successfully');
+
+      // Refresh data from server to ensure consistency
       loadDeals();
       loadStats();
     } catch (err) {
       console.error('Error updating deal:', err);
       toast.error('Failed to update deal');
+      // Revert optimistic update on error
+      loadDeals();
     }
   };
 
@@ -150,10 +169,13 @@ const Deals = () => {
 
   // Calculate stats from deals if API stats are not available
   const calculatedStats = React.useMemo(() => {
-    if (stats) {
+    // Use all deals for stats calculation - cards show overall stats, not filtered
+    const dealsForStats = deals;
+
+    if (stats && dealsForStats.length > 0) {
       return stats;
     }
-    
+
     const stageStats = [
       { _id: 'lead', count: 0, totalValue: 0, avgProbability: 0 },
       { _id: 'qualification', count: 0, totalValue: 0, avgProbability: 0 },
@@ -164,10 +186,12 @@ const Deals = () => {
     ];
 
     let totalValue = 0;
+    let wonDealsCount = 0;
     let wonValue = 0;
     let lostValue = 0;
+    let pipelineCount = 0;
 
-    deals.forEach(deal => {
+    dealsForStats.forEach(deal => {
       const stageIndex = stageStats.findIndex(s => s._id === deal.stage);
       if (stageIndex !== -1) {
         stageStats[stageIndex].count++;
@@ -176,21 +200,27 @@ const Deals = () => {
           stageStats[stageIndex].totalValue / stageStats[stageIndex].count
         );
       }
-      
+
       totalValue += deal.value || 0;
-      if (deal.stage === 'won') wonValue += deal.value || 0;
+      if (deal.stage === 'won') {
+        wonDealsCount++;
+        wonValue += deal.value || 0;
+      }
       if (deal.stage === 'lost') lostValue += deal.value || 0;
+      if (deal.stage !== 'won' && deal.stage !== 'lost') pipelineCount++;
     });
 
     return {
       stageStats,
       totalStats: {
-        totalDeals: deals.length,
+        totalDeals: dealsForStats.length,
         totalValue,
+        wonDealsCount,
         wonValue,
         lostValue,
-        // winRate as percentage with one decimal
-        winRate: totalValue > 0 ? parseFloat(((wonValue / totalValue) * 100).toFixed(1)) : 0
+        pipelineCount,
+        // winRate as percentage with one decimal (won deals / total deals)
+        winRate: dealsForStats.length > 0 ? parseFloat(((wonDealsCount / dealsForStats.length) * 100).toFixed(1)) : 0
       }
     };
   }, [stats, deals]);
@@ -202,6 +232,8 @@ const Deals = () => {
       </div>
     );
   }
+
+  const formatUGX = (val) => `UGX ${Number(val || 0).toLocaleString('en-UG', { maximumFractionDigits: 0 })}`;
 
   return (
     <div className="space-y-6">
@@ -246,7 +278,7 @@ const Deals = () => {
         >
           <h3 className="text-lg font-semibold text-gray-900">Total Value</h3>
           <p className="text-2xl font-bold text-orange-500">
-            ${calculatedStats.totalStats?.totalValue?.toLocaleString() || '0'}
+            {formatUGX(calculatedStats.totalStats?.totalValue || 0)}
           </p>
         </motion.div>
         
@@ -258,8 +290,9 @@ const Deals = () => {
         >
           <h3 className="text-lg font-semibold text-gray-900">Won Deals</h3>
           <p className="text-2xl font-bold text-green-500">
-            ${calculatedStats.totalStats?.wonValue?.toLocaleString() || '0'}
+            {calculatedStats.totalStats?.wonDealsCount || 0}
           </p>
+          <p className="text-xs text-gray-500 mt-1">Number of won deals</p>
         </motion.div>
         
         <motion.div
@@ -270,8 +303,9 @@ const Deals = () => {
         >
           <h3 className="text-lg font-semibold text-gray-900">Pipeline</h3>
           <p className="text-2xl font-bold text-blue-500">
-            {calculatedStats.totalStats?.totalDeals || '0'}
+            {calculatedStats.totalStats?.pipelineCount || 0}
           </p>
+          <p className="text-xs text-gray-500 mt-1">Active deals</p>
         </motion.div>
         
         <motion.div
@@ -284,6 +318,7 @@ const Deals = () => {
           <p className="text-2xl font-bold text-purple-500">
             {calculatedStats?.totalStats?.winRate || 0}%
           </p>
+          <p className="text-xs text-gray-500 mt-1">Won deals / Total deals</p>
         </motion.div>
       </div>
 
@@ -318,10 +353,37 @@ const Deals = () => {
               <option value="lost">Lost</option>
             </select>
 
-            {/* Probability filter removed as requested */}
+            {/* Value Range Filter */}
+            <div className="flex gap-2 items-center">
+              <input
+                type="number"
+                placeholder="Min UGX"
+                value={filters.minValue}
+                onChange={(e) => setFilters(prev => ({ ...prev, minValue: e.target.value }))}
+                className="w-24 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-sm"
+              />
+              <span className="text-gray-500">-</span>
+              <input
+                type="number"
+                placeholder="Max UGX"
+                value={filters.maxValue}
+                onChange={(e) => setFilters(prev => ({ ...prev, maxValue: e.target.value }))}
+                className="w-24 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-sm"
+              />
+            </div>
           </div>
 
           <div className="flex gap-2">
+            {/* Clear Filters Button */}
+            {(filters.search || filters.stage || filters.minValue || filters.maxValue) && (
+              <button
+                onClick={() => setFilters({ search: '', stage: '', minValue: '', maxValue: '' })}
+                className="px-3 py-2 text-sm text-gray-600 hover:text-gray-800 border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Clear Filters
+              </button>
+            )}
+
             <button
               onClick={() => setView('table')}
               className={`p-2 rounded-lg ${view === 'table' ? 'bg-orange-100 text-orange-500' : 'text-gray-500'}`}
@@ -347,15 +409,57 @@ const Deals = () => {
       {/* Content View */}
       {view === 'table' && (
         <>
-          <DealsTableView deals={deals} onUpdateStage={handleUpdateDealStage} onDeleteDeal={handleDeleteDeal} />
-          {/* Charts below the table (actual data) */}
-          <div className="pt-6">
-            <DealsChartsView stats={calculatedStats} />
-          </div>
+          {displayDeals.length === 0 ? (
+            <div className="text-center py-12">
+              <div className="text-gray-500 text-lg mb-2">
+                {filters.stage ? `No ${filters.stage} deals found` : deals.length === 0 ? 'No deals found' : 'No deals in pipeline'}
+              </div>
+              <p className="text-gray-400 text-sm">
+                {filters.stage ? `No deals match the "${filters.stage}" filter` : deals.length === 0 ? 'Create your first deal to get started' : 'All deals are either won or lost'}
+              </p>
+              {(filters.search || filters.stage || filters.minValue || filters.maxValue) && (
+                <button
+                  onClick={() => setFilters({ search: '', stage: '', minValue: '', maxValue: '' })}
+                  className="mt-4 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600"
+                >
+                  Clear Filters
+                </button>
+              )}
+            </div>
+          ) : (
+            <>
+              <DealsTableView deals={displayDeals} onUpdateStage={handleUpdateDealStage} onDeleteDeal={handleDeleteDeal} formatUGX={formatUGX} />
+              {/* Charts below the table (actual data) */}
+              <div className="pt-6">
+                <DealsChartsView stats={calculatedStats} formatUGX={formatUGX} />
+              </div>
+            </>
+          )}
         </>
       )}
-      {view === 'kanban' && <DealsKanbanView deals={deals} onUpdateStage={handleUpdateDealStage} />}
-      {view === 'charts' && <DealsChartsView stats={calculatedStats} />}
+      {view === 'kanban' && (
+        displayDeals.length === 0 ? (
+          <div className="text-center py-12">
+            <div className="text-gray-500 text-lg mb-2">
+              {filters.stage ? `No ${filters.stage} deals found` : deals.length === 0 ? 'No deals found' : 'No deals in pipeline'}
+            </div>
+            <p className="text-gray-400 text-sm">
+              {filters.stage ? `No deals match the "${filters.stage}" filter` : deals.length === 0 ? 'Create your first deal to get started' : 'All deals are either won or lost'}
+            </p>
+            {(filters.search || filters.stage || filters.minValue || filters.maxValue) && (
+              <button
+                onClick={() => setFilters({ search: '', stage: '', minValue: '', maxValue: '' })}
+                className="mt-4 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600"
+              >
+                Clear Filters
+              </button>
+            )}
+          </div>
+        ) : (
+          <DealsKanbanView deals={displayDeals} onUpdateStage={handleUpdateDealStage} formatUGX={formatUGX} />
+        )
+      )}
+      {view === 'charts' && <DealsChartsView stats={calculatedStats} formatUGX={formatUGX} />}
 
       {/* Create Deal Modal */}
       {showCreateModal && (
@@ -372,7 +476,7 @@ const Deals = () => {
 };
 
 // Table View Component
-const DealsTableView = ({ deals, onUpdateStage, onDeleteDeal }) => {
+const DealsTableView = ({ deals, onUpdateStage, onDeleteDeal, formatUGX }) => {
   return (
     <div className="bg-white rounded-xl shadow-sm overflow-hidden">
       <div className="overflow-x-auto">
@@ -396,7 +500,7 @@ const DealsTableView = ({ deals, onUpdateStage, onDeleteDeal }) => {
                 </td>
                 <td className="px-6 py-4 text-sm text-gray-900">{deal.client?.name || 'N/A'}</td>
                 <td className="px-6 py-4">
-                  <div className="text-sm font-medium text-gray-900">${(deal.value || 0).toLocaleString()}</div>
+                  <div className="text-sm font-medium text-gray-900">{formatUGX(deal.value)}</div>
                 </td>
                 <td className="px-6 py-4">
                   <select
@@ -446,8 +550,9 @@ const DealsTableView = ({ deals, onUpdateStage, onDeleteDeal }) => {
 };
 
 // Kanban View Component
-const DealsKanbanView = ({ deals, onUpdateStage }) => {
-  const stages = ['lead', 'qualification', 'proposal', 'negotiation', 'won', 'lost'];
+const DealsKanbanView = ({ deals, onUpdateStage, formatUGX }) => {
+  // Pipeline should only show active stages
+  const stages = ['lead', 'qualification', 'proposal', 'negotiation'];
   
   return (
     <div className="grid grid-cols-1 lg:grid-cols-6 gap-4">
@@ -458,7 +563,7 @@ const DealsKanbanView = ({ deals, onUpdateStage }) => {
             {deals.filter(d => d.stage === stage).map(deal => (
               <div key={deal._id} className="bg-white rounded-lg p-3 shadow-sm">
                 <p className="font-medium text-sm text-gray-900">{deal.title}</p>
-                <p className="text-xs text-gray-600">${(deal.value || 0).toLocaleString()}</p>
+                <p className="text-xs text-gray-600">{formatUGX(deal.value)}</p>
               </div>
             ))}
           </div>
@@ -471,7 +576,7 @@ const DealsKanbanView = ({ deals, onUpdateStage }) => {
 // Charts View Component
 const PIE_COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff7a45', '#a28fd0', '#f87171'];
 
-const DealsChartsView = ({ stats }) => {
+const DealsChartsView = ({ stats, formatUGX }) => {
   const pieData = (stats?.stageStats || []).map(s => ({ name: s._id, value: s.count }));
   const barData = (stats?.stageStats || []).map(s => ({ stage: s._id, value: s.totalValue || 0 }));
 
@@ -485,7 +590,7 @@ const DealsChartsView = ({ stats }) => {
             {stats?.totalStats?.winRate ?? 0}%
           </div>
           <div className="text-sm text-gray-600 mt-2">
-            {stats?.totalStats?.wonValue ? `Won: $${(stats.totalStats.wonValue).toLocaleString()}` : 'No won deals yet'}
+            {stats?.totalStats?.wonValue ? `Won: ${formatUGX(stats.totalStats.wonValue)}` : 'No won deals yet'}
           </div>
         </div>
 
@@ -620,11 +725,16 @@ const CreateDealModal = ({ onClose, onSubmit, clients, onClientSearch, error }) 
               </label>
               <input
                 type="number"
+                min="0"
+                step="1"
                 required
                 value={formData.value}
-                onChange={(e) => setFormData(prev => ({ ...prev, value: e.target.value }))}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value, 10);
+                  setFormData(prev => ({ ...prev, value: Number.isNaN(val) ? '' : Math.max(0, val) }));
+                }}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                placeholder="0.00"
+                placeholder="Enter amount in UGX"
               />
             </div>
             

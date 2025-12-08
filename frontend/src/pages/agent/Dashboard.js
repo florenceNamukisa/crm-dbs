@@ -48,6 +48,9 @@ const AgentDashboard = () => {
   const [monthlySalesData, setMonthlySalesData] = useState([]);
   const [dealsWonLostData, setDealsWonLostData] = useState([]);
   const [timeFilter, setTimeFilter] = useState('monthly');
+
+  // Format currency in UGX without decimals
+  const formatUGX = (val) => `UGX ${Number(val || 0).toLocaleString('en-UG', { maximumFractionDigits: 0 })}`;
   const [rankings, setRankings] = useState([]);
   const [userRank, setUserRank] = useState(null);
   const [currentUserRating, setCurrentUserRating] = useState(0);
@@ -265,7 +268,7 @@ const AgentDashboard = () => {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard
           icon={Users}
           title="Clients Met"
@@ -293,13 +296,13 @@ const AgentDashboard = () => {
         <StatCard
           icon={Target}
           title="Total Sales"
-          value={stats.totalSales || 0}
+          value={formatUGX(stats.totalSales || 0)}
           subtitle="Transactions"
         />
         <StatCard
           icon={DollarSign}
           title="Sales Amount"
-          value={`$${stats.totalSalesAmount?.toFixed(2) || '0.00'}`}
+          value={formatUGX(stats.totalSalesAmount || 0)}
           subtitle="Total revenue"
         />
         <StatCard
@@ -357,11 +360,11 @@ const AgentDashboard = () => {
             <div className="mt-4 space-y-2 text-sm text-gray-600">
                 <div className="flex justify-between">
                   <span>Monthly Goal:</span>
-                  <span className="font-medium">UGX {Number(performance.monthlyGoal || 50000).toLocaleString('en-UG')}</span>
+                  <span className="font-medium">{formatUGX(performance.monthlyGoal || 50000)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Achieved:</span>
-                  <span className="font-medium">UGX {Number(salesTotal || performance.totalRevenue || 0).toLocaleString('en-UG')}</span>
+                  <span className="font-medium">{formatUGX(salesTotal || performance.totalRevenue || 0)}</span>
                 </div>
             </div>
           </div>
@@ -379,7 +382,7 @@ const AgentDashboard = () => {
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="month" />
               <YAxis />
-              <Tooltip formatter={(value) => `UGX ${Number(value).toLocaleString('en-UG')}`} />
+              <Tooltip formatter={(value) => formatUGX(value)} />
               <Line
                 type="monotone"
                 dataKey="sales"
@@ -491,7 +494,7 @@ const AgentDashboard = () => {
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="month" />
               <YAxis />
-              <Tooltip formatter={(value) => `UGX ${Number(value).toLocaleString('en-UG')}`} />
+              <Tooltip formatter={(value) => formatUGX(value)} />
               <Line type="monotone" dataKey="sales" stroke="#ff8c00" strokeWidth={3} dot={{ r: 3 }} />
             </LineChart>
           </ResponsiveContainer>

@@ -167,9 +167,13 @@ const ClientRegistrationForm = ({ onClose, onSuccess }) => {
       return;
     }
 
-    // Check if user ID is available
+    // Check if user is authenticated
     if (!user?.id) {
-      toast.error('User authentication error. Please log in again.');
+      toast.error('Your session has expired. Please log in again.');
+      // Optionally redirect to login
+      setTimeout(() => {
+        window.location.href = '/login';
+      }, 2000);
       return;
     }
 
@@ -209,7 +213,12 @@ const ClientRegistrationForm = ({ onClose, onSuccess }) => {
       toast.success('Client registered successfully! 🎉');
       onSuccess();
     } catch (error) {
-      if (error.response?.data?.message) {
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        toast.error('Your session has expired. Please log in again.');
+        setTimeout(() => {
+          window.location.href = '/login';
+        }, 2000);
+      } else if (error.response?.data?.message) {
         if (error.response.data.message.includes('already exists')) {
           toast.error('A client with this NIN already exists');
         } else if (error.response.data.errors) {
@@ -217,6 +226,8 @@ const ClientRegistrationForm = ({ onClose, onSuccess }) => {
         } else {
           toast.error(error.response.data.message);
         }
+      } else if (error.code === 'ERR_NETWORK' || !error.response) {
+        toast.error('Network error. Please check your connection and try again.');
       } else {
         toast.error('Failed to register client. Please try again.');
       }

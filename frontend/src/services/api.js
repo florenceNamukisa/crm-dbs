@@ -12,6 +12,8 @@ api.interceptors.request.use(
     const token = localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+    } else if (config.url !== '/auth/login' && config.url !== '/auth/me') {
+      console.warn('Making API request without authentication token:', config.url);
     }
     return config;
   },
@@ -20,15 +22,63 @@ api.interceptors.request.use(
   }
 );
 
-// Handle token expiration
+// Handle token expiration and network errors with improved resilience
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      window.location.href = '/login';
+    const isAuthError = error.response?.status === 401 || error.response?.status === 403;
+    const isNetworkError = error.code === 'ERR_NETWORK' || error.code === 'NETWORK_ERROR' || !error.response;
+    const isServerError = error.response?.status >= 500;
+    const isAuthEndpoint = error.config?.url?.includes('/auth/');
+
+    if (isAuthError) {
+      // For auth endpoints, always handle as auth error
+      if (isAuthEndpoint) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        window.location.href = '/login';
+      } else {
+        // For other endpoints, check if user might still be logged in
+        // Only logout if it's clearly an authentication issue
+        const storedToken = localStorage.getItem('token');
+        if (!storedToken) {
+          // No token stored, definitely need to login
+          window.location.href = '/login';
+        } else {
+          // Token exists, might be a temporary issue - don't logout immediately
+          console.warn('Authentication error but token exists, not logging out');
+        }
+      }
+    } else if (isNetworkError || isServerError) {
+      // Network or server errors - don't logout, just log
+      console.warn('Network/Server error:', error.message);
     }
+
+    return Promise.reject(error);
+  }
+);
+
+// Add automatic retry for failed requests
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const config = error.config;
+
+    // Don't retry auth requests or if already retried
+    if (config?.url?.includes('/auth/') || config?._retry) {
+      return Promise.reject(error);
+    }
+
+    // Retry network errors once
+    if (error.code === 'ERR_NETWORK' && !config._retry) {
+      config._retry = true;
+      console.log('Retrying failed request:', config.url);
+
+      // Wait 1 second before retry
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      return api(config);
+    }
+
     return Promise.reject(error);
   }
 );

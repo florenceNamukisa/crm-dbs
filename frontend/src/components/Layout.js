@@ -111,8 +111,11 @@ const Layout = ({ children }) => {
   const navItems = isAdmin ? adminNavItems : agentNavItems;
 
   const handleLogout = () => {
-    logout();
-    navigate('/login');
+    const confirmed = window.confirm('Are you sure you want to logout?');
+    if (confirmed) {
+      logout();
+      navigate('/login');
+    }
   };
 
   const NavItem = ({ item, isActive, onClick }) => {

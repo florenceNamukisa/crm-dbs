@@ -102,7 +102,7 @@ const NotificationCenter = ({ isOpen, onClose }) => {
       case 'meeting_created':
       case 'meeting_completed':
         return <Calendar className="w-5 h-5 text-purple-500" />;
-      case 'sale_made':
+      case 'sale_created':
         return <DollarSign className="w-5 h-5 text-green-500" />;
       case 'document_uploaded':
         return <FileText className="w-5 h-5 text-orange-500" />;

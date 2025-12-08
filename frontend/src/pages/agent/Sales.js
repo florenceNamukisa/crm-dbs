@@ -43,7 +43,7 @@ const Sales = () => {
     customerEmail: '',
     customerPhone: '',
     clientId: '',
-    items: [{ itemName: '', quantity: 1, unitPrice: '', discount: 0 }],
+    items: [{ itemName: '', quantity: '', unitPrice: '', discount: '' }],
     paymentMethod: 'cash',
     notes: '',
     dueDate: ''
@@ -54,6 +54,9 @@ const Sales = () => {
   const [showClientDropdown, setShowClientDropdown] = useState(false);
   const [filteredClients, setFilteredClients] = useState([]);
   const [loadingClients, setLoadingClients] = useState(false);
+
+  // Format currency in UGX without decimals
+  const formatUGX = (val) => `UGX ${Number(val || 0).toLocaleString('en-UG', { maximumFractionDigits: 0 })}`;
 
   // Payment form state
   const [paymentForm, setPaymentForm] = useState({
@@ -202,7 +205,7 @@ const Sales = () => {
         customerEmail: '',
         customerPhone: '',
         clientId: '',
-        items: [{ itemName: '', quantity: 1, unitPrice: 0, discount: 0 }],
+        items: [{ itemName: '', quantity: '', unitPrice: '', discount: '' }],
         paymentMethod: 'cash',
         notes: '',
         dueDate: ''
@@ -221,7 +224,7 @@ const Sales = () => {
   const addItemToSale = () => {
     setNewSale({
       ...newSale,
-      items: [...newSale.items, { itemName: '', quantity: 1, unitPrice: 0, discount: 0 }]
+      items: [...newSale.items, { itemName: '', quantity: '', unitPrice: '', discount: '' }]
     });
   };
 
@@ -290,7 +293,7 @@ const Sales = () => {
   const exportSales = () => {
     const allSales = [...sales, ...creditSales];
     const csvContent = [
-      ['Customer Name', 'Email', 'Phone', 'Items', 'Payment Method', 'Total Amount (UGX)', 'Discount (UGX)', 'Final Amount (UGX)', 'Status', 'Date'],
+      ['Customer Name', 'Email', 'Phone', 'Items', 'Payment Method', 'Total Amount', 'Discount', 'Final Amount', 'Status', 'Date'],
       ...allSales.map(sale => [
         sale.customerName || '',
         sale.customerEmail || '',
@@ -365,7 +368,7 @@ const Sales = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Total Amount</p>
-              <p className="text-2xl font-bold text-gray-900">UGX {(summary.totalAmount || 0).toLocaleString()}</p>
+              <p className="text-2xl font-bold text-gray-900">{formatUGX(summary.totalAmount || 0)}</p>
             </div>
             <DollarSign className="w-8 h-8 text-green-600" />
           </div>
@@ -431,7 +434,7 @@ const Sales = () => {
                     {sale.items?.length || 0} item(s)
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    UGX {(sale.finalAmount || 0).toLocaleString()}
+                    {formatUGX(sale.finalAmount || 0)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {sale.saleDate ? new Date(sale.saleDate).toLocaleDateString() : 'N/A'}
@@ -487,13 +490,13 @@ const Sales = () => {
                       {sale.items?.length || 0} item(s)
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      UGX {(sale.finalAmount || 0).toLocaleString()}
+                      {formatUGX(sale.finalAmount || 0)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      UGX {totalPaid.toLocaleString()}
+                      {formatUGX(totalPaid)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      UGX {balance.toLocaleString()}
+                      {formatUGX(balance)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
@@ -696,7 +699,7 @@ const Sales = () => {
                     <button
                       type="button"
                       onClick={addItemToSale}
-                      className="bg-blue-600 text-white px-3 py-1 rounded-lg hover:bg-blue-700 text-sm"
+                      className="bg-orange-600 text-white px-3 py-1 rounded-lg hover:bg-orange-700 text-sm"
                     >
                       Add Item
                     </button>
@@ -724,11 +727,12 @@ const Sales = () => {
                           </label>
                           <input
                             type="number"
-                            min="1"
+                            min="0"
                             required
-                            value={item.quantity}
-                            onChange={(e) => updateSaleItem(index, 'quantity', parseInt(e.target.value) || 1)}
+                            value={item.quantity || ''}
+                            onChange={(e) => updateSaleItem(index, 'quantity', Math.max(0, parseInt(e.target.value) || 0))}
                             className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                            placeholder="Enter quantity"
                           />
                         </div>
                         <div>
@@ -740,10 +744,13 @@ const Sales = () => {
                             min="0"
                             step="100"
                             required
-                            value={item.unitPrice}
-                            onChange={(e) => updateSaleItem(index, 'unitPrice', parseFloat(e.target.value) || 0)}
+                            value={item.unitPrice === '' ? '' : item.unitPrice}
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value);
+                              updateSaleItem(index, 'unitPrice', Number.isNaN(val) ? '' : Math.max(0, val));
+                            }}
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                            placeholder="0"
+                            placeholder="Enter unit price"
                           />
                         </div>
                         <div>
@@ -754,9 +761,13 @@ const Sales = () => {
                             type="number"
                             min="0"
                             max="100"
-                            value={item.discount}
-                            onChange={(e) => updateSaleItem(index, 'discount', parseFloat(e.target.value) || 0)}
-                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                            value={item.discount === '' ? '' : item.discount}
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value);
+                              updateSaleItem(index, 'discount', Number.isNaN(val) ? '' : Math.min(100, Math.max(0, val)));
+                            }}
+                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
+                            placeholder="Enter discount"
                           />
                         </div>
                         <div className="flex items-end space-x-2">
@@ -842,7 +853,7 @@ const Sales = () => {
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                    className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700"
                   >
                     Create Sale
                   </button>
@@ -866,10 +877,10 @@ const Sales = () => {
             <div className="mb-4 p-4 bg-gray-50 rounded-lg">
               <h3 className="font-medium text-gray-900 mb-2">{selectedCreditSale.customerName}</h3>
               <div className="text-sm text-gray-600 space-y-1">
-                <p>Total Amount: UGX {selectedCreditSale.finalAmount?.toLocaleString() || 0}</p>
-                <p>Paid: UGX {(selectedCreditSale.payments?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0).toLocaleString()}</p>
+                <p>Total Amount: {formatUGX(selectedCreditSale.finalAmount || 0)}</p>
+                <p>Paid: {formatUGX(selectedCreditSale.payments?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0)}</p>
                 <p className="font-medium text-orange-600">
-                  Balance: UGX {((selectedCreditSale.finalAmount || 0) - (selectedCreditSale.payments?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0)).toLocaleString()}
+                  Balance: {formatUGX((selectedCreditSale.finalAmount || 0) - (selectedCreditSale.payments?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0))}
                 </p>
               </div>
             </div>
