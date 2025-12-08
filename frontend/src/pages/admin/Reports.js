@@ -244,7 +244,7 @@ const Reports = () => {
         usersAPI.getAll().catch(e => ({ data: [] }))
       ]);
 
-      const deals = dealsRes?.data || [];
+      const deals = dealsRes?.data?.deals || [];
       const users = usersRes?.data || [];
       // fetch schedules, clients and sales for report capture
       const [schedulesRes, clientsRes, salesRes] = await Promise.all([

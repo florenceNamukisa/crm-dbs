@@ -77,11 +77,11 @@ const Clients = () => {
       };
 
       const response = await clientsAPI.getAll(params);
-      setClients(response.data.clients || []);
+      setClients(response.data?.clients || response.data || []);
       setPagination(prev => ({
         ...prev,
-        totalPages: response.data.totalPages,
-        total: response.data.total
+        totalPages: response.data?.pagination?.totalPages || response.data?.totalPages || 1,
+        total: response.data?.pagination?.total || response.data?.total || 0
       }));
     } catch (error) {
       console.error('Failed to load clients:', error);

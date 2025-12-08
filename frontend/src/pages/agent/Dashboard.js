@@ -9,19 +9,24 @@ import {
   Mail,
   DollarSign,
   CheckCircle,
-  CreditCard
+  CreditCard,
+  Trophy,
+  XCircle,
+  Star
 } from 'lucide-react';
-import { 
-  LineChart, 
-  Line, 
-  PieChart, 
-  Pie, 
+import {
+  LineChart,
+  Line,
+  PieChart,
+  Pie,
   Cell,
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer 
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  BarChart,
+  Bar
 } from 'recharts';
 import { performanceAPI, dealsAPI, clientsAPI, salesAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -32,7 +37,8 @@ const AgentDashboard = () => {
   const { user } = useAuth();
   const [stats, setStats] = useState({
     clientsMet: 0,
-    dealsClosed: 0,
+    dealsWon: 0,
+    dealsLost: 0,
     pendingDeals: 0,
     scheduledMeetings: 0
   });
@@ -40,18 +46,38 @@ const AgentDashboard = () => {
   const [progress, setProgress] = useState(0);
   const [salesTotal, setSalesTotal] = useState(0);
   const [monthlySalesData, setMonthlySalesData] = useState([]);
+  const [dealsWonLostData, setDealsWonLostData] = useState([]);
   const [timeFilter, setTimeFilter] = useState('monthly');
+  const [rankings, setRankings] = useState([]);
+  const [userRank, setUserRank] = useState(null);
+  const [currentUserRating, setCurrentUserRating] = useState(0);
   const navigate = useNavigate();
 
   useEffect(() => {
     if (!user) return;
     loadDashboardData();
+    loadRankings();
     // refresh every 60s to reflect DB changes automatically
     const timer = setInterval(() => {
       loadDashboardData();
+      loadRankings();
     }, 60000);
     return () => clearInterval(timer);
   }, [user, timeFilter]);
+
+  const loadRankings = async () => {
+    try {
+      const response = await performanceAPI.getRankings();
+      const rankingsData = response.data || [];
+      setRankings(rankingsData);
+
+      // Find current user's rank
+      const currentUserRanking = rankingsData.find(r => r.agent.id === user._id || r.agent.id === user.id);
+      setUserRank(currentUserRanking);
+    } catch (error) {
+      console.error('Failed to load rankings:', error);
+    }
+  };
 
   const loadDashboardData = async () => {
     try {
@@ -61,49 +87,55 @@ const AgentDashboard = () => {
       // Fetch performance, deals stats, clients, sales, and deals in parallel
       const [performanceResponse, dealsStatsResponse, clientsResponse, dealsResponse, salesResponse] = await Promise.all([
         performanceAPI.getAgentPerformance(userId),
-        dealsAPI.getStats({ agent: userId }),
-        clientsAPI.getAll({ agent: userId }),
-        dealsAPI.getAll({ agent: userId }),
-        salesAPI.getSummary(timeFilter)
+        dealsAPI.getStats(),
+        clientsAPI.getAll(),
+        dealsAPI.getAll(),
+        salesAPI.getAll({ limit: 1000 }) // Get agent-specific sales (filtered by backend)
       ]);
 
       const perf = performanceResponse?.data || {};
       const dealsStats = dealsStatsResponse?.data || {};
       const clients = clientsResponse?.data?.clients || clientsResponse?.clients || [];
-      const deals = dealsResponse?.data || dealsResponse || [];
-      const salesSummary = salesResponse?.data || {};
+      const deals = dealsResponse?.data?.deals || dealsResponse?.data || dealsResponse || [];
+      const sales = salesResponse?.data?.sales || [];
 
-      // compute sales by month from deals (use closedAt/createdAt fallback)
+      // Get current user rating from user object or performance data
+      const rating = user?.performanceScore || perf.overallRating || 0;
+      setCurrentUserRating(rating);
+
+      // compute sales by month from sales data (more accurate than deals)
       const salesByMonth = new Array(12).fill(0);
-      let totalSales = (dealsStats?.totalStats && (dealsStats.totalStats.wonValue || dealsStats.totalStats.totalValue)) || 0;
-      if (!totalSales) {
-        // fallback: compute from deals list where stage/status indicates won
-        deals.forEach(d => {
-          const isWon = (d.stage && String(d.stage).toLowerCase() === 'won') ||
-                        (d.status && String(d.status).toLowerCase() === 'won') ||
-                        d.isWon === true || d.won === true;
-          if (isWon || (!dealsStats?.totalStats || (!dealsStats.totalStats.wonValue && !dealsStats.totalStats.totalValue))) {
-            const value = Number(d.value) || 0;
-            const date = new Date(d.closedAt || d.updatedAt || d.createdAt || Date.now());
-            const m = date.getMonth();
-            salesByMonth[m] += value;
-            totalSales += value;
-          }
-        });
-      } else {
-        // when totalSales provided, still try to populate monthly buckets from deals
-        deals.forEach(d => {
-          const isWon = (d.stage && String(d.stage).toLowerCase() === 'won') ||
-                        (d.status && String(d.status).toLowerCase() === 'won') ||
-                        d.isWon === true || d.won === true;
+      let totalSales = 0;
+
+      sales.forEach(sale => {
+        const saleDate = new Date(sale.saleDate);
+        const month = saleDate.getMonth();
+        const amount = Number(sale.finalAmount) || 0;
+        salesByMonth[month] += amount;
+        totalSales += amount;
+      });
+
+      // Compute deals won vs lost by month
+      const wonLostByMonth = new Array(12).fill(0).map(() => ({ won: 0, lost: 0 }));
+      deals.forEach(deal => {
+        const isWon = (deal.stage && String(deal.stage).toLowerCase() === 'won') ||
+                      (deal.status && String(deal.status).toLowerCase() === 'won') ||
+                      deal.isWon === true || deal.won === true;
+        const isLost = (deal.stage && String(deal.stage).toLowerCase() === 'lost') ||
+                       (deal.status && String(deal.status).toLowerCase() === 'lost') ||
+                       deal.isLost === true;
+
+        if (isWon || isLost) {
+          const date = new Date(deal.closedAt || deal.updatedAt || deal.createdAt || Date.now());
+          const month = date.getMonth();
+
           if (isWon) {
-            const value = Number(d.value) || 0;
-            const date = new Date(d.closedAt || d.updatedAt || d.createdAt || Date.now());
-            const m = date.getMonth();
-            salesByMonth[m] += value;
+            wonLostByMonth[month].won += 1;
+          } else if (isLost) {
+            wonLostByMonth[month].lost += 1;
           }
-        });
-      }
+        }
+      });
 
       setPerformance(perf);
       // progress: compute as percentage of monthly goal
@@ -119,16 +151,22 @@ const AgentDashboard = () => {
       setStats({
         clientsMet: Array.isArray(clients) ? clients.length : (perf.clientsMet || 0),
         dealsWon: wonDeals.length || (dealsStats?.totalStats?.wonCount || 0),
+        dealsLost: lostDeals.length || (dealsStats?.totalStats?.lostCount || 0),
         pendingDeals: pendingDealsCount || (dealsStats?.totalStats?.pendingCount || 0),
         scheduledMeetings: perf.scheduledMeetings || 0,
-        totalSales: salesSummary.totalSales || 0,
-        totalSalesAmount: salesSummary.totalAmount || 0,
-        cashSales: salesSummary.cashSales || 0,
-        creditSales: salesSummary.creditSales || 0
+        totalSales: sales.length,
+        totalSalesAmount: totalSales,
+        cashSales: sales.filter(s => s.paymentMethod === 'cash').length,
+        creditSales: sales.filter(s => s.paymentMethod === 'credit').length
       });
 
-      setSalesTotal(salesSummary.totalAmount || totalSales);
+      setSalesTotal(totalSales);
       setMonthlySalesData(salesByMonth.map((value, idx) => ({ month: monthNames[idx], sales: value })));
+      setDealsWonLostData(wonLostByMonth.map((data, idx) => ({
+        month: monthNames[idx],
+        won: data.won,
+        lost: data.lost
+      })));
 
     } catch (error) {
       toast.error('Failed to load dashboard data');
@@ -145,11 +183,12 @@ const AgentDashboard = () => {
   });
 
   const dealStatusData = [
-    { name: 'Closed', value: stats.dealsClosed || 0 },
+    { name: 'Won', value: stats.dealsWon || 0 },
+    { name: 'Lost', value: stats.dealsLost || 0 },
     { name: 'Pending', value: stats.pendingDeals || 0 }
   ];
 
-  const COLORS = ['#ff8c00', '#ffa94d'];
+  const COLORS = ['#10b981', '#ef4444', '#f59e0b']; // green, red, orange
 
   const StatCard = ({ icon: Icon, title, value, subtitle, color = 'orange' }) => (
     <motion.div
@@ -178,13 +217,13 @@ const AgentDashboard = () => {
           <p className="text-gray-600 mt-1">Welcome back, {user?.name}! Here's your performance overview.</p>
         </div>
         <div className="text-right">
-          <p className="text-sm text-gray-600">Overall Rating</p>
+          <p className="text-sm text-gray-600">Performance Rating</p>
           <div className="flex items-center space-x-1">
             {[...Array(5)].map((_, i) => (
               <svg
                 key={i}
                 className={`w-5 h-5 ${
-                  i < Math.floor(performance.overallRating || 0)
+                  i < Math.floor(currentUserRating)
                     ? 'text-yellow-400 fill-current'
                     : 'text-gray-300'
                 }`}
@@ -194,10 +233,13 @@ const AgentDashboard = () => {
                 <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
               </svg>
             ))}
-            <span className="text-sm text-gray-600 ml-2">
-              {performance.overallRating?.toFixed(1) || '0.0'}
+            <span className="text-sm font-semibold text-orange-600 ml-2">
+              {currentUserRating.toFixed(1)}/5.0
             </span>
           </div>
+          <p className="text-xs text-gray-500 mt-1">
+            Based on won deal values
+          </p>
         </div>
       </div>
 
@@ -231,10 +273,16 @@ const AgentDashboard = () => {
           subtitle="Total engaged clients"
         />
         <StatCard
-          icon={Target}
+          icon={Trophy}
           title="Deals Won"
           value={stats.dealsWon ?? 0}
           subtitle="Successful deals"
+        />
+        <StatCard
+          icon={XCircle}
+          title="Deals Lost"
+          value={stats.dealsLost ?? 0}
+          subtitle="Unsuccessful deals"
         />
         <StatCard
           icon={TrendingUp}
@@ -325,17 +373,17 @@ const AgentDashboard = () => {
           animate={{ opacity: 1, y: 0 }}
           className="bg-white rounded-xl shadow-sm p-6 lg:col-span-2"
         >
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Monthly Progress</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Monthly Sales Progress</h3>
           <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={monthlyProgressData}>
+            <LineChart data={monthlySalesData}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="month" />
               <YAxis />
-              <Tooltip />
-              <Line 
-                type="monotone" 
-                dataKey="progress" 
-                stroke="#ff8c00" 
+              <Tooltip formatter={(value) => `UGX ${Number(value).toLocaleString('en-UG')}`} />
+              <Line
+                type="monotone"
+                dataKey="sales"
+                stroke="#ff8c00"
                 strokeWidth={3}
                 dot={{ fill: '#ff8c00', strokeWidth: 2, r: 4 }}
                 activeDot={{ r: 6, fill: '#ff8c00' }}
@@ -373,6 +421,67 @@ const AgentDashboard = () => {
         </motion.div>
 
       </div>
+
+      {/* Deals Won vs Lost */}
+      <motion.div
+        initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 1, x: 0 }}
+        className="bg-white rounded-xl shadow-sm p-6 lg:col-span-2"
+      >
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Deals Won vs Lost</h3>
+        <ResponsiveContainer width="100%" height={300}>
+          <BarChart data={dealsWonLostData}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="month" />
+            <YAxis />
+            <Tooltip />
+            <Bar dataKey="won" fill="#10b981" name="Won" />
+            <Bar dataKey="lost" fill="#ef4444" name="Lost" />
+          </BarChart>
+        </ResponsiveContainer>
+      </motion.div>
+
+      {/* Rankings Section */}
+      {userRank && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-gradient-to-r from-orange-50 to-orange-100 rounded-xl shadow-sm p-6 border border-orange-200"
+        >
+          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+            <Trophy className="w-5 h-5 text-orange-500 mr-2" />
+            Your Performance Ranking
+          </h3>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600">Current Rank</p>
+              <p className="text-2xl font-bold text-orange-600">#{userRank.rank}</p>
+              <p className="text-sm text-gray-500">out of {rankings.length} agents</p>
+            </div>
+            <div className="text-right">
+              <p className="text-sm text-gray-600">Your Rating</p>
+              <div className="flex items-center space-x-1">
+                {[...Array(5)].map((_, i) => (
+                  <Star
+                    key={i}
+                    className={`w-5 h-5 ${
+                      i < Math.floor(userRank.rating)
+                        ? 'text-yellow-400 fill-current'
+                        : 'text-gray-300'
+                    }`}
+                  />
+                ))}
+              </div>
+              <p className="text-sm font-semibold text-orange-600">{userRank.rating.toFixed(1)}/5.0</p>
+            </div>
+          </div>
+          <div className="mt-4 p-3 bg-white rounded-lg">
+            <p className="text-sm text-gray-600">
+              <span className="font-medium">Keep up the great work!</span> Your rating is automatically calculated based on the value of your won deals compared to other agents.
+            </p>
+          </div>
+        </motion.div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-white rounded-xl shadow-sm p-6 lg:col-span-2">

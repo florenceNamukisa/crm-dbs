@@ -43,16 +43,26 @@ const Sales = () => {
     customerEmail: '',
     customerPhone: '',
     clientId: '',
-    items: [{ itemName: '', quantity: 1, unitPrice: 0, discount: 0 }],
+    items: [{ itemName: '', quantity: 1, unitPrice: '', discount: 0 }],
     paymentMethod: 'cash',
     notes: '',
     dueDate: ''
   });
 
+  // Client search states
+  const [clientSearchTerm, setClientSearchTerm] = useState('');
+  const [showClientDropdown, setShowClientDropdown] = useState(false);
+  const [filteredClients, setFilteredClients] = useState([]);
+  const [loadingClients, setLoadingClients] = useState(false);
+
   // Payment form state
   const [paymentForm, setPaymentForm] = useState({
     amount: '',
     paymentMethod: 'cash',
+    paymentDate: new Date().toISOString().split('T')[0], // Today's date in YYYY-MM-DD format
+    cardNumber: '',
+    bankName: '',
+    accountName: '',
     notes: ''
   });
 
@@ -76,7 +86,7 @@ const Sales = () => {
 
       // Load clients for customer selection
       const clientsResponse = await clientsAPI.getAll({ limit: 100 });
-      setClients(clientsResponse.data.clients || []);
+      setClients(clientsResponse.data?.clients || clientsResponse.data || []);
 
     } catch (error) {
       console.error('Error loading sales data:', error);
@@ -90,6 +100,45 @@ const Sales = () => {
     loadData();
   }, [loadData]);
 
+  // Load clients when new sale modal opens
+  useEffect(() => {
+    if (showNewSaleModal) {
+      loadClientsForModal();
+    }
+  }, [showNewSaleModal]);
+
+  const loadClientsForModal = async () => {
+    try {
+      setLoadingClients(true);
+      console.log('Loading clients for sale modal...');
+      const clientsResponse = await clientsAPI.getAll({ limit: 200 }); // Load more clients for better selection
+      const fetchedClients = clientsResponse.data?.clients || clientsResponse.data || [];
+      setClients(fetchedClients);
+      console.log('Loaded clients for modal:', fetchedClients.length);
+    } catch (error) {
+      console.error('Error loading clients for modal:', error);
+      toast.error('Failed to load clients list');
+      setClients([]);
+    } finally {
+      setLoadingClients(false);
+    }
+  };
+
+  // Filter clients based on search term
+  useEffect(() => {
+    if (clientSearchTerm.trim() === '') {
+      setFilteredClients(clients);
+    } else {
+      const filtered = clients.filter(client =>
+        client.name.toLowerCase().includes(clientSearchTerm.toLowerCase()) ||
+        client.email?.toLowerCase().includes(clientSearchTerm.toLowerCase()) ||
+        client.phone?.includes(clientSearchTerm) ||
+        client.company?.toLowerCase().includes(clientSearchTerm.toLowerCase())
+      );
+      setFilteredClients(filtered);
+    }
+  }, [clientSearchTerm, clients]);
+
   const handleNewSale = async (e) => {
     e.preventDefault();
 
@@ -101,7 +150,7 @@ const Sales = () => {
 
     // Validate form
     if (!newSale.clientId) {
-      toast.error('Please select a customer');
+      toast.error('Please select a customer from the search results');
       return;
     }
 
@@ -158,6 +207,8 @@ const Sales = () => {
         notes: '',
         dueDate: ''
       });
+      setClientSearchTerm('');
+      setShowClientDropdown(false);
       loadData();
     } catch (error) {
       console.error('Error creating sale:', error);
@@ -194,6 +245,45 @@ const Sales = () => {
       const updatedItems = newSale.items.filter((_, i) => i !== index);
       setNewSale({ ...newSale, items: updatedItems });
     }
+  };
+
+  const handleClientSelect = (client) => {
+    setNewSale({
+      ...newSale,
+      clientId: client._id,
+      customerName: client.name,
+      customerEmail: client.email || '',
+      customerPhone: client.phone || ''
+    });
+    setClientSearchTerm(client.name);
+    setShowClientDropdown(false);
+  };
+
+  const handleClientSearchChange = (value) => {
+    setClientSearchTerm(value);
+    setShowClientDropdown(true);
+    // Clear selection if search term doesn't match current selection
+    if (value !== newSale.customerName) {
+      setNewSale({
+        ...newSale,
+        clientId: '',
+        customerName: '',
+        customerEmail: '',
+        customerPhone: ''
+      });
+    }
+  };
+
+  const clearClientSelection = () => {
+    setNewSale({
+      ...newSale,
+      clientId: '',
+      customerName: '',
+      customerEmail: '',
+      customerPhone: ''
+    });
+    setClientSearchTerm('');
+    setShowClientDropdown(false);
   };
 
 
@@ -456,32 +546,125 @@ const Sales = () => {
               <form onSubmit={handleNewSale} className="space-y-6">
                 {/* Customer Information */}
                 <div className="grid grid-cols-1 gap-4">
-                  <div>
+                  <div className="relative">
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Select Customer *
+                      Search & Select Customer *
                     </label>
-                    <select
-                      required
-                      value={newSale.clientId}
-                      onChange={(e) => {
-                        const selectedClient = clients.find(c => c._id === e.target.value);
-                        setNewSale({
-                          ...newSale,
-                          clientId: e.target.value,
-                          customerName: selectedClient?.name || '',
-                          customerEmail: selectedClient?.email || '',
-                          customerPhone: selectedClient?.phone || ''
-                        });
-                      }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                    >
-                      <option value="">Select a customer</option>
-                      {clients.map((client) => (
-                        <option key={client._id} value={client._id}>
-                          {client.name} - {client.email || client.phone || 'No contact info'}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        required
+                        value={clientSearchTerm}
+                        onChange={(e) => handleClientSearchChange(e.target.value)}
+                        onFocus={() => setShowClientDropdown(true)}
+                        placeholder="Type to search clients by name, email, phone, or company..."
+                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 pr-20 ${
+                          newSale.clientId ? 'border-green-300 bg-green-50' : 'border-gray-300'
+                        }`}
+                      />
+                      <div className="absolute inset-y-0 right-0 flex items-center pr-3 space-x-2">
+                        {newSale.clientId && (
+                          <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                        {clientSearchTerm && !newSale.clientId && (
+                          <button
+                            type="button"
+                            onClick={clearClientSelection}
+                            className="text-gray-400 hover:text-gray-600"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        )}
+                        <svg className={`w-5 h-5 ${newSale.clientId ? 'text-green-600' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                      </div>
+                    </div>
+
+                    {/* Client Dropdown */}
+                    {showClientDropdown && (
+                      <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                        {loadingClients ? (
+                          <div className="px-4 py-3 text-sm text-gray-500 flex items-center">
+                            <svg className="animate-spin -ml-1 mr-3 h-4 w-4 text-orange-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Loading clients...
+                          </div>
+                        ) : filteredClients.length === 0 ? (
+                          <div className="px-4 py-3 text-sm text-gray-500">
+                            {clientSearchTerm.trim() === '' ? 'No clients registered yet. Please add clients first.' : 'No clients found matching your search'}
+                          </div>
+                        ) : (
+                          <div className="py-1">
+                            {filteredClients.map((client) => (
+                              <div
+                                key={client._id}
+                                onClick={() => handleClientSelect(client)}
+                                className="px-4 py-3 hover:bg-orange-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <div className="flex-1">
+                                    <div className="font-medium text-gray-900">{client.name}</div>
+                                    <div className="text-sm text-gray-600 flex items-center space-x-4 mt-1">
+                                      {client.email && (
+                                        <span className="flex items-center">
+                                          <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                          </svg>
+                                          {client.email}
+                                        </span>
+                                      )}
+                                      {client.phone && (
+                                        <span className="flex items-center">
+                                          <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                                          </svg>
+                                          {client.phone}
+                                        </span>
+                                      )}
+                                    </div>
+                                    {client.company && (
+                                      <div className="text-sm text-gray-500 mt-1">
+                                        <span className="inline-flex items-center">
+                                          <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                                          </svg>
+                                          {client.company}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="ml-3">
+                                    <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
+                                      client.status === 'active' ? 'bg-green-100 text-green-800' :
+                                      client.status === 'prospect' ? 'bg-blue-100 text-blue-800' :
+                                      client.status === 'vip' ? 'bg-purple-100 text-purple-800' :
+                                      'bg-gray-100 text-gray-800'
+                                    }`}>
+                                      {client.status || 'prospect'}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Close dropdown when clicking outside */}
+                    {showClientDropdown && (
+                      <div
+                        className="fixed inset-0 z-40"
+                        onClick={() => setShowClientDropdown(false)}
+                      />
+                    )}
                   </div>
                 </div>
 
@@ -699,7 +882,7 @@ const Sales = () => {
                 toast.success('Payment recorded successfully!');
                 setShowPaymentModal(false);
                 setSelectedCreditSale(null);
-                setPaymentForm({ amount: '', paymentMethod: 'cash', notes: '' });
+                setPaymentForm({ amount: '', paymentMethod: 'cash', paymentDate: new Date().toISOString().split('T')[0], cardNumber: '', bankName: '', accountName: '', notes: '' });
                 loadData();
               } catch (error) {
                 console.error('Error recording payment:', error);
@@ -741,6 +924,67 @@ const Sales = () => {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Payment Date *
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={paymentForm.paymentDate}
+                    onChange={(e) => setPaymentForm({ ...paymentForm, paymentDate: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  />
+                </div>
+
+                {/* Bank Transfer Fields */}
+                {paymentForm.paymentMethod === 'bank_transfer' && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Card/Account Number *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={paymentForm.cardNumber}
+                        onChange={(e) => setPaymentForm({ ...paymentForm, cardNumber: e.target.value.replace(/\D/g, '').slice(0, 16) })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                        placeholder="Enter card or account number"
+                        maxLength="16"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Bank Name *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={paymentForm.bankName}
+                        onChange={(e) => setPaymentForm({ ...paymentForm, bankName: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                        placeholder="Enter bank name"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Account Holder Name *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={paymentForm.accountName}
+                        onChange={(e) => setPaymentForm({ ...paymentForm, accountName: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                        placeholder="Enter account holder name"
+                      />
+                    </div>
+                  </>
+                )}
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Notes
                   </label>
                   <textarea
@@ -759,7 +1003,7 @@ const Sales = () => {
                   onClick={() => {
                     setShowPaymentModal(false);
                     setSelectedCreditSale(null);
-                    setPaymentForm({ amount: '', paymentMethod: 'cash', notes: '' });
+                    setPaymentForm({ amount: '', paymentMethod: 'cash', paymentDate: new Date().toISOString().split('T')[0], cardNumber: '', bankName: '', accountName: '', notes: '' });
                   }}
                   className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
                 >

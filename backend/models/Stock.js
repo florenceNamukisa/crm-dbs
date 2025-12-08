@@ -76,3 +76,5 @@ stockSchema.methods.updateStock = function(quantity, operation = 'add') {
 };
 
 export default mongoose.model('Stock', stockSchema);
+
+

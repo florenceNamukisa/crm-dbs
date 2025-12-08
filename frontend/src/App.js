@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { ThemeProvider } from './context/ThemeContext';
 
 // Pages
 import Login from './pages/Login';
@@ -57,8 +58,9 @@ const PublicRoute = ({ children }) => {
 function App() {
   return (
     <Router>
-      <AuthProvider>
-        <div className="App min-h-screen bg-gray-50">
+      <ThemeProvider>
+        <AuthProvider>
+          <div className="App min-h-screen bg-gray-50">
           <Routes>
             <Route path="/login" element={
               <PublicRoute>
@@ -123,10 +125,11 @@ function App() {
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="*" element={<Navigate to="/login" replace />} />
           </Routes>
-          
+
           <Toaster position="top-right" />
         </div>
-      </AuthProvider>
+        </AuthProvider>
+      </ThemeProvider>
     </Router>
   );
 }

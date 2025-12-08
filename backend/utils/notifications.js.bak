@@ -1,0 +1,333 @@
+import Notification from '../models/Notification.js';
+import User from '../models/User.js';
+
+export const createNotification = async (data) => {
+  try {
+    const { type, actorId, entityType, entityId, metadata = {} } = data;
+
+    // Find all admin users
+    const admins = await User.find({ role: 'admin' });
+
+    if (admins.length === 0) {
+      console.warn('No admin users found to send notifications');
+      return;
+    }
+
+    // Get actor details
+    const actor = await User.findById(actorId);
+    if (!actor) {
+      console.error('Actor not found for notification');
+      return;
+    }
+
+    // Create notification messages based on type
+    const notificationData = getNotificationData(type, actor, metadata);
+
+    // Create notifications for all admins
+    const notifications = admins.map(admin => ({
+      title: notificationData.title,
+      message: notificationData.message,
+      type: type,
+      recipient: admin._id,
+      actor: actorId,
+      entityType: entityType,
+      entityId: entityId,
+      metadata: metadata,
+      priority: notificationData.priority || 'medium'
+    }));
+
+    await Notification.insertMany(notifications);
+
+
+    return { success: true, count: notifications.length };
+  } catch (error) {
+    console.error('Error creating notification:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+const getNotificationData = (type, actor, metadata) => {
+  const actorName = actor.name || 'Unknown Agent';
+
+  switch (type) {
+    case 'deal_created':
+      return {
+        title: 'New Deal Created',
+        message: `${actorName} created a new deal: "${metadata.dealTitle || 'Untitled'}" worth UGX ${Number(metadata.value || 0).toLocaleString('en-UG')}`,
+        priority: 'medium'
+      };
+
+    case 'deal_updated':
+      return {
+        title: 'Deal Updated',
+        message: `${actorName} updated deal "${metadata.dealTitle || 'Untitled'}" - ${metadata.change || 'Modified details'}`,
+        priority: 'low'
+      };
+
+    case 'deal_won':
+      return {
+        title: 'Deal Won! 🎉',
+        message: `${actorName} closed a deal: "${metadata.dealTitle || 'Untitled'}" worth UGX ${Number(metadata.value || 0).toLocaleString('en-UG')}`,
+        priority: 'high'
+      };
+
+    case 'deal_lost':
+      return {
+        title: 'Deal Lost',
+        message: `${actorName} lost a deal: "${metadata.dealTitle || 'Untitled'}" worth UGX ${Number(metadata.value || 0).toLocaleString('en-UG')}`,
+        priority: 'medium'
+      };
+
+    case 'client_created':
+      return {
+        title: 'New Client Added',
+        message: `${actorName} registered a new client: ${metadata.clientName || 'Unknown Client'}`,
+        priority: 'medium'
+      };
+
+    case 'client_updated':
+      return {
+        title: 'Client Updated',
+        message: `${actorName} updated client information for ${metadata.clientName || 'Unknown Client'}`,
+        priority: 'low'
+      };
+
+    case 'meeting_created':
+      return {
+        title: 'Meeting Scheduled',
+        message: `${actorName} scheduled a meeting with ${metadata.clientName || 'client'} on ${metadata.date || 'TBD'}`,
+        priority: 'medium'
+      };
+
+    case 'meeting_completed':
+      return {
+        title: 'Meeting Completed',
+        message: `${actorName} completed a meeting with ${metadata.clientName || 'client'}`,
+        priority: 'low'
+      };
+
+    case 'sale_made':
+      return {
+        title: 'Sale Completed',
+        message: `${actorName} made a sale worth UGX ${Number(metadata.amount || 0).toLocaleString('en-UG')}`,
+        priority: 'high'
+      };
+
+    case 'document_uploaded':
+      return {
+        title: 'Document Uploaded',
+        message: `${actorName} uploaded a document: ${metadata.filename || 'Unknown file'}`,
+        priority: 'low'
+      };
+
+    case 'meeting_response':
+      const responseText = metadata.response === 'accepted' ? 'accepted' :
+                          metadata.response === 'declined' ? 'declined' :
+                          'responded tentatively to';
+      return {
+        title: 'Meeting Response',
+        message: `${metadata.clientName} has ${responseText} the meeting: "${metadata.meetingTitle}"`,
+        priority: 'medium'
+      };
+
+    default:
+      return {
+        title: 'Agent Activity',
+        message: `${actorName} performed an action: ${type}`,
+        priority: 'low'
+      };
+  }
+};
+
+export const sendNotification = async (schedule, action) => {
+  try {
+      title: schedule.title,
+      date: schedule.date,
+      client: schedule.client?.name,
+      type: schedule.type
+    });
+
+    // Simulate sending notifications
+    if (action === 'created' && schedule.reminders && schedule.reminders.length > 0) {
+      schedule.reminders.forEach(reminder => {
+        scheduleReminder(schedule, reminder);
+      });
+    }
+
+    return { success: true, message: `Notification sent for schedule ${action}` };
+  } catch (error) {
+    console.error('Error sending notification:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+const scheduleReminder = (schedule, reminder) => {
+  const reminderTime = calculateReminderTime(schedule.date, reminder);
+
+    title: schedule.title,
+    type: reminder,
+    client: schedule.client?.name
+  });
+};
+
+const calculateReminderTime = (scheduleDate, reminder) => {
+  const date = new Date(scheduleDate);
+  const reminderMap = {
+    '15min': 15 * 60 * 1000,
+    '30min': 30 * 60 * 1000,
+    '1hr': 60 * 60 * 1000,
+    '2hr': 2 * 60 * 60 * 1000,
+    '1day': 24 * 60 * 60 * 1000
+  };
+
+  return new Date(date.getTime() - (reminderMap[reminder] || 0));
+};
+
+export default {
+  createNotification,
+  sendNotification,
+  scheduleReminder
+};
+  const actorName = actor.name || 'Unknown Agent';
+
+  switch (type) {
+    case 'deal_created':
+      return {
+        title: 'New Deal Created',
+        message: `${actorName} created a new deal: "${metadata.dealTitle || 'Untitled'}" worth UGX ${Number(metadata.value || 0).toLocaleString('en-UG')}`,
+        priority: 'medium'
+      };
+
+    case 'deal_updated':
+      return {
+        title: 'Deal Updated',
+        message: `${actorName} updated deal "${metadata.dealTitle || 'Untitled'}" - ${metadata.change || 'Modified details'}`,
+        priority: 'low'
+      };
+
+    case 'deal_won':
+      return {
+        title: 'Deal Won! 🎉',
+        message: `${actorName} closed a deal: "${metadata.dealTitle || 'Untitled'}" worth UGX ${Number(metadata.value || 0).toLocaleString('en-UG')}`,
+        priority: 'high'
+      };
+
+    case 'deal_lost':
+      return {
+        title: 'Deal Lost',
+        message: `${actorName} lost a deal: "${metadata.dealTitle || 'Untitled'}" worth UGX ${Number(metadata.value || 0).toLocaleString('en-UG')}`,
+        priority: 'medium'
+      };
+
+    case 'client_created':
+      return {
+        title: 'New Client Added',
+        message: `${actorName} registered a new client: ${metadata.clientName || 'Unknown Client'}`,
+        priority: 'medium'
+      };
+
+    case 'client_updated':
+      return {
+        title: 'Client Updated',
+        message: `${actorName} updated client information for ${metadata.clientName || 'Unknown Client'}`,
+        priority: 'low'
+      };
+
+    case 'meeting_created':
+      return {
+        title: 'Meeting Scheduled',
+        message: `${actorName} scheduled a meeting with ${metadata.clientName || 'client'} on ${metadata.date || 'TBD'}`,
+        priority: 'medium'
+      };
+
+    case 'meeting_completed':
+      return {
+        title: 'Meeting Completed',
+        message: `${actorName} completed a meeting with ${metadata.clientName || 'client'}`,
+        priority: 'low'
+      };
+
+    case 'sale_made':
+      return {
+        title: 'Sale Completed',
+        message: `${actorName} made a sale worth UGX ${Number(metadata.amount || 0).toLocaleString('en-UG')}`,
+        priority: 'high'
+      };
+
+    case 'document_uploaded':
+      return {
+        title: 'Document Uploaded',
+        message: `${actorName} uploaded a document: ${metadata.filename || 'Unknown file'}`,
+        priority: 'low'
+      };
+
+    case 'meeting_response':
+      const responseText = metadata.response === 'accepted' ? 'accepted' :
+                          metadata.response === 'declined' ? 'declined' :
+                          'responded tentatively to';
+      return {
+        title: 'Meeting Response',
+        message: `${metadata.clientName} has ${responseText} the meeting: "${metadata.meetingTitle}"`,
+        priority: 'medium'
+      };
+
+    default:
+      return {
+        title: 'Agent Activity',
+        message: `${actorName} performed an action: ${type}`,
+        priority: 'low'
+      };
+  }
+};
+
+export const sendNotification = async (schedule, action) => {
+  try {
+      title: schedule.title,
+      date: schedule.date,
+      client: schedule.client?.name,
+      type: schedule.type
+    });
+
+    // Simulate sending notifications
+    if (action === 'created' && schedule.reminders && schedule.reminders.length > 0) {
+      schedule.reminders.forEach(reminder => {
+        scheduleReminder(schedule, reminder);
+      });
+    }
+
+    return { success: true, message: `Notification sent for schedule ${action}` };
+  } catch (error) {
+    console.error('Error sending notification:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+const scheduleReminder = (schedule, reminder) => {
+  const reminderTime = calculateReminderTime(schedule.date, reminder);
+
+    title: schedule.title,
+    type: reminder,
+    client: schedule.client?.name
+  });
+};
+
+const calculateReminderTime = (scheduleDate, reminder) => {
+  const date = new Date(scheduleDate);
+  const reminderMap = {
+    '15min': 15 * 60 * 1000,
+    '30min': 30 * 60 * 1000,
+    '1hr': 60 * 60 * 1000,
+    '2hr': 2 * 60 * 60 * 1000,
+    '1day': 24 * 60 * 60 * 1000
+  };
+
+  return new Date(date.getTime() - (reminderMap[reminder] || 0));
+};
+
+export default {
+  createNotification,
+  sendNotification,
+  scheduleReminder
+};c a s e   ' s a l e _ c r e a t e d ' :  
+             r e t u r n   {  
+ 

@@ -75,7 +75,7 @@ const Deals = () => {
       };
 
       const response = await dealsAPI.getAll(params);
-      setDeals(response.data || []);
+      setDeals(response.data?.deals || response.data || []);
     } catch (err) {
       console.error('Error fetching deals:', err);
       setError('Failed to load deals');

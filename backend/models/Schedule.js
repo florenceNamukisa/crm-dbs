@@ -55,6 +55,10 @@ const scheduleSchema = new mongoose.Schema({
     trim: true,
     maxlength: [200, 'Location cannot exceed 200 characters']
   },
+  meetingLink: {
+    type: String,
+    trim: true
+  },
   mode: {
     type: String,
     enum: {
@@ -119,6 +123,20 @@ const scheduleSchema = new mongoose.Schema({
       default: Date.now
     }
   }],
+  clientResponse: {
+    responded: {
+      type: Boolean,
+      default: false
+    },
+    response: {
+      type: String,
+      enum: ['accepted', 'declined', 'tentative', null],
+      default: null
+    },
+    respondedAt: Date,
+    notes: String
+  },
+  completedAt: Date,
   history: [{
     action: String,
     date: {

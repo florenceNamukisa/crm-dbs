@@ -9,14 +9,6 @@ let cachedEtherealAccount = null;
 
 const logEmailConfig = () => {
   if (!cachedConfigSummary) return;
-  console.log(
-    `✉️  Email transport ready → provider: ${cachedConfigSummary.provider}, user: ${cachedConfigSummary.user}`
-  );
-  if (cachedConfigSummary.provider === 'ethereal:auto') {
-    console.log(
-      'ℹ️  Using auto-generated Ethereal inbox. Emails will stay in preview mode until real SMTP credentials are provided.'
-    );
-  }
 };
 
 const createTransporter = async () => {
@@ -89,6 +81,112 @@ export const generateOTP = () => {
 
 // Email templates - FIXED: Properly handle template data
 const emailTemplates = {
+  meetingInvite: (templateData) => {
+    const { clientName, agentName, title, date, duration, location, mode, agenda, meetingLink } = templateData;
+
+    const formatDate = (dateString) => {
+      return new Date(dateString).toLocaleString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZoneName: 'short'
+      });
+    };
+
+    const getModeIcon = (mode) => {
+      switch (mode) {
+        case 'zoom': return '📹';
+        case 'google-meet': return '🎥';
+        case 'teams': return '👥';
+        case 'phone': return '📞';
+        case 'in-person': return '🏢';
+        default: return '📅';
+      }
+    };
+
+    return {
+      subject: `Meeting Invitation: ${title}`,
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
+            .container { max-width: 600px; margin: 0 auto; background: #ffffff; }
+            .header { background: linear-gradient(135deg, #FF6B35, #FF8C42); color: white; padding: 30px; text-align: center; }
+            .content { padding: 30px; }
+            .meeting-details { background: #f8f9fa; padding: 25px; border-radius: 10px; border-left: 4px solid #FF6B35; margin: 25px 0; }
+            .meeting-info { margin: 15px 0; }
+            .meeting-info strong { display: inline-block; width: 120px; }
+            .join-button {
+              background: #FF6B35;
+              color: white;
+              padding: 15px 40px;
+              text-decoration: none;
+              border-radius: 8px;
+              display: inline-block;
+              margin: 20px 0;
+              font-size: 16px;
+              font-weight: bold;
+            }
+            .footer { text-align: center; margin-top: 30px; padding: 20px; color: #666; font-size: 12px; border-top: 1px solid #eee; }
+            .agenda { background: #fff8e1; padding: 15px; border-radius: 8px; margin: 15px 0; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>📅 Meeting Invitation</h1>
+              <p>${getModeIcon(mode)} ${title}</p>
+            </div>
+
+            <div class="content">
+              <h2>Hello ${clientName},</h2>
+              <p>You have been invited to a meeting by ${agentName}. Please find the details below:</p>
+
+              <div class="meeting-details">
+                <h3>📋 Meeting Details:</h3>
+                <div class="meeting-info"><strong>Title:</strong> ${title}</div>
+                <div class="meeting-info"><strong>Date & Time:</strong> ${formatDate(date)}</div>
+                <div class="meeting-info"><strong>Duration:</strong> ${duration} minutes</div>
+                <div class="meeting-info"><strong>Location/Mode:</strong> ${location}</div>
+                <div class="meeting-info"><strong>Meeting Type:</strong> ${mode.replace('-', ' ').toUpperCase()}</div>
+                ${meetingLink ? `<div class="meeting-info"><strong>Meeting Link:</strong> <a href="${meetingLink}" target="_blank">${meetingLink}</a></div>` : ''}
+              </div>
+
+              ${agenda ? `
+              <div class="agenda">
+                <h4>📝 Agenda:</h4>
+                <p>${agenda}</p>
+              </div>
+              ` : ''}
+
+              ${meetingLink ? `
+              <div style="text-align: center;">
+                <a href="${meetingLink}" class="join-button" target="_blank">🔗 Join Meeting</a>
+              </div>
+              ` : ''}
+
+              <div style="background: #f0f7ff; padding: 15px; border-radius: 6px; margin: 15px 0;">
+                <p><strong>💡 Important:</strong> Please arrive 5 minutes early. If you need to reschedule, please contact ${agentName} directly.</p>
+              </div>
+
+              <div class="footer">
+                <p>This meeting invitation was sent by the CRM System.</p>
+                <p>Please add this event to your calendar to avoid missing it.</p>
+                <p>© ${new Date().getFullYear()} CRM System. All rights reserved.</p>
+              </div>
+            </div>
+          </div>
+        </body>
+        </html>
+      `
+    };
+  },
+
   agentWelcome: (templateData) => {
     const { name, email, otp } = templateData;
     
@@ -208,17 +306,13 @@ export const sendEmail = async (to, templateName, templateData) => {
       html: emailContent.html
     };
 
-    console.log(`📧 Attempting to send email to: ${to}`);
-    console.log(`📧 Email details:`, { name: templateData.name, email: templateData.email, otp: templateData.otp });
     
     const result = await transporter.sendMail(mailOptions);
 
     const previewUrl = nodemailer.getTestMessageUrl(result);
     if (previewUrl) {
-      console.log('📧 Email sent! Preview URL:', previewUrl);
     }
 
-    console.log(`✅ Email sent successfully to ${to}`);
     return { success: true, messageId: result.messageId, previewUrl };
   } catch (error) {
     console.error('❌ Email sending error:', error);
@@ -231,7 +325,6 @@ export const testEmailConfig = async () => {
   try {
     const transporter = await createTransporter();
     await transporter.verify();
-    console.log('✅ Email server is ready to send messages');
     return true;
   } catch (error) {
     console.error('❌ Email configuration error:', error);
@@ -255,7 +348,6 @@ export const sendEmailWithAttachment = async (to, subject, htmlContent, attachme
     const result = await transporter.sendMail(mailOptions);
     const previewUrl = nodemailer.getTestMessageUrl(result);
     if (previewUrl) {
-      console.log('📧 Email sent! Preview URL:', previewUrl);
     }
 
     return { success: true, messageId: result.messageId };

@@ -107,6 +107,10 @@ const saleSchema = new mongoose.Schema({
       enum: ['cash', 'bank_transfer', 'online'],
       default: 'cash'
     },
+    // Bank transfer specific fields
+    cardNumber: String,
+    bankName: String,
+    accountName: String,
     notes: String
   }]
 }, {

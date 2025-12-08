@@ -1,11 +1,29 @@
 import express from 'express';
 import User from '../models/User.js';
 import Deal from '../models/Deal.js';
+import { getAgentRankings, updateAgentRating } from '../utils/ratingSystem.js';
 
 const router = express.Router();
 
+// Middleware to get current user
+const getCurrentUser = async (req, res, next) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ message: 'No token provided' });
+    }
+
+    const jwt = await import('jsonwebtoken');
+    const decoded = jwt.default.verify(token, process.env.JWT_SECRET || 'fallback_secret');
+    req.user = decoded;
+    next();
+  } catch (error) {
+    return res.status(401).json({ message: 'Invalid token' });
+  }
+};
+
 // Get performance stats for agent
-router.get('/agent/:agentId', async (req, res) => {
+router.get('/agent/:agentId', getCurrentUser, async (req, res) => {
   try {
     const { agentId } = req.params;
 
@@ -42,8 +60,12 @@ router.get('/agent/:agentId', async (req, res) => {
 });
 
 // Get overall performance stats (admin)
-router.get('/overall', async (req, res) => {
+router.get('/overall', getCurrentUser, async (req, res) => {
   try {
+    // Only admins can access overall performance
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Access denied. Admin only.' });
+    }
     const agents = await User.find({ role: 'agent' });
     const deals = await Deal.find().populate('agent');
     
@@ -80,6 +102,35 @@ router.get('/overall', async (req, res) => {
     };
     
     res.json(stats);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Get agent rankings
+router.get('/rankings', getCurrentUser, async (req, res) => {
+  try {
+    // Only admins can access rankings
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Access denied. Admin only.' });
+    }
+
+    const rankings = await getAgentRankings();
+    res.json(rankings);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Force rating recalculation (admin only)
+router.post('/recalculate-ratings', async (req, res) => {
+  try {
+    const { calculateAgentRatings } = await import('../utils/ratingSystem.js');
+    const ratings = await calculateAgentRatings();
+    res.json({
+      message: 'Ratings recalculated successfully',
+      updatedAgents: ratings.length
+    });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }

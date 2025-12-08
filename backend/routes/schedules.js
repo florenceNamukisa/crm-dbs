@@ -1,10 +1,43 @@
 import express from 'express';
 import Schedule from '../models/Schedule.js';
 
+// Generate meeting link based on mode
+const generateMeetingLink = (mode) => {
+  switch (mode) {
+    case 'zoom':
+      // In a real app, you'd integrate with Zoom API to create a meeting
+      return 'https://zoom.us/j/example-meeting-id';
+    case 'google-meet':
+      // In a real app, you'd use Google Calendar API to create a meeting
+      return 'https://meet.google.com/example-meeting-code';
+    case 'teams':
+      return 'https://teams.microsoft.com/l/meetup-join/example-meeting';
+    default:
+      return null;
+  }
+};
+
 const router = express.Router();
 
+// Middleware to get current user
+const getCurrentUser = async (req, res, next) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ message: 'No token provided' });
+    }
+
+    const jwt = await import('jsonwebtoken');
+    const decoded = jwt.default.verify(token, process.env.JWT_SECRET || 'fallback_secret');
+    req.user = decoded;
+    next();
+  } catch (error) {
+    return res.status(401).json({ message: 'Invalid token' });
+  }
+};
+
 // Get all schedules with filters
-router.get('/', async (req, res) => {
+router.get('/', getCurrentUser, async (req, res) => {
   try {
     const { 
       agentId, 
@@ -18,8 +51,14 @@ router.get('/', async (req, res) => {
     } = req.query;
     
     let query = {};
-    
-    if (agentId) query.agent = agentId;
+
+    // Agents can only see their own schedules, admins see all
+    if (req.user.role === 'agent') {
+      query.agent = req.user.userId;
+    } else if (agentId) {
+      // Admin can filter by specific agent
+      query.agent = agentId;
+    }
     if (clientId) query.client = clientId;
     if (type) query.type = type;
     if (status) query.status = status;
@@ -73,17 +112,50 @@ router.get('/:id', async (req, res) => {
 // Create new schedule
 router.post('/', async (req, res) => {
   try {
-    const schedule = new Schedule(req.body);
+    const scheduleData = { ...req.body };
+
+    // Generate meeting link if it's a virtual meeting
+    if (scheduleData.type === 'meeting' && ['zoom', 'google-meet', 'teams'].includes(scheduleData.mode)) {
+      scheduleData.meetingLink = generateMeetingLink(scheduleData.mode);
+    }
+
+    const schedule = new Schedule(scheduleData);
     await schedule.save();
-    
+
     await schedule.populate('client', 'name email phone company');
     await schedule.populate('agent', 'name email role');
-    
+
+    // Send email invite to client if it's a meeting
+    if (schedule.type === 'meeting' && schedule.client && schedule.client.email) {
+      const { sendEmail } = await import('../services/emailService.js');
+
+      const emailResult = await sendEmail(
+        schedule.client.email,
+        'meetingInvite',
+        {
+          clientName: schedule.client.name,
+          agentName: schedule.agent.name,
+          title: schedule.title,
+          date: schedule.date,
+          duration: schedule.duration,
+          location: schedule.location,
+          mode: schedule.mode,
+          agenda: schedule.agenda,
+          meetingLink: schedule.meetingLink
+        }
+      );
+
+      if (emailResult.success) {
+      } else {
+        console.error('❌ Failed to send meeting invite:', emailResult.error);
+      }
+    }
+
     // Send notification if scheduled
     if (schedule.reminders && schedule.reminders.length > 0) {
       await sendNotification(schedule, 'created');
     }
-    
+
     res.status(201).json(schedule);
   } catch (error) {
     console.error('Error creating schedule:', error);
@@ -204,6 +276,83 @@ router.get('/agent/:agentId/upcoming', async (req, res) => {
     res.json(upcomingSchedules);
   } catch (error) {
     console.error('Error fetching upcoming schedules:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Client response to meeting invite
+router.post('/:id/respond', async (req, res) => {
+  try {
+    const { response, notes } = req.body; // response: 'accepted', 'declined', 'tentative'
+
+    const schedule = await Schedule.findById(req.params.id);
+    if (!schedule) {
+      return res.status(404).json({ message: 'Schedule not found' });
+    }
+
+    schedule.clientResponse = {
+      responded: true,
+      response,
+      respondedAt: new Date(),
+      notes
+    };
+
+    await schedule.save();
+
+    // Create notification for the agent about client response
+    const { createNotification } = await import('../utils/notifications.js');
+    await createNotification({
+      type: 'meeting_response',
+      actorId: schedule.client._id,
+      entityType: 'meeting',
+      entityId: schedule._id,
+      metadata: {
+        response,
+        meetingTitle: schedule.title,
+        clientName: schedule.client?.name || 'Client'
+      }
+    });
+
+    res.json({ message: 'Response recorded successfully', schedule });
+  } catch (error) {
+    console.error('Error recording response:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Mark meeting as completed and track attendance
+router.put('/:id/complete', async (req, res) => {
+  try {
+    const schedule = await Schedule.findByIdAndUpdate(
+      req.params.id,
+      {
+        status: 'completed',
+        completedAt: new Date()
+      },
+      { new: true }
+    ).populate('client', 'name email')
+     .populate('agent', 'name email');
+
+    if (!schedule) {
+      return res.status(404).json({ message: 'Schedule not found' });
+    }
+
+    // Create notification for completed meeting
+    const { createNotification } = await import('../utils/notifications.js');
+    await createNotification({
+      type: 'meeting_completed',
+      actorId: schedule.agent._id,
+      entityType: 'meeting',
+      entityId: schedule._id,
+      metadata: {
+        meetingTitle: schedule.title,
+        clientName: schedule.client?.name || 'Client'
+      }
+    });
+
+    res.json(schedule);
+  } catch (error) {
+    console.error('Error completing meeting:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });

@@ -67,6 +67,7 @@ export const clientsAPI = {
   update: (id, clientData) => api.put(`/clients/${id}`, clientData),
   delete: (id) => api.delete(`/clients/${id}`),
   getById: (id) => api.get(`/clients/${id}`),
+  exportCSV: () => api.get('/clients/export/csv', { responseType: 'blob' }),
 };
 
 // Deals API
@@ -87,6 +88,7 @@ export const performanceAPI = {
   getAllPerformance: () => api.get('/performance/overall'),
   getTeamPerformance: () => api.get('/performance/team'),
   getPerformanceStats: () => api.get('/performance/stats'),
+  getRankings: () => api.get('/performance/rankings'),
 };
 
 // Schedules API
@@ -124,7 +126,11 @@ export const reportsAPI = {
 // Sales API
 export const salesAPI = {
   getAll: (params = {}) => api.get('/sales', { params }),
-  getSummary: (period = 'daily') => api.get(`/sales/summary?period=${period}`),
+  getSummary: (period = 'daily', agent = null) => {
+    const params = new URLSearchParams({ period });
+    if (agent) params.append('agent', agent);
+    return api.get(`/sales/summary?${params.toString()}`);
+  },
   getStats: (params = {}) => api.get('/sales/stats', { params }),
   create: (saleData) => api.post('/sales', saleData),
   getById: (id) => api.get(`/sales/${id}`),
@@ -152,6 +158,22 @@ export const uploadAPI = {
     },
   }),
   deleteFile: (fileId) => api.delete(`/upload/${fileId}`),
+};
+
+// Notifications API
+export const notificationsAPI = {
+  getAll: (params = {}) => api.get('/notifications', { params }),
+  getUnreadCount: () => api.get('/notifications/unread-count'),
+  markAsRead: (id) => api.put(`/notifications/${id}/read`),
+  markAllAsRead: () => api.put('/notifications/mark-all-read'),
+  delete: (id) => api.delete(`/notifications/${id}`),
+  getStats: () => api.get('/notifications/stats/summary')
+};
+
+// OTP API
+export const otpAPI = {
+  sendOTP: (data) => api.post('/otp/send', data),
+  verifyOTP: (data) => api.post('/otp/verify', data)
 };
 
 // Export the main api instance for custom requests

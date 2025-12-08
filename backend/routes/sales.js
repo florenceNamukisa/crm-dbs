@@ -4,6 +4,7 @@ import Sale from '../models/Sale.js';
 import Stock from '../models/Stock.js';
 import User from '../models/User.js';
 import { body, validationResult } from 'express-validator';
+import { createNotification } from '../utils/notifications.js';
 
 const router = express.Router();
 
@@ -27,13 +28,16 @@ const getCurrentUser = async (req, res, next) => {
 // Get all sales (admin sees all, agents see their own)
 router.get('/', getCurrentUser, async (req, res) => {
   try {
-    const { page = 1, limit = 10, startDate, endDate, paymentMethod, status, customerName } = req.query;
+    const { page = 1, limit = 10, startDate, endDate, paymentMethod, status, customerName, agent } = req.query;
 
     let query = {};
 
-    // Agents can only see their own sales
+    // Agents can only see their own sales, or filter by specific agent if admin
     if (req.user.role === 'agent') {
       query.agent = req.user.userId;
+    } else if (agent) {
+      // Admin can filter by specific agent
+      query.agent = agent;
     }
 
     // Apply filters
@@ -85,7 +89,7 @@ router.get('/', getCurrentUser, async (req, res) => {
 // Get sales summary (daily, weekly, monthly)
 router.get('/summary', getCurrentUser, async (req, res) => {
   try {
-    const { period = 'daily' } = req.query;
+    const { period = 'daily', agent } = req.query;
     const now = new Date();
 
     let startDate;
@@ -101,9 +105,12 @@ router.get('/summary', getCurrentUser, async (req, res) => {
 
     let query = { saleDate: { $gte: startDate } };
 
-    // Agents can only see their own sales
+    // Agents can only see their own sales, or filter by specific agent if admin
     if (req.user.role === 'agent') {
       query.agent = req.user.userId;
+    } else if (agent) {
+      // Admin can filter by specific agent
+      query.agent = agent;
     }
 
     const sales = await Sale.find(query);
@@ -208,18 +215,6 @@ router.post('/', [
 
     const { customerName, customerEmail, customerPhone, items, paymentMethod, client, notes, dueDate } = req.body;
 
-    console.log('Creating sale with data:', {
-      customerName,
-      customerEmail,
-      customerPhone,
-      items,
-      paymentMethod,
-      client,
-      notes,
-      dueDate,
-      agent: req.user.userId
-    });
-
     // Create sale
     const sale = new Sale({
       customerName,
@@ -234,11 +229,9 @@ router.post('/', [
       saleDate: new Date()
     });
 
-    console.log('Sale object before save:', sale);
 
     try {
       await sale.save();
-      console.log('Sale saved successfully:', sale);
     } catch (validationError) {
       console.error('Sale validation error:', validationError);
       throw validationError;
@@ -276,6 +269,19 @@ router.post('/', [
 
       await agent.save();
     }
+
+    // Create notification for admins
+    await createNotification({
+      type: 'sale_created',
+      actorId: req.user.userId,
+      entityType: 'Sale',
+      entityId: sale._id,
+      metadata: {
+        customerName: sale.customerName,
+        finalAmount: sale.finalAmount,
+        itemCount: items.length
+      }
+    });
 
     await sale.populate('agent', 'name email');
     await sale.populate('client', 'name email phone');
@@ -377,7 +383,10 @@ router.put('/:id', [
 router.post('/:id/payment', [
   getCurrentUser,
   body('amount').isFloat({ min: 0.01 }).withMessage('Payment amount must be greater than 0'),
-  body('paymentMethod').optional().isIn(['cash', 'bank_transfer', 'online']).withMessage('Invalid payment method')
+  body('paymentMethod').optional().isIn(['cash', 'bank_transfer', 'online']).withMessage('Invalid payment method'),
+  body('cardNumber').if(body('paymentMethod').equals('bank_transfer')).notEmpty().withMessage('Card/Account number is required for bank transfers'),
+  body('bankName').if(body('paymentMethod').equals('bank_transfer')).notEmpty().withMessage('Bank name is required for bank transfers'),
+  body('accountName').if(body('paymentMethod').equals('bank_transfer')).notEmpty().withMessage('Account holder name is required for bank transfers')
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -402,14 +411,23 @@ router.post('/:id/payment', [
       return res.status(400).json({ message: 'Only credit sales can receive payments' });
     }
 
-    const { amount, paymentMethod = 'cash', notes } = req.body;
+    const { amount, paymentMethod = 'cash', notes, paymentDate, cardNumber, bankName, accountName } = req.body;
 
-    sale.payments.push({
+    const paymentData = {
       amount,
       paymentMethod,
       notes,
-      paymentDate: new Date()
-    });
+      paymentDate: paymentDate ? new Date(paymentDate) : new Date()
+    };
+
+    // Add bank transfer specific fields if payment method is bank_transfer
+    if (paymentMethod === 'bank_transfer') {
+      paymentData.cardNumber = cardNumber;
+      paymentData.bankName = bankName;
+      paymentData.accountName = accountName;
+    }
+
+    sale.payments.push(paymentData);
 
     sale.updateCreditStatus();
     await sale.save();

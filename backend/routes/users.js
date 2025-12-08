@@ -4,9 +4,31 @@ import { sendEmail, generateOTP } from '../services/emailService.js';
 
 const router = express.Router();
 
-// Get all users (admin only)
-router.get('/', async (req, res) => {
+// Middleware to get current user
+const getCurrentUser = async (req, res, next) => {
   try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ message: 'No token provided' });
+    }
+
+    const jwt = await import('jsonwebtoken');
+    const decoded = jwt.default.verify(token, process.env.JWT_SECRET || 'fallback_secret');
+    req.user = decoded;
+    next();
+  } catch (error) {
+    return res.status(401).json({ message: 'Invalid token' });
+  }
+};
+
+// Get all users (admin only)
+router.get('/', getCurrentUser, async (req, res) => {
+  try {
+    // Only admins can access this route
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Access denied. Admin only.' });
+    }
+
     const users = await User.find().select('-password -otp');
     res.json(users);
   } catch (error) {
@@ -28,7 +50,6 @@ router.post('/', async (req, res) => {
 
     // Generate OTP (6-digit code)
     const otp = generateOTP();
-    console.log(`🔐 Creating user with OTP: ${otp}`);
     
     // Create user with OTP as temporary password
     const user = new User({
@@ -44,10 +65,8 @@ router.post('/', async (req, res) => {
     });
 
     await user.save();
-    console.log(`✅ User created: ${email}`);
 
     // Send welcome email with OTP
-    console.log(`📧 Sending welcome email to: ${email}`);
     const emailResult = await sendEmail(
       email,
       'agentWelcome',
@@ -58,14 +77,12 @@ router.post('/', async (req, res) => {
     const userResponse = await User.findById(user._id).select('-password -otp');
 
     if (emailResult.success) {
-      console.log(`🎉 Email sent successfully to ${email}`);
       res.status(201).json({ 
         message: 'User created successfully and welcome email sent',
         user: userResponse,
         emailSent: true
       });
     } else {
-      console.log(`⚠️ User created but email failed: ${emailResult.error}`);
       res.status(201).json({ 
         message: 'User created but failed to send welcome email',
         user: userResponse,

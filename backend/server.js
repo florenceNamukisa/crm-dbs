@@ -15,6 +15,7 @@ import { performanceRoutes } from './routes/performance.js';
 import { reportsRoutes } from './routes/reports.js';
 import { salesRoutes } from './routes/sales.js';
 import { stockRoutes } from './routes/stock.js';
+import { notificationRoutes } from './routes/notifications.js';
 import { testEmailConfig } from './services/emailService.js';
 
 
@@ -63,6 +64,7 @@ app.use('/api/performance', performanceRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/sales', salesRoutes);
 app.use('/api/stock', stockRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 
 // Serve frontend
@@ -87,7 +89,6 @@ const createDefaultAdmin = async () => {
         role: 'admin',
         isFirstLogin: false
       });
-      console.log('Default admin user created: admin@crm.com / admin123');
     }
   } catch (error) {
     console.error('Error creating default users:', error);
@@ -153,7 +154,6 @@ const updateAgentRankings = async () => {
       });
     }
 
-    console.log('✅ Agent rankings updated successfully');
   } catch (error) {
     console.error('❌ Error updating agent rankings:', error);
   }
@@ -167,9 +167,7 @@ app.listen(PORT, async () => {
   // Test email configuration
   const emailTest = await testEmailConfig();
   if (emailTest) {
-    console.log('✅ Email service is configured and ready');
   } else {
-    console.log('⚠️  Email service configuration issue detected');
   }
 
   await createDefaultAdmin();

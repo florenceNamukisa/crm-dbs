@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { 
-  Users, 
-  Settings, 
-  LogOut, 
-  Menu, 
+import {
+  Users,
+  Settings,
+  LogOut,
+  Menu,
   X,
   User,
   Target,
@@ -16,15 +16,37 @@ import {
   TrendingUp
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { notificationsAPI } from '../services/api';
+import NotificationCenter from './NotificationCenter';
 import logo from '../assets/logo.png';
 
 const Layout = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
   const isAdmin = user?.role === 'admin';
+
+  // Load unread notifications count for admin
+  useEffect(() => {
+    if (isAdmin) {
+      loadUnreadNotifications();
+    }
+  }, [isAdmin]);
+
+  const loadUnreadNotifications = async () => {
+    if (!isAdmin) return;
+
+    try {
+      const response = await notificationsAPI.getUnreadCount();
+      setUnreadNotifications(response.data.count || 0);
+    } catch (error) {
+      console.error('Failed to load unread notifications:', error);
+    }
+  };
 
   const adminNavItems = [
     { 
@@ -310,10 +332,20 @@ const Layout = ({ children }) => {
             </div>
             
             <div className="flex items-center space-x-4">
-              <button className="p-2 text-gray-400 hover:text-gray-500 relative">
-                <Bell className="w-5 h-5" />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-              </button>
+              {isAdmin && (
+                <button
+                  onClick={() => setShowNotifications(true)}
+                  className="p-2 text-gray-400 hover:text-gray-500 relative"
+                  title="Notifications"
+                >
+                  <Bell className="w-5 h-5" />
+                  {unreadNotifications > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                      {unreadNotifications > 99 ? '99+' : unreadNotifications}
+                    </span>
+                  )}
+                </button>
+              )}
               
               <div className="hidden sm:flex flex-col items-end">
                 <span className="text-sm font-medium text-gray-900">{user?.name}</span>
@@ -329,6 +361,18 @@ const Layout = ({ children }) => {
           </div>
         </main>
       </div>
+
+      {/* Notification Center - Only for admins */}
+      {isAdmin && (
+        <NotificationCenter
+          isOpen={showNotifications}
+          onClose={() => {
+            setShowNotifications(false);
+            // Refresh unread count when closing
+            loadUnreadNotifications();
+          }}
+        />
+      )}
     </div>
   );
 };

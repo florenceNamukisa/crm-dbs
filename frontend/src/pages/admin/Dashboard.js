@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { Users, TrendingUp, DollarSign, Target } from 'lucide-react';
-import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { Users, TrendingUp, DollarSign, Target, Bell } from 'lucide-react';
+import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar } from 'recharts';
 import { useAuth } from '../../context/AuthContext';
-import { dealsAPI, salesAPI, schedulesAPI, clientsAPI, usersAPI, performanceAPI } from '../../services/api';
+import { dealsAPI, salesAPI, schedulesAPI, clientsAPI, usersAPI, performanceAPI, notificationsAPI } from '../../services/api';
 import toast from 'react-hot-toast';
 
 const PERIODS = ['daily', 'weekly', 'monthly', 'yearly'];
@@ -33,16 +33,22 @@ const AdminDashboard = () => {
   const [clientsPeriod, setClientsPeriod] = useState('monthly');
   const [dealsPeriod, setDealsPeriod] = useState('monthly');
 
+  // notifications
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
+
   // stats
   const [totalSales, setTotalSales] = useState(0);
   const [agentsCount, setAgentsCount] = useState(0);
   const [dealsCount, setDealsCount] = useState(0);
   const [pendingDeals, setPendingDeals] = useState(0);
   const [clientsCount, setClientsCount] = useState(0);
+  const [totalDealsClosed, setTotalDealsClosed] = useState(0);
+  const [totalClientsMet, setTotalClientsMet] = useState(0);
 
   // charts & tables
   const [monthlyData, setMonthlyData] = useState([]);
   const [dealStageData, setDealStageData] = useState([]);
+  const [dealsWonLostData, setDealsWonLostData] = useState([]);
   const [dealsTable, setDealsTable] = useState([]);
   const [topAgentsData, setTopAgentsData] = useState([]);
   const [topClientsChartData, setTopClientsChartData] = useState([]);
@@ -81,9 +87,9 @@ const AdminDashboard = () => {
       const salesRange = computeRange(salesPeriod);
       const [salesRes, dealsRes, schedulesRes, clientsRes, usersRes, perfRes] = await Promise.all([
         salesAPI.getStats({ startDate: salesRange.start, endDate: salesRange.end }).catch(e => ({ data: {} })),
-        dealsAPI.getAll(computeRange(dealsPeriod)).catch(e => ({ data: [] })),
+        dealsAPI.getAll().catch(e => ({ data: [] })), // Get ALL deals for admin dashboard totals
         schedulesAPI.getAll({ startDate: range.start, endDate: range.end }).catch(e => ({ data: [] })),
-        clientsAPI.getAll(computeRange(clientsPeriod)).catch(e => ({ data: [] })),
+        clientsAPI.getAll().catch(e => ({ data: [] })), // Get ALL clients for admin dashboard
         usersAPI.getAll().catch(e => ({ data: [] })),
         performanceAPI.getAllPerformance().catch(e => ({ data: {} }))
       ]);
@@ -105,11 +111,17 @@ const AdminDashboard = () => {
       }
 
       // deals
-      const deals = dealsRes?.data || [];
+      const deals = dealsRes?.data?.deals || [];
       setDealsTable(Array.isArray(deals) ? deals.slice(0, 50) : []);
       setDealsCount(Array.isArray(deals) ? deals.length : 0);
       const pending = Array.isArray(deals) ? deals.filter(d => !d.stage || (d.stage && d.stage.toLowerCase() !== 'won' && d.stage.toLowerCase() !== 'lost')).length : 0;
       setPendingDeals(pending);
+
+      // total deals closed (won deals from all agents)
+      const dealsClosed = Array.isArray(deals) ? deals.filter(d =>
+        d.stage && (d.stage.toLowerCase() === 'won' || d.status?.toLowerCase() === 'won')
+      ).length : 0;
+      setTotalDealsClosed(dealsClosed);
 
       // deal stages pie
       const stageMap = {};
@@ -119,11 +131,41 @@ const AdminDashboard = () => {
       });
       setDealStageData(Object.keys(stageMap).map((k) => ({ name: k, value: stageMap[k] })));
 
+      // deals won vs lost over time (by month)
+      const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      const wonLostByMonth = new Array(12).fill(0).map(() => ({ won: 0, lost: 0 }));
+
+      (deals || []).forEach(deal => {
+        const isWon = (deal.stage && String(deal.stage).toLowerCase() === 'won') ||
+                      (deal.status && String(deal.status).toLowerCase() === 'won');
+        const isLost = (deal.stage && String(deal.stage).toLowerCase() === 'lost') ||
+                       (deal.status && String(deal.status).toLowerCase() === 'lost');
+
+        if (isWon || isLost) {
+          const date = new Date(deal.closedAt || deal.updatedAt || deal.createdAt || Date.now());
+          const month = date.getMonth();
+
+          if (isWon) {
+            wonLostByMonth[month].won += 1;
+          } else if (isLost) {
+            wonLostByMonth[month].lost += 1;
+          }
+        }
+      });
+
+      const dealsWonLostChartData = monthNames.map((month, idx) => ({
+        month,
+        won: wonLostByMonth[idx].won,
+        lost: wonLostByMonth[idx].lost
+      }));
+
+      setDealsWonLostData(dealsWonLostChartData);
+
       // top agents: count won deals per agent from deals in selected period
       const perfData = perfRes?.data || {};
       const users_list = usersRes?.data || [];
       const agentsList = Array.isArray(users_list) ? users_list.filter(u => u.role === 'agent') : [];
-      const dealsListForAgents = dealsRes?.data || [];
+      const dealsListForAgents = dealsRes?.data?.deals || [];
       const agentWonCounts = agentsList.map(agent => {
         const agentWonDeals = (dealsListForAgents || []).filter(d => {
           const agentMatch = (d.agent?._id === agent._id) || (d.agent === agent._id) || (d.agent?.toString() === agent._id?.toString());
@@ -173,8 +215,9 @@ const AdminDashboard = () => {
       setTopClientsChartData(chart);
 
       // clients
-      const clients = clientsRes?.data || [];
+      const clients = clientsRes?.data?.clients || [];
       setClientsCount(Array.isArray(clients) ? clients.length : 0);
+      setTotalClientsMet(Array.isArray(clients) ? clients.length : 0);
 
       // agents
       const users = usersRes?.data || [];
@@ -191,8 +234,18 @@ const AdminDashboard = () => {
 
   useEffect(() => {
     loadData();
+    loadUnreadNotifications();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [period, salesPeriod, agentsPeriod, clientsPeriod, dealsPeriod]);
+
+  const loadUnreadNotifications = async () => {
+    try {
+      const response = await notificationsAPI.getUnreadCount();
+      setUnreadNotifications(response.data.count || 0);
+    } catch (error) {
+      console.error('Failed to load unread notifications:', error);
+    }
+  };
 
   const COLORS = ['#ff8c00', '#60a5fa', '#34d399', '#f97316', '#ef4444', '#a78bfa'];
 
@@ -212,7 +265,7 @@ const AdminDashboard = () => {
           <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
           <p className="text-gray-600 mt-1">Welcome back, {user?.name}! Overview of platform activity.</p>
         </div>
-        <div className="flex items-center space-x-4">
+        <div className="flex flex-col items-end space-y-2">
           <div className="text-sm text-gray-500">Filter:</div>
           <div className="flex items-center space-x-2">
             {PERIODS.map(p => (
@@ -225,11 +278,13 @@ const AdminDashboard = () => {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <StatCard icon={DollarSign} title="Total Sales" value={`UGX ${Number(totalSales || 0).toLocaleString('en-UG')}`} subtitle={loading ? 'Refreshing...' : ''} />
         <StatCard icon={Users} title="Total Agents" value={agentsCount} />
         <StatCard icon={Target} title="Total Deals" value={dealsCount} />
         <StatCard icon={TrendingUp} title="Pending Deals" value={pendingDeals} />
+        <StatCard icon={Target} title="Deals Closed" value={totalDealsClosed} />
+        <StatCard icon={Users} title="Clients Met" value={totalClientsMet} />
       </div>
 
       {/* Charts */}
@@ -282,6 +337,29 @@ const AdminDashboard = () => {
         </div>
       </div>
 
+      {/* Deals Won vs Lost Chart */}
+      <div className="bg-white rounded-xl shadow-sm p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold">Deals Won vs Lost Over Time</h3>
+          <select value={dealsPeriod} onChange={(e) => setDealsPeriod(e.target.value)} className="px-3 py-1 border border-gray-300 rounded text-sm">
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+            <option value="yearly">Yearly</option>
+          </select>
+        </div>
+        <ResponsiveContainer width="100%" height={300}>
+          <LineChart data={dealsWonLostData}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="month" />
+            <YAxis />
+            <Tooltip />
+            <Line type="monotone" dataKey="won" stroke="#10b981" strokeWidth={3} name="Won Deals" dot={{ r: 4 }} />
+            <Line type="monotone" dataKey="lost" stroke="#ef4444" strokeWidth={3} name="Lost Deals" dot={{ r: 4 }} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+
       {/* Top Agents & Top Clients */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="bg-white rounded-xl shadow-sm p-6">
@@ -311,6 +389,31 @@ const AdminDashboard = () => {
         </div>
 
         <div className="bg-white rounded-xl shadow-sm p-6 lg:col-span-2">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold">Most Active Agents by Won Deals</h3>
+            <select value={agentsPeriod} onChange={(e) => setAgentsPeriod(e.target.value)} className="px-3 py-1 border border-gray-300 rounded text-sm">
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+              <option value="yearly">Yearly</option>
+            </select>
+          </div>
+          {topAgentsData.length === 0 ? (
+            <p className="text-sm text-gray-500">No data</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={topAgentsData.slice(0, 8)} layout="horizontal">
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis type="number" />
+                <YAxis dataKey="name" type="category" width={80} />
+                <Tooltip formatter={(value) => [`${value} deals`, 'Won Deals']} />
+                <Bar dataKey="value" fill="#ff8c00" />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold">Top Clients — Won Deals (last 12 months)</h3>
             <select value={clientsPeriod} onChange={(e) => setClientsPeriod(e.target.value)} className="px-3 py-1 border border-gray-300 rounded text-sm">
@@ -371,6 +474,7 @@ const AdminDashboard = () => {
           </table>
         </div>
       </div>
+
     </div>
   );
 };
