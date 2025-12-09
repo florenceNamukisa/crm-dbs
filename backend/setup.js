@@ -17,8 +17,8 @@ const createDefaultData = async () => {
     if (!adminExists) {
       const admin = await User.create({
         name: 'System Administrator',
-        email: 'Xtreative@crm.com',
-        password: 'crm@12',
+        email: 'admin@crm.com',
+        password: 'admin123',
         role: 'admin',
         isFirstLogin: false
       });
