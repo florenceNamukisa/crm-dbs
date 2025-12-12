@@ -159,103 +159,115 @@ router.get('/stats/summary', getCurrentUser, async (req, res) => {
 // Create new sale
 // CREATE a new sale (SIMPLIFIED AND BULLETPROOF)
 router.post('/', getCurrentUser, async (req, res) => {
+  const startTime = Date.now();
   try {
-    console.log('=== POST /api/sales ===');
+    console.log('\n=== POST /api/sales START ===');
+    console.log('Timestamp:', new Date().toISOString());
+    console.log('User ID:', req.user?.userId);
     console.log('Request body:', JSON.stringify(req.body, null, 2));
-    console.log('User:', req.user);
 
     const { customerName, customerEmail, customerPhone, items, paymentMethod, notes } = req.body;
 
-    // VALIDATION WITH CLEAR ERROR MESSAGES
-    if (!customerName || !customerName.toString().trim()) {
-      console.log('❌ Validation failed: missing customerName');
-      return res.status(400).json({ message: 'customerName is required' });
+    // VALIDATION
+    const errors = [];
+    
+    if (!customerName || typeof customerName !== 'string' || !customerName.trim()) {
+      errors.push('customerName is required and must be a string');
     }
-
+    
     if (!items || !Array.isArray(items) || items.length === 0) {
-      console.log('❌ Validation failed: items must be a non-empty array');
-      return res.status(400).json({ message: 'items must be a non-empty array' });
-    }
-
-    // Validate each item
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      if (!item.itemName || !item.itemName.toString().trim()) {
-        console.log(`❌ Validation failed: items[${i}].itemName is required`);
-        return res.status(400).json({ message: `items[${i}].itemName is required` });
-      }
-      const qty = Number(item.quantity);
-      if (isNaN(qty) || qty < 1) {
-        console.log(`❌ Validation failed: items[${i}].quantity must be >= 1`);
-        return res.status(400).json({ message: `items[${i}].quantity must be >= 1` });
-      }
-      const price = Number(item.unitPrice);
-      if (isNaN(price) || price < 0) {
-        console.log(`❌ Validation failed: items[${i}].unitPrice must be >= 0`);
-        return res.status(400).json({ message: `items[${i}].unitPrice must be >= 0` });
+      errors.push('items must be a non-empty array');
+    } else {
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (!item.itemName || typeof item.itemName !== 'string' || !item.itemName.trim()) {
+          errors.push(`items[${i}].itemName is required`);
+        }
+        if (!item.quantity || Number(item.quantity) < 1) {
+          errors.push(`items[${i}].quantity must be >= 1`);
+        }
+        if (item.unitPrice === undefined || item.unitPrice === null || Number(item.unitPrice) < 0) {
+          errors.push(`items[${i}].unitPrice must be >= 0`);
+        }
       }
     }
-
+    
     if (!paymentMethod || !['cash', 'credit'].includes(paymentMethod)) {
-      console.log('❌ Validation failed: paymentMethod must be cash or credit');
-      return res.status(400).json({ message: 'paymentMethod must be cash or credit' });
+      errors.push('paymentMethod must be "cash" or "credit"');
     }
 
-    console.log('✅ All validations passed');
+    if (errors.length > 0) {
+      console.log('❌ Validation errors:', errors);
+      return res.status(400).json({ message: 'Validation failed', errors });
+    }
 
-    // NORMALIZE ITEMS: ensure all fields are numbers
-    const normalizedItems = items.map(item => ({
-      itemName: String(item.itemName).trim(),
-      quantity: Number(item.quantity) || 1,
-      unitPrice: Number(item.unitPrice) || 0,
-      discount: Number(item.discount) || 0
-    }));
+    console.log('✅ Validation passed');
 
-    console.log('Normalized items:', normalizedItems);
+    // NORMALIZE ITEMS
+    const normalizedItems = items.map((item, i) => {
+      try {
+        return {
+          itemName: String(item.itemName).trim(),
+          quantity: Number(item.quantity) || 0,
+          unitPrice: Number(item.unitPrice) || 0,
+          discount: Number(item.discount) || 0
+        };
+      } catch (e) {
+        console.error(`Error normalizing item ${i}:`, e);
+        throw new Error(`Failed to normalize item ${i}`);
+      }
+    });
 
-    // CREATE THE SALE OBJECT
-    const sale = new Sale({
-      customerName: customerName.toString().trim(),
-      customerEmail: customerEmail ? customerEmail.toString().trim() : undefined,
-      customerPhone: customerPhone ? customerPhone.toString().trim() : undefined,
+    console.log('✅ Items normalized:', normalizedItems);
+
+    // CREATE SALE OBJECT
+    const saleData = {
+      customerName: String(customerName).trim(),
+      customerEmail: customerEmail ? String(customerEmail).trim() : undefined,
+      customerPhone: customerPhone ? String(customerPhone).trim() : undefined,
       items: normalizedItems,
       paymentMethod,
-      notes: notes ? notes.toString().trim() : undefined,
+      notes: notes ? String(notes).trim() : undefined,
       agent: req.user.userId,
       saleDate: new Date()
+    };
+
+    console.log('Creating sale with data:', {
+      customerName: saleData.customerName,
+      itemCount: saleData.items.length,
+      paymentMethod: saleData.paymentMethod,
+      agent: saleData.agent
     });
 
-    console.log('Sale object before save:', {
-      customerName: sale.customerName,
-      items: sale.items,
-      paymentMethod: sale.paymentMethod,
-      agent: sale.agent
-    });
+    const sale = new Sale(saleData);
 
     // SAVE TO DATABASE
-    try {
-      await sale.save();
-      console.log('✅ Sale saved successfully:', sale._id);
-    } catch (saveError) {
-      console.error('❌ Error saving sale to database:', saveError);
-      console.error('Error message:', saveError.message);
-      console.error('Error details:', saveError);
-      throw saveError;
-    }
+    const savedSale = await sale.save();
+    console.log('✅ Sale saved to database:', savedSale._id);
 
-    // POPULATE REFERENCES FOR RESPONSE
-    await sale.populate('agent', 'name email');
+    // POPULATE AND RESPOND
+    await savedSale.populate('agent', 'name email');
+
+    const elapsed = Date.now() - startTime;
+    console.log(`✅ POST /api/sales completed in ${elapsed}ms`);
+    console.log('=== POST /api/sales END ===\n');
 
     res.status(201).json({
       message: 'Sale created successfully',
-      sale
+      sale: savedSale
     });
+
   } catch (error) {
-    console.error('❌ Error creating sale:', error);
-    console.error('Error stack:', error.stack);
+    const elapsed = Date.now() - startTime;
+    console.error(`❌ Error creating sale (${elapsed}ms):`, error.message);
+    console.error('Error type:', error.constructor.name);
+    console.error('Stack:', error.stack);
+    console.log('=== POST /api/sales ERROR ===\n');
+
     res.status(500).json({
-      message: 'Server error',
-      error: error.message
+      message: 'Failed to create sale',
+      error: error.message,
+      type: error.constructor.name
     });
   }
 });

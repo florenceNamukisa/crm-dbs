@@ -66,6 +66,16 @@ app.use('/api/sales', salesRoutes);
 app.use('/api/stock', stockRoutes);
 app.use('/api/notifications', notificationRoutes);
 
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development',
+    mongoConnected: mongoose.connection.readyState === 1
+  });
+});
+
 
 // Serve frontend
 app.use(express.static(path.join(__dirname, '../frontend/dist')));
