@@ -11,7 +11,7 @@ import AgentDashboard from './pages/agent/Dashboard';
 import Clients from './pages/agent/Clients';
 import Deals from './pages/agent/Deals';
 import Schedules from './pages/agent/Schedules';
-import Sales from './pages/agent/Sales';
+import SalesNew from './pages/agent/SalesNew';
 import UserManagement from './pages/admin/UserManagement';
 import Reports from './pages/admin/Reports';
 import Settings from './pages/admin/Settings';
@@ -118,7 +118,7 @@ function App() {
             } />
             <Route path="/agent/sales" element={
               <ProtectedRoute allowedRoles={['agent']}>
-                <Sales />
+                <SalesNew />
               </ProtectedRoute>
             } />
             
