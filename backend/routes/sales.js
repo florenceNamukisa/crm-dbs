@@ -196,147 +196,114 @@ router.get('/stats', getCurrentUser, async (req, res) => {
   }
 });
 
-// Create new sale
-router.post('/', [
-  getCurrentUser
-], async (req, res) => {
+// Create new sale - SIMPLIFIED AND BULLETPROOF
+router.post('/', getCurrentUser, async (req, res) => {
   try {
     console.log('📝 Sale creation request received');
-    console.log('Request body:', req.body);
-    console.log('User:', req.user);
+    console.log('Request body:', JSON.stringify(req.body, null, 2));
+    console.log('User ID:', req.user?.userId);
 
     const { customerName, customerEmail, customerPhone, items, paymentMethod, client, notes, dueDate } = req.body;
 
-    // Validate required fields
-    if (!customerName || !customerName.trim()) {
+    // Basic validation with friendly error messages
+    if (!customerName) {
       return res.status(400).json({ message: 'Customer name is required' });
     }
 
-    if (!items || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ message: 'At least one item is required' });
+    if (!items || items.length === 0) {
+      return res.status(400).json({ message: 'Please add at least one item' });
     }
 
-    if (!paymentMethod || !['cash', 'credit'].includes(paymentMethod)) {
-      return res.status(400).json({ message: 'Payment method must be cash or credit' });
+    if (!paymentMethod) {
+      return res.status(400).json({ message: 'Payment method is required' });
     }
 
-    // Validate and convert items
-    const validatedItems = [];
+    // Process and validate items
+    const processedItems = [];
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
       
-      if (!item.itemName || !item.itemName.trim()) {
-        return res.status(400).json({ message: `Item ${i + 1}: Item name is required` });
+      // Skip empty items
+      if (!item || !item.itemName || item.itemName.toString().trim() === '') {
+        continue;
       }
 
-      const quantity = Number(item.quantity);
-      if (isNaN(quantity) || quantity < 1) {
-        return res.status(400).json({ message: `Item ${i + 1}: Quantity must be a number and at least 1` });
-      }
+      try {
+        const qty = parseFloat(item.quantity) || 0;
+        const price = parseFloat(item.unitPrice) || 0;
+        const disc = parseFloat(item.discount) || 0;
 
-      const unitPrice = Number(item.unitPrice);
-      if (isNaN(unitPrice) || unitPrice < 0) {
-        return res.status(400).json({ message: `Item ${i + 1}: Unit price must be a number and non-negative` });
-      }
+        if (qty <= 0) {
+          return res.status(400).json({ message: `Item ${i + 1}: Quantity must be greater than 0` });
+        }
 
-      const discount = item.discount ? Number(item.discount) : 0;
-      if (isNaN(discount) || discount < 0 || discount > 100) {
-        return res.status(400).json({ message: `Item ${i + 1}: Discount must be between 0 and 100` });
-      }
+        if (price < 0) {
+          return res.status(400).json({ message: `Item ${i + 1}: Price cannot be negative` });
+        }
 
-      validatedItems.push({
-        itemName: String(item.itemName).trim(),
-        quantity,
-        unitPrice,
-        discount,
-        totalPrice: 0 // Will be calculated by pre-save hook
-      });
+        processedItems.push({
+          itemName: item.itemName.toString().trim(),
+          quantity: qty,
+          unitPrice: price,
+          discount: Math.max(0, Math.min(100, disc)),
+          totalPrice: 0
+        });
+      } catch (e) {
+        console.error(`Error processing item ${i}:`, e.message);
+        return res.status(400).json({ message: `Error processing item ${i + 1}` });
+      }
     }
 
-    console.log('✅ Validation passed, validated items:', validatedItems);
+    if (processedItems.length === 0) {
+      return res.status(400).json({ message: 'Please add at least one valid item' });
+    }
 
-    // Create sale
-    const sale = new Sale({
-      customerName: String(customerName).trim(),
-      customerEmail: customerEmail ? String(customerEmail).trim() : '',
-      customerPhone: customerPhone ? String(customerPhone).trim() : '',
-      items: validatedItems,
-      paymentMethod,
+    console.log('✅ Items processed:', processedItems);
+
+    // Create the sale document
+    const saleData = {
+      customerName: customerName.toString().trim(),
+      customerEmail: customerEmail ? customerEmail.toString().trim() : '',
+      customerPhone: customerPhone ? customerPhone.toString().trim() : '',
+      items: processedItems,
+      paymentMethod: paymentMethod.toString().toLowerCase(),
       agent: req.user.userId,
       client: client || null,
       notes: notes || '',
       dueDate: paymentMethod === 'credit' && dueDate ? new Date(dueDate) : null,
+      status: 'completed',
       saleDate: new Date()
-    });
+    };
 
-    try {
-      await sale.save();
-      console.log('✅ Sale saved successfully:', sale._id);
-    } catch (saveError) {
-      console.error('❌ Sale save error:', saveError.message);
-      console.error('Full error:', saveError);
-      return res.status(400).json({ 
-        message: 'Error saving sale: ' + saveError.message, 
-        error: saveError.message 
-      });
-    }
+    console.log('Creating sale with data:', JSON.stringify(saleData, null, 2));
 
-    // Update stock levels for each item
-    for (const item of items) {
-      try {
-        let stockItem = await Stock.findOne({ itemName: item.itemName });
-        if (stockItem) {
-          await stockItem.updateStock(item.quantity, 'subtract');
-        }
-      } catch (error) {
-        console.warn(`Could not update stock for ${item.itemName}:`, error.message);
-      }
-    }
+    const sale = new Sale(saleData);
+    await sale.save();
 
-    // Update agent's sales metrics
-    const agent = await User.findById(req.user.userId);
-    if (agent) {
-      agent.totalSales += 1;
-      agent.totalSalesAmount += sale.finalAmount;
+    console.log('✅ Sale saved successfully with ID:', sale._id);
 
-      // Update monthly stats
-      const now = new Date();
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      const monthlySales = await Sale.find({
-        agent: req.user.userId,
-        saleDate: { $gte: startOfMonth },
-        status: 'completed'
-      });
-
-      agent.monthlySales = monthlySales.length;
-      agent.monthlySalesAmount = monthlySales.reduce((sum, sale) => sum + sale.finalAmount, 0);
-
-      await agent.save();
-    }
-
-    // Create notification for admins
-    await createNotification({
-      type: 'sale_created',
-      actorId: req.user.userId,
-      entityType: 'Sale',
-      entityId: sale._id,
-      metadata: {
-        customerName: sale.customerName,
-        finalAmount: sale.finalAmount,
-        itemCount: items.length
-      }
-    });
-
+    // Populate agent and client info
     await sale.populate('agent', 'name email');
-    await sale.populate('client', 'name email phone');
+    if (sale.client) {
+      await sale.populate('client', 'name email phone');
+    }
 
     res.status(201).json({
-      message: 'Sale created successfully',
-      sale
+      message: 'Sale created successfully!',
+      sale: sale,
+      success: true
     });
+
   } catch (error) {
-    console.error('Error creating sale:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('❌ Error creating sale:');
+    console.error('  Message:', error.message);
+    console.error('  Stack:', error.stack);
+    
+    res.status(500).json({
+      message: 'Failed to create sale: ' + error.message,
+      success: false,
+      error: error.message
+    });
   }
 });
 
