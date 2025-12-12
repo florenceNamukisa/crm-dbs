@@ -122,14 +122,13 @@ router.get('/summary/:period', getCurrentUser, async (req, res) => {
   }
 });
 
-// Get sales statistics (admin only - sees all data)
-router.get('/stats', getCurrentUser, async (req, res) => {
+// GET sales statistics (simplified)
+router.get('/stats/summary', getCurrentUser, async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
 
     let query = {};
 
-    // Apply date filters if provided
     if (startDate && endDate) {
       query.saleDate = {
         $gte: new Date(startDate),
@@ -137,44 +136,17 @@ router.get('/stats', getCurrentUser, async (req, res) => {
       };
     }
 
-    // Only filter by agent if not admin
     if (req.user.role !== 'admin') {
       query.agent = req.user.userId;
     }
 
-    const sales = await Sale.find(query).populate('agent', 'name');
-
-    // Calculate monthly breakdown
-    const monthlyStats = {};
-    sales.forEach(sale => {
-      const date = new Date(sale.saleDate);
-      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-      if (!monthlyStats[monthKey]) {
-        monthlyStats[monthKey] = { total: 0, count: 0 };
-      }
-      monthlyStats[monthKey].total += sale.finalAmount || 0;
-      monthlyStats[monthKey].count += 1;
-    });
-
-    // Convert to array format
-    const monthly = Object.entries(monthlyStats).map(([month, data]) => ({
-      month: parseInt(month.split('-')[1]),
-      year: parseInt(month.split('-')[0]),
-      total: data.total,
-      count: data.count
-    }));
+    const sales = await Sale.find(query);
 
     const stats = {
       totalSales: sales.length,
       totalAmount: sales.reduce((sum, sale) => sum + (sale.finalAmount || 0), 0),
       cashSales: sales.filter(sale => sale.paymentMethod === 'cash').length,
-      creditSales: sales.filter(sale => sale.paymentMethod === 'credit').length,
-      cashAmount: sales.filter(sale => sale.paymentMethod === 'cash')
-        .reduce((sum, sale) => sum + (sale.finalAmount || 0), 0),
-      creditAmount: sales.filter(sale => sale.paymentMethod === 'credit')
-        .reduce((sum, sale) => sum + (sale.finalAmount || 0), 0),
-      pendingCredits: sales.filter(sale => sale.paymentMethod === 'credit' && sale.creditStatus !== 'paid').length,
-      monthly
+      creditSales: sales.filter(sale => sale.paymentMethod === 'credit').length
     };
 
     res.json(stats);
@@ -302,20 +274,9 @@ router.get('/:id', getCurrentUser, async (req, res) => {
 });
 
 // Update sale (only for credit sales, agents can edit their own)
-router.put('/:id', [
-  getCurrentUser,
-  body('customerName').optional().trim().isLength({ min: 1 }).withMessage('Customer name cannot be empty'),
-  body('items').optional().isArray({ min: 1 }).withMessage('At least one item is required'),
-  body('items.*.itemName').optional().trim().isLength({ min: 1 }).withMessage('Item name is required'),
-  body('items.*.quantity').optional().isInt({ min: 1 }).withMessage('Quantity must be at least 1'),
-  body('items.*.unitPrice').optional().isFloat({ min: 0 }).withMessage('Unit price must be non-negative'),
-  body('items.*.discount').optional().isFloat({ min: 0, max: 100 }).withMessage('Discount must be between 0 and 100')
-], async (req, res) => {
+router.put('/:id', getCurrentUser, async (req, res) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ message: 'Validation errors', errors: errors.array() });
-    }
+    const { customerName, customerEmail, customerPhone, items, notes, dueDate } = req.body;
 
     let query = { _id: req.params.id };
 
@@ -330,13 +291,6 @@ router.put('/:id', [
       return res.status(404).json({ message: 'Sale not found' });
     }
 
-    // Only allow editing credit sales
-    if (sale.paymentMethod !== 'credit') {
-      return res.status(400).json({ message: 'Only credit sales can be edited' });
-    }
-
-    const { customerName, customerEmail, customerPhone, items, notes, dueDate } = req.body;
-
     if (customerName) sale.customerName = customerName;
     if (customerEmail) sale.customerEmail = customerEmail;
     if (customerPhone) sale.customerPhone = customerPhone;
@@ -345,9 +299,7 @@ router.put('/:id', [
     if (dueDate) sale.dueDate = dueDate;
 
     await sale.save();
-
     await sale.populate('agent', 'name email');
-    await sale.populate('client', 'name email phone');
 
     res.json({
       message: 'Sale updated successfully',
@@ -360,23 +312,12 @@ router.put('/:id', [
 });
 
 // Record payment for credit sale
-router.post('/:id/payment', [
-  getCurrentUser,
-  body('amount').isFloat({ min: 0.01 }).withMessage('Payment amount must be greater than 0'),
-  body('paymentMethod').optional().isIn(['cash', 'bank_transfer', 'online']).withMessage('Invalid payment method'),
-  body('cardNumber').if(body('paymentMethod').equals('bank_transfer')).notEmpty().withMessage('Card/Account number is required for bank transfers'),
-  body('bankName').if(body('paymentMethod').equals('bank_transfer')).notEmpty().withMessage('Bank name is required for bank transfers'),
-  body('accountName').if(body('paymentMethod').equals('bank_transfer')).notEmpty().withMessage('Account holder name is required for bank transfers')
-], async (req, res) => {
+router.post('/:id/payment', getCurrentUser, async (req, res) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ message: 'Validation errors', errors: errors.array() });
-    }
+    const { amount, paymentMethod = 'cash', notes, paymentDate } = req.body;
 
     let query = { _id: req.params.id };
 
-    // Agents can only access their own sales
     if (req.user.role === 'agent') {
       query.agent = req.user.userId;
     }
@@ -391,24 +332,14 @@ router.post('/:id/payment', [
       return res.status(400).json({ message: 'Only credit sales can receive payments' });
     }
 
-    const { amount, paymentMethod = 'cash', notes, paymentDate, cardNumber, bankName, accountName } = req.body;
-
     const paymentData = {
-      amount,
+      amount: Number(amount) || 0,
       paymentMethod,
       notes,
       paymentDate: paymentDate ? new Date(paymentDate) : new Date()
     };
 
-    // Add bank transfer specific fields if payment method is bank_transfer
-    if (paymentMethod === 'bank_transfer') {
-      paymentData.cardNumber = cardNumber;
-      paymentData.bankName = bankName;
-      paymentData.accountName = accountName;
-    }
-
     sale.payments.push(paymentData);
-
     sale.updateCreditStatus();
     await sale.save();
 
