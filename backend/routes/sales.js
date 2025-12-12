@@ -225,11 +225,23 @@ router.post('/', getCurrentUser, async (req, res) => {
       saleDate: new Date()
     });
 
-    console.log('Sale object before save:', sale);
+    console.log('Sale object before save:', {
+      customerName: sale.customerName,
+      items: sale.items,
+      paymentMethod: sale.paymentMethod,
+      agent: sale.agent
+    });
 
     // SAVE TO DATABASE
-    await sale.save();
-    console.log('✅ Sale saved successfully:', sale._id);
+    try {
+      await sale.save();
+      console.log('✅ Sale saved successfully:', sale._id);
+    } catch (saveError) {
+      console.error('❌ Error saving sale to database:', saveError);
+      console.error('Error message:', saveError.message);
+      console.error('Error details:', saveError);
+      throw saveError;
+    }
 
     // POPULATE REFERENCES FOR RESPONSE
     await sale.populate('agent', 'name email');

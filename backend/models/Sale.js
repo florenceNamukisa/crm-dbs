@@ -127,7 +127,7 @@ saleSchema.pre('save', function(next) {
       return next(new Error('At least one item is required'));
     }
 
-    this.items.forEach(item => {
+    for (const item of this.items) {
       // Ensure all required fields are present and valid
       const quantity = Number(item.quantity) || 0;
       const unitPrice = Number(item.unitPrice) || 0;
@@ -145,18 +145,18 @@ saleSchema.pre('save', function(next) {
 
       totalAmount += itemTotal;
       discountAmount += itemDiscount;
-    });
+    }
 
     // Set the calculated totals
     this.totalAmount = totalAmount;
     this.discountAmount = discountAmount;
     this.finalAmount = totalAmount - discountAmount;
 
-    console.log('Calculated totals:', { totalAmount, discountAmount, finalAmount: this.finalAmount });
+    console.log('✅ Calculated totals:', { totalAmount, discountAmount, finalAmount: this.finalAmount });
 
     next();
   } catch (error) {
-    console.error('Error in sale pre-save hook:', error);
+    console.error('❌ Error in sale pre-save hook:', error);
     next(error);
   }
 });
