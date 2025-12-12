@@ -84,6 +84,24 @@ app.get('/api/sales/test', (req, res) => {
   });
 });
 
+// Global error handler - logs all errors to console for debugging
+app.use((err, req, res, next) => {
+  console.error('🔴 GLOBAL ERROR HANDLER CAUGHT:', {
+    timestamp: new Date().toISOString(),
+    method: req.method,
+    path: req.path,
+    error: err.message,
+    stack: err.stack,
+    body: req.body
+  });
+  
+  res.status(500).json({
+    success: false,
+    error: 'Internal server error',
+    message: err.message,
+    timestamp: new Date().toISOString()
+  });
+});
 
 // Serve frontend
 app.use(express.static(path.join(__dirname, '../frontend/dist')));
