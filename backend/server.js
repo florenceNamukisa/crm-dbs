@@ -80,12 +80,24 @@ app.set('views', path.join(__dirname, 'views'));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // MongoDB connection
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/crm_system', {
+const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/crm_db';
+console.log('Connecting to MongoDB:', mongoUri.replace(/\/\/.+:.*@/, '//***:***@'));
+
+mongoose.connect(mongoUri, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
+  serverSelectionTimeoutMS: 5000,
 })
-.then(() => console.log('MongoDB connected successfully'))
-.catch(err => console.error('MongoDB connection error:', err));
+.then(() => {
+  console.log('✅ MongoDB connected successfully');
+})
+.catch(err => {
+  console.error('❌ MongoDB connection error:', err.message);
+  console.error('Please ensure MongoDB is running or check your MONGODB_URI environment variable');
+  if (process.env.NODE_ENV === 'production') {
+    console.error('ERROR: Cannot start in production without MongoDB connection');
+  }
+});
 
 // Routes
 app.use('/api/auth', authRoutes);
