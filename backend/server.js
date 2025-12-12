@@ -28,12 +28,36 @@ const app = express();
 
 // CORS configuration with environment support
 const corsOrigins = process.env.CORS_ORIGINS 
-  ? process.env.CORS_ORIGINS.split(',')
-  : ['http://localhost:3000', 'http://localhost:3001', 'https://crm-tool-ebon.vercel.app'];
+  ? process.env.CORS_ORIGINS.split(',').map(origin => origin.trim())
+  : [
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'https://crm-tool-ebon.vercel.app',
+      'https://crm-dbs.onrender.com',
+      'http://crm-dbs.onrender.com'
+    ];
+
+console.log('CORS Origins:', corsOrigins);
 
 // Middleware
 app.use(cors({
-  origin: corsOrigins,
+  origin: function(origin, callback) {
+    // Allow requests with no origin (mobile apps, curl requests, etc)
+    if (!origin) return callback(null, true);
+    
+    if (corsOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      // Check if origin matches with or without trailing slash
+      const normalizedOrigin = origin.endsWith('/') ? origin.slice(0, -1) : origin;
+      if (corsOrigins.includes(normalizedOrigin)) {
+        callback(null, true);
+      } else {
+        console.warn('CORS blocked origin:', origin);
+        callback(new Error('Not allowed by CORS'));
+      }
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
