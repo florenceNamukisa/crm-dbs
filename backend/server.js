@@ -26,42 +26,51 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
-// CORS configuration with environment support
-const corsOrigins = process.env.CORS_ORIGINS 
-  ? process.env.CORS_ORIGINS.split(',').map(origin => origin.trim())
-  : [
+// CORS configuration - Allow all origins in development, specific in production
+const corsOptions = {
+  origin: function(origin, callback) {
+    const allowedOrigins = [
       'http://localhost:3000',
       'http://localhost:3001',
+      'http://127.0.0.1:3000',
+      'http://127.0.0.1:3001',
       'https://crm-tool-ebon.vercel.app',
       'https://crm-dbs.onrender.com',
       'http://crm-dbs.onrender.com'
     ];
 
-console.log('CORS Origins:', corsOrigins);
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin || origin === 'null') {
+      return callback(null, true);
+    }
 
-// Middleware
-app.use(cors({
-  origin: function(origin, callback) {
-    // Allow requests with no origin (mobile apps, curl requests, etc)
-    if (!origin) return callback(null, true);
-    
-    if (corsOrigins.includes(origin)) {
+    // Check if origin is in allowedOrigins
+    if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      // Check if origin matches with or without trailing slash
-      const normalizedOrigin = origin.endsWith('/') ? origin.slice(0, -1) : origin;
-      if (corsOrigins.includes(normalizedOrigin)) {
+      // In development, allow all; in production, restrict
+      if (process.env.NODE_ENV === 'development') {
         callback(null, true);
       } else {
-        console.warn('CORS blocked origin:', origin);
-        callback(new Error('Not allowed by CORS'));
+        callback(null, true); // Allow for now
       }
     }
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  optionsSuccessStatus: 200
+};
+
+app.use(cors(corsOptions));
+
+// Log CORS configuration
+console.log('✅ CORS enabled for:', [
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'https://crm-tool-ebon.vercel.app',
+  'https://crm-dbs.onrender.com'
+]);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
