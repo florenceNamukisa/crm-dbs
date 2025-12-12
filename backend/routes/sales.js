@@ -163,12 +163,19 @@ router.post('/', getCurrentUser, async (req, res) => {
   try {
     console.log('\n=== POST /api/sales START ===');
     console.log('Timestamp:', new Date().toISOString());
-    console.log('User ID:', req.user?.userId);
+    
+    // Verify user authentication
+    if (!req.user || !req.user.userId) {
+      console.log('❌ Error: User not properly authenticated');
+      return res.status(401).json({ message: 'User not authenticated' });
+    }
+    
+    console.log('User ID:', req.user.userId);
     console.log('Request body:', JSON.stringify(req.body, null, 2));
 
     const { customerName, customerEmail, customerPhone, items, paymentMethod, notes } = req.body;
 
-    // VALIDATION
+    // VALIDATION - collect all errors
     const errors = [];
     
     if (!customerName || typeof customerName !== 'string' || !customerName.trim()) {
@@ -240,8 +247,10 @@ router.post('/', getCurrentUser, async (req, res) => {
     });
 
     const sale = new Sale(saleData);
+    console.log('Sale object created');
 
     // SAVE TO DATABASE
+    console.log('Attempting to save to MongoDB...');
     const savedSale = await sale.save();
     console.log('✅ Sale saved to database:', savedSale._id);
 
@@ -249,7 +258,7 @@ router.post('/', getCurrentUser, async (req, res) => {
     await savedSale.populate('agent', 'name email');
 
     const elapsed = Date.now() - startTime;
-    console.log(`✅ POST /api/sales completed in ${elapsed}ms`);
+    console.log(`✅ POST /api/sales completed successfully in ${elapsed}ms`);
     console.log('=== POST /api/sales END ===\n');
 
     res.status(201).json({
@@ -259,9 +268,10 @@ router.post('/', getCurrentUser, async (req, res) => {
 
   } catch (error) {
     const elapsed = Date.now() - startTime;
-    console.error(`❌ Error creating sale (${elapsed}ms):`, error.message);
+    console.error(`\n❌ Error creating sale (${elapsed}ms):`);
+    console.error('Error message:', error.message);
     console.error('Error type:', error.constructor.name);
-    console.error('Stack:', error.stack);
+    console.error('Stack trace:', error.stack);
     console.log('=== POST /api/sales ERROR ===\n');
 
     res.status(500).json({

@@ -76,6 +76,14 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Test endpoint for sales
+app.get('/api/sales/test', (req, res) => {
+  res.json({
+    message: 'Sales API is working',
+    timestamp: new Date().toISOString()
+  });
+});
+
 
 // Serve frontend
 app.use(express.static(path.join(__dirname, '../frontend/dist')));
