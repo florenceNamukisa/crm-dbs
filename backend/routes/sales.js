@@ -198,53 +198,62 @@ router.get('/stats', getCurrentUser, async (req, res) => {
 
 // Create new sale
 router.post('/', [
-  getCurrentUser,
-  body('customerName').trim().isLength({ min: 1 }).withMessage('Customer name is required'),
-  body('items').isArray({ min: 1 }).withMessage('At least one item is required'),
-  body('items.*.itemName').trim().isLength({ min: 1 }).withMessage('Item name is required'),
-  body('items.*.quantity').custom(value => {
-    const num = Number(value);
-    if (isNaN(num) || num < 1) {
-      throw new Error('Quantity must be a number and at least 1');
-    }
-    return true;
-  }),
-  body('items.*.unitPrice').custom(value => {
-    const num = Number(value);
-    if (isNaN(num) || num < 0) {
-      throw new Error('Unit price must be a number and non-negative');
-    }
-    return true;
-  }),
-  body('items.*.discount').optional().custom(value => {
-    if (value === '' || value === undefined || value === null) return true;
-    const num = Number(value);
-    if (isNaN(num) || num < 0 || num > 100) {
-      throw new Error('Discount must be between 0 and 100');
-    }
-    return true;
-  }),
-  body('paymentMethod').isIn(['cash', 'credit']).withMessage('Payment method must be cash or credit')
+  getCurrentUser
 ], async (req, res) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      console.error('Validation errors:', errors.array());
-      return res.status(400).json({ message: 'Validation errors', errors: errors.array() });
-    }
+    console.log('📝 Sale creation request received');
+    console.log('Request body:', req.body);
+    console.log('User:', req.user);
 
     const { customerName, customerEmail, customerPhone, items, paymentMethod, client, notes, dueDate } = req.body;
 
-    // Convert items to proper numbers
-    const validatedItems = items.map(item => ({
-      itemName: String(item.itemName).trim(),
-      quantity: Number(item.quantity),
-      unitPrice: Number(item.unitPrice),
-      discount: item.discount ? Number(item.discount) : 0,
-      totalPrice: 0 // Will be calculated by the pre-save hook
-    }));
+    // Validate required fields
+    if (!customerName || !customerName.trim()) {
+      return res.status(400).json({ message: 'Customer name is required' });
+    }
 
-    console.log('Creating sale with validated items:', validatedItems);
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ message: 'At least one item is required' });
+    }
+
+    if (!paymentMethod || !['cash', 'credit'].includes(paymentMethod)) {
+      return res.status(400).json({ message: 'Payment method must be cash or credit' });
+    }
+
+    // Validate and convert items
+    const validatedItems = [];
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      
+      if (!item.itemName || !item.itemName.trim()) {
+        return res.status(400).json({ message: `Item ${i + 1}: Item name is required` });
+      }
+
+      const quantity = Number(item.quantity);
+      if (isNaN(quantity) || quantity < 1) {
+        return res.status(400).json({ message: `Item ${i + 1}: Quantity must be a number and at least 1` });
+      }
+
+      const unitPrice = Number(item.unitPrice);
+      if (isNaN(unitPrice) || unitPrice < 0) {
+        return res.status(400).json({ message: `Item ${i + 1}: Unit price must be a number and non-negative` });
+      }
+
+      const discount = item.discount ? Number(item.discount) : 0;
+      if (isNaN(discount) || discount < 0 || discount > 100) {
+        return res.status(400).json({ message: `Item ${i + 1}: Discount must be between 0 and 100` });
+      }
+
+      validatedItems.push({
+        itemName: String(item.itemName).trim(),
+        quantity,
+        unitPrice,
+        discount,
+        totalPrice: 0 // Will be calculated by pre-save hook
+      });
+    }
+
+    console.log('✅ Validation passed, validated items:', validatedItems);
 
     // Create sale
     const sale = new Sale({
@@ -262,12 +271,13 @@ router.post('/', [
 
     try {
       await sale.save();
-      console.log('Sale saved successfully:', sale._id);
-    } catch (validationError) {
-      console.error('Sale validation/save error:', validationError.message);
+      console.log('✅ Sale saved successfully:', sale._id);
+    } catch (saveError) {
+      console.error('❌ Sale save error:', saveError.message);
+      console.error('Full error:', saveError);
       return res.status(400).json({ 
-        message: 'Error saving sale', 
-        error: validationError.message 
+        message: 'Error saving sale: ' + saveError.message, 
+        error: saveError.message 
       });
     }
 
