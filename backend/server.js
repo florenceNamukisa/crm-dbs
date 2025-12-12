@@ -26,51 +26,18 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
-// CORS configuration - Allow all origins in development, specific in production
-const corsOptions = {
-  origin: function(origin, callback) {
-    const allowedOrigins = [
-      'http://localhost:3000',
-      'http://localhost:3001',
-      'http://127.0.0.1:3000',
-      'http://127.0.0.1:3001',
-      'https://crm-tool-ebon.vercel.app',
-      'https://crm-dbs.onrender.com',
-      'http://crm-dbs.onrender.com'
-    ];
+// CORS configuration with environment support
+const corsOrigins = process.env.CORS_ORIGINS 
+  ? process.env.CORS_ORIGINS.split(',')
+  : ['http://localhost:3000', 'http://localhost:3001', 'https://crm-tool-ebon.vercel.app'];
 
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin || origin === 'null') {
-      return callback(null, true);
-    }
-
-    // Check if origin is in allowedOrigins
-    if (allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      // In development, allow all; in production, restrict
-      if (process.env.NODE_ENV === 'development') {
-        callback(null, true);
-      } else {
-        callback(null, true); // Allow for now
-      }
-    }
-  },
+// Middleware
+app.use(cors({
+  origin: corsOrigins,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  optionsSuccessStatus: 200
-};
-
-app.use(cors(corsOptions));
-
-// Log CORS configuration
-console.log('✅ CORS enabled for:', [
-  'http://localhost:3000',
-  'http://localhost:3001',
-  'https://crm-tool-ebon.vercel.app',
-  'https://crm-dbs.onrender.com'
-]);
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -80,24 +47,12 @@ app.set('views', path.join(__dirname, 'views'));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // MongoDB connection
-const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/crm_db';
-console.log('Connecting to MongoDB:', mongoUri.replace(/\/\/.+:.*@/, '//***:***@'));
-
-mongoose.connect(mongoUri, {
+mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/crm_system', {
   useNewUrlParser: true,
   useUnifiedTopology: true,
-  serverSelectionTimeoutMS: 5000,
 })
-.then(() => {
-  console.log('✅ MongoDB connected successfully');
-})
-.catch(err => {
-  console.error('❌ MongoDB connection error:', err.message);
-  console.error('Please ensure MongoDB is running or check your MONGODB_URI environment variable');
-  if (process.env.NODE_ENV === 'production') {
-    console.error('ERROR: Cannot start in production without MongoDB connection');
-  }
-});
+.then(() => console.log('MongoDB connected successfully'))
+.catch(err => console.error('MongoDB connection error:', err));
 
 // Routes
 app.use('/api/auth', authRoutes);

@@ -1,14 +1,11 @@
-// routes/sales.js
+// routes/sales.js - REBUILT FOR BULLETPROOF FUNCTIONALITY
 import express from 'express';
 import Sale from '../models/Sale.js';
-import Stock from '../models/Stock.js';
 import User from '../models/User.js';
-import { body, validationResult } from 'express-validator';
-import { createNotification } from '../utils/notifications.js';
 
 const router = express.Router();
 
-// Middleware to get current user
+// Middleware to verify user is logged in
 const getCurrentUser = async (req, res, next) => {
   try {
     const token = req.headers.authorization?.split(' ')[1];
@@ -87,9 +84,9 @@ router.get('/', getCurrentUser, async (req, res) => {
 });
 
 // Get sales summary (daily, weekly, monthly)
-router.get('/summary', getCurrentUser, async (req, res) => {
+router.get('/summary/:period', getCurrentUser, async (req, res) => {
   try {
-    const { period = 'daily', agent } = req.query;
+    const { period = 'daily' } = req.params;
     const now = new Date();
 
     let startDate;
@@ -105,12 +102,8 @@ router.get('/summary', getCurrentUser, async (req, res) => {
 
     let query = { saleDate: { $gte: startDate } };
 
-    // Agents can only see their own sales, or filter by specific agent if admin
     if (req.user.role === 'agent') {
       query.agent = req.user.userId;
-    } else if (agent) {
-      // Admin can filter by specific agent
-      query.agent = agent;
     }
 
     const sales = await Sale.find(query);
@@ -119,12 +112,7 @@ router.get('/summary', getCurrentUser, async (req, res) => {
       totalSales: sales.length,
       totalAmount: sales.reduce((sum, sale) => sum + sale.finalAmount, 0),
       cashSales: sales.filter(sale => sale.paymentMethod === 'cash').length,
-      creditSales: sales.filter(sale => sale.paymentMethod === 'credit').length,
-      cashAmount: sales.filter(sale => sale.paymentMethod === 'cash')
-        .reduce((sum, sale) => sum + sale.finalAmount, 0),
-      creditAmount: sales.filter(sale => sale.paymentMethod === 'credit')
-        .reduce((sum, sale) => sum + sale.finalAmount, 0),
-      pendingCredits: sales.filter(sale => sale.paymentMethod === 'credit' && sale.creditStatus !== 'paid').length
+      creditSales: sales.filter(sale => sale.paymentMethod === 'credit').length
     };
 
     res.json(summary);
@@ -196,112 +184,93 @@ router.get('/stats', getCurrentUser, async (req, res) => {
   }
 });
 
-// Create new sale - SIMPLIFIED AND BULLETPROOF
+// Create new sale
+// CREATE a new sale (SIMPLIFIED AND BULLETPROOF)
 router.post('/', getCurrentUser, async (req, res) => {
   try {
-    console.log('📝 Sale creation request received');
+    console.log('=== POST /api/sales ===');
     console.log('Request body:', JSON.stringify(req.body, null, 2));
-    console.log('User ID:', req.user?.userId);
+    console.log('User:', req.user);
 
-    const { customerName, customerEmail, customerPhone, items, paymentMethod, client, notes, dueDate } = req.body;
+    const { customerName, customerEmail, customerPhone, items, paymentMethod, notes } = req.body;
 
-    // Basic validation with friendly error messages
-    if (!customerName) {
-      return res.status(400).json({ message: 'Customer name is required' });
+    // VALIDATION WITH CLEAR ERROR MESSAGES
+    if (!customerName || !customerName.toString().trim()) {
+      console.log('❌ Validation failed: missing customerName');
+      return res.status(400).json({ message: 'customerName is required' });
     }
 
-    if (!items || items.length === 0) {
-      return res.status(400).json({ message: 'Please add at least one item' });
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      console.log('❌ Validation failed: items must be a non-empty array');
+      return res.status(400).json({ message: 'items must be a non-empty array' });
     }
 
-    if (!paymentMethod) {
-      return res.status(400).json({ message: 'Payment method is required' });
-    }
-
-    // Process and validate items
-    const processedItems = [];
+    // Validate each item
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
-      
-      // Skip empty items
-      if (!item || !item.itemName || item.itemName.toString().trim() === '') {
-        continue;
+      if (!item.itemName || !item.itemName.toString().trim()) {
+        console.log(`❌ Validation failed: items[${i}].itemName is required`);
+        return res.status(400).json({ message: `items[${i}].itemName is required` });
       }
-
-      try {
-        const qty = parseFloat(item.quantity) || 0;
-        const price = parseFloat(item.unitPrice) || 0;
-        const disc = parseFloat(item.discount) || 0;
-
-        if (qty <= 0) {
-          return res.status(400).json({ message: `Item ${i + 1}: Quantity must be greater than 0` });
-        }
-
-        if (price < 0) {
-          return res.status(400).json({ message: `Item ${i + 1}: Price cannot be negative` });
-        }
-
-        processedItems.push({
-          itemName: item.itemName.toString().trim(),
-          quantity: qty,
-          unitPrice: price,
-          discount: Math.max(0, Math.min(100, disc)),
-          totalPrice: 0
-        });
-      } catch (e) {
-        console.error(`Error processing item ${i}:`, e.message);
-        return res.status(400).json({ message: `Error processing item ${i + 1}` });
+      const qty = Number(item.quantity);
+      if (isNaN(qty) || qty < 1) {
+        console.log(`❌ Validation failed: items[${i}].quantity must be >= 1`);
+        return res.status(400).json({ message: `items[${i}].quantity must be >= 1` });
+      }
+      const price = Number(item.unitPrice);
+      if (isNaN(price) || price < 0) {
+        console.log(`❌ Validation failed: items[${i}].unitPrice must be >= 0`);
+        return res.status(400).json({ message: `items[${i}].unitPrice must be >= 0` });
       }
     }
 
-    if (processedItems.length === 0) {
-      return res.status(400).json({ message: 'Please add at least one valid item' });
+    if (!paymentMethod || !['cash', 'credit'].includes(paymentMethod)) {
+      console.log('❌ Validation failed: paymentMethod must be cash or credit');
+      return res.status(400).json({ message: 'paymentMethod must be cash or credit' });
     }
 
-    console.log('✅ Items processed:', processedItems);
+    console.log('✅ All validations passed');
 
-    // Create the sale document
-    const saleData = {
+    // NORMALIZE ITEMS: ensure all fields are numbers
+    const normalizedItems = items.map(item => ({
+      itemName: String(item.itemName).trim(),
+      quantity: Number(item.quantity) || 1,
+      unitPrice: Number(item.unitPrice) || 0,
+      discount: Number(item.discount) || 0
+    }));
+
+    console.log('Normalized items:', normalizedItems);
+
+    // CREATE THE SALE OBJECT
+    const sale = new Sale({
       customerName: customerName.toString().trim(),
-      customerEmail: customerEmail ? customerEmail.toString().trim() : '',
-      customerPhone: customerPhone ? customerPhone.toString().trim() : '',
-      items: processedItems,
-      paymentMethod: paymentMethod.toString().toLowerCase(),
+      customerEmail: customerEmail ? customerEmail.toString().trim() : undefined,
+      customerPhone: customerPhone ? customerPhone.toString().trim() : undefined,
+      items: normalizedItems,
+      paymentMethod,
+      notes: notes ? notes.toString().trim() : undefined,
       agent: req.user.userId,
-      client: client || null,
-      notes: notes || '',
-      dueDate: paymentMethod === 'credit' && dueDate ? new Date(dueDate) : null,
-      status: 'completed',
       saleDate: new Date()
-    };
-
-    console.log('Creating sale with data:', JSON.stringify(saleData, null, 2));
-
-    const sale = new Sale(saleData);
-    await sale.save();
-
-    console.log('✅ Sale saved successfully with ID:', sale._id);
-
-    // Populate agent and client info
-    await sale.populate('agent', 'name email');
-    if (sale.client) {
-      await sale.populate('client', 'name email phone');
-    }
-
-    res.status(201).json({
-      message: 'Sale created successfully!',
-      sale: sale,
-      success: true
     });
 
+    console.log('Sale object before save:', sale);
+
+    // SAVE TO DATABASE
+    await sale.save();
+    console.log('✅ Sale saved successfully:', sale._id);
+
+    // POPULATE REFERENCES FOR RESPONSE
+    await sale.populate('agent', 'name email');
+
+    res.status(201).json({
+      message: 'Sale created successfully',
+      sale
+    });
   } catch (error) {
-    console.error('❌ Error creating sale:');
-    console.error('  Message:', error.message);
-    console.error('  Stack:', error.stack);
-    
+    console.error('❌ Error creating sale:', error);
+    console.error('Error stack:', error.stack);
     res.status(500).json({
-      message: 'Failed to create sale: ' + error.message,
-      success: false,
+      message: 'Server error',
       error: error.message
     });
   }
@@ -449,30 +418,6 @@ router.post('/:id/payment', [
     });
   } catch (error) {
     console.error('Error recording payment:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
-  }
-});
-
-// Get recent sales for dashboard
-router.get('/recent/list', getCurrentUser, async (req, res) => {
-  try {
-    const { limit = 5 } = req.query;
-
-    let query = {};
-
-    // Agents can only see their own sales
-    if (req.user.role === 'agent') {
-      query.agent = req.user.userId;
-    }
-
-    const sales = await Sale.find(query)
-      .populate('agent', 'name')
-      .sort({ saleDate: -1 })
-      .limit(parseInt(limit));
-
-    res.json(sales);
-  } catch (error) {
-    console.error('Error fetching recent sales:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });

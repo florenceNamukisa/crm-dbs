@@ -9,17 +9,12 @@ const router = express.Router();
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-    
-    console.log('Login attempt with email:', email);
 
     // Check if user exists
     const user = await User.findOne({ email });
     if (!user) {
-      console.log('User not found:', email);
       return res.status(400).json({ message: 'Invalid email or password' });
     }
-
-    console.log('User found:', user.name);
 
     // Prevent deactivated users from logging in
     if (user.isActive === false) {
@@ -29,11 +24,8 @@ router.post('/login', async (req, res) => {
     // Check password/OTP
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      console.log('Password mismatch for user:', email);
       return res.status(400).json({ message: 'Invalid email or password' });
     }
-
-    console.log('Password matched, generating token');
 
     // Check if OTP has expired (for first login)
     if (user.isFirstLogin && user.otpExpires && new Date() > user.otpExpires) {
@@ -81,13 +73,8 @@ router.post('/login', async (req, res) => {
       requiresPasswordChange: user.isFirstLogin
     });
   } catch (error) {
-    console.error('❌ Login error:', error.message);
-    console.error('Full error:', error);
-    res.status(500).json({ 
-      message: 'Server error during login', 
-      error: error.message,
-      type: error.name
-    });
+    console.error('Login error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
 
