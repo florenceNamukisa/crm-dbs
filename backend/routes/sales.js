@@ -202,39 +202,73 @@ router.post('/', [
   body('customerName').trim().isLength({ min: 1 }).withMessage('Customer name is required'),
   body('items').isArray({ min: 1 }).withMessage('At least one item is required'),
   body('items.*.itemName').trim().isLength({ min: 1 }).withMessage('Item name is required'),
-  body('items.*.quantity').isInt({ min: 1 }).withMessage('Quantity must be at least 1'),
-  body('items.*.unitPrice').isFloat({ min: 0 }).withMessage('Unit price must be non-negative'),
-  body('items.*.discount').optional().isFloat({ min: 0, max: 100 }).withMessage('Discount must be between 0 and 100'),
-  body('paymentMethod').isIn(['cash', 'credit']).withMessage('Invalid payment method')
+  body('items.*.quantity').custom(value => {
+    const num = Number(value);
+    if (isNaN(num) || num < 1) {
+      throw new Error('Quantity must be a number and at least 1');
+    }
+    return true;
+  }),
+  body('items.*.unitPrice').custom(value => {
+    const num = Number(value);
+    if (isNaN(num) || num < 0) {
+      throw new Error('Unit price must be a number and non-negative');
+    }
+    return true;
+  }),
+  body('items.*.discount').optional().custom(value => {
+    if (value === '' || value === undefined || value === null) return true;
+    const num = Number(value);
+    if (isNaN(num) || num < 0 || num > 100) {
+      throw new Error('Discount must be between 0 and 100');
+    }
+    return true;
+  }),
+  body('paymentMethod').isIn(['cash', 'credit']).withMessage('Payment method must be cash or credit')
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.error('Validation errors:', errors.array());
       return res.status(400).json({ message: 'Validation errors', errors: errors.array() });
     }
 
     const { customerName, customerEmail, customerPhone, items, paymentMethod, client, notes, dueDate } = req.body;
 
+    // Convert items to proper numbers
+    const validatedItems = items.map(item => ({
+      itemName: String(item.itemName).trim(),
+      quantity: Number(item.quantity),
+      unitPrice: Number(item.unitPrice),
+      discount: item.discount ? Number(item.discount) : 0,
+      totalPrice: 0 // Will be calculated by the pre-save hook
+    }));
+
+    console.log('Creating sale with validated items:', validatedItems);
+
     // Create sale
     const sale = new Sale({
-      customerName,
-      customerEmail,
-      customerPhone,
-      items,
+      customerName: String(customerName).trim(),
+      customerEmail: customerEmail ? String(customerEmail).trim() : '',
+      customerPhone: customerPhone ? String(customerPhone).trim() : '',
+      items: validatedItems,
       paymentMethod,
       agent: req.user.userId,
-      client,
-      notes,
-      dueDate: paymentMethod === 'credit' ? dueDate : null,
+      client: client || null,
+      notes: notes || '',
+      dueDate: paymentMethod === 'credit' && dueDate ? new Date(dueDate) : null,
       saleDate: new Date()
     });
 
-
     try {
       await sale.save();
+      console.log('Sale saved successfully:', sale._id);
     } catch (validationError) {
-      console.error('Sale validation error:', validationError);
-      throw validationError;
+      console.error('Sale validation/save error:', validationError.message);
+      return res.status(400).json({ 
+        message: 'Error saving sale', 
+        error: validationError.message 
+      });
     }
 
     // Update stock levels for each item
