@@ -127,25 +127,30 @@ saleSchema.pre('save', function(next) {
       return next(new Error('At least one item is required'));
     }
 
-    for (const item of this.items) {
+    for (let i = 0; i < this.items.length; i++) {
+      const item = this.items[i];
       // Ensure all required fields are present and valid
       const quantity = Number(item.quantity) || 0;
       const unitPrice = Number(item.unitPrice) || 0;
       const discount = Number(item.discount) || 0;
 
       if (quantity <= 0 || unitPrice < 0) {
-        return next(new Error('Invalid item data'));
+        return next(new Error(`Invalid item data at index ${i}: quantity=${quantity}, unitPrice=${unitPrice}`));
       }
 
       const itemTotal = quantity * unitPrice;
       const itemDiscount = itemTotal * (discount / 100);
 
       // Store calculated total price on the item
-      item.totalPrice = itemTotal - itemDiscount;
+      // Use set to ensure Mongoose recognizes the change
+      this.items[i].totalPrice = itemTotal - itemDiscount;
 
       totalAmount += itemTotal;
       discountAmount += itemDiscount;
     }
+    
+    // Mark items array as modified to ensure Mongoose saves the changes
+    this.markModified('items');
 
     // Set the calculated totals
     this.totalAmount = totalAmount;

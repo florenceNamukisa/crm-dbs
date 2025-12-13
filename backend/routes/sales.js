@@ -1,5 +1,6 @@
 // routes/sales.js - REBUILT FOR BULLETPROOF FUNCTIONALITY
 import express from 'express';
+import fs from 'fs';
 import Sale from '../models/Sale.js';
 import User from '../models/User.js';
 
@@ -173,7 +174,14 @@ router.post('/', getCurrentUser, async (req, res) => {
     console.log('User ID:', req.user.userId);
     console.log('Request body:', JSON.stringify(req.body, null, 2));
 
-    const { customerName, customerEmail, customerPhone, items, paymentMethod, notes } = req.body;
+    // #region agent log
+    const logPath = 'c:\\Users\\HP\\Desktop\\CRM-DBS\\.cursor\\debug.log';
+    try {
+      fs.appendFileSync(logPath, JSON.stringify({location:'sales.js:174',message:'Request received',data:{userId:req.user.userId,hasClient:!!req.body.client,itemCount:req.body.items?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})+'\n');
+    } catch(e) {}
+    // #endregion
+
+    const { customerName, customerEmail, customerPhone, items, paymentMethod, notes, client } = req.body;
 
     // VALIDATION - collect all errors
     const errors = [];
@@ -210,34 +218,99 @@ router.post('/', getCurrentUser, async (req, res) => {
 
     console.log('✅ Validation passed');
 
-    // NORMALIZE ITEMS
+    // NORMALIZE ITEMS AND CALCULATE TOTAL PRICE
     const normalizedItems = items.map((item, i) => {
       try {
-        return {
+        const quantity = Number(item.quantity) || 0;
+        const unitPrice = Number(item.unitPrice) || 0;
+        const discount = Number(item.discount) || 0;
+        
+        // Calculate item total
+        const itemTotal = quantity * unitPrice;
+        const itemDiscount = itemTotal * (discount / 100);
+        const totalPrice = itemTotal - itemDiscount;
+        
+        const normalizedItem = {
           itemName: String(item.itemName).trim(),
-          quantity: Number(item.quantity) || 0,
-          unitPrice: Number(item.unitPrice) || 0,
-          discount: Number(item.discount) || 0
+          quantity: quantity,
+          unitPrice: unitPrice,
+          discount: discount,
+          totalPrice: totalPrice // Required by schema - MUST be set before validation
         };
+        
+        // #region agent log
+        try {
+          fs.appendFileSync(logPath, JSON.stringify({location:'sales.js:238',message:'Normalized item',data:{index:i,itemName:normalizedItem.itemName,quantity,unitPrice,totalPrice,hasTotalPrice:!!normalizedItem.totalPrice},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})+'\n');
+        } catch(e) {}
+        // #endregion
+        
+        return normalizedItem;
       } catch (e) {
         console.error(`Error normalizing item ${i}:`, e);
         throw new Error(`Failed to normalize item ${i}`);
       }
     });
 
-    console.log('✅ Items normalized:', normalizedItems);
+    console.log('✅ Items normalized:', JSON.stringify(normalizedItems, null, 2));
+    
+    // #region agent log
+    try {
+      fs.appendFileSync(logPath, JSON.stringify({location:'sales.js:247',message:'All items normalized',data:{itemCount:normalizedItems.length,allHaveTotalPrice:normalizedItems.every(item=>item.totalPrice!==undefined&&item.totalPrice!==null)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})+'\n');
+    } catch(e) {}
+    // #endregion
+
+    // Ensure all items have totalPrice as a NUMBER before creating Sale object
+    // This is critical because Mongoose validates required fields BEFORE pre-save hooks run
+    const finalItems = normalizedItems.map((item, index) => {
+      // Always recalculate to ensure it's correct
+      const qty = Number(item.quantity) || 0;
+      const price = Number(item.unitPrice) || 0;
+      const disc = Number(item.discount) || 0;
+      const itemTotal = qty * price;
+      const itemDiscount = itemTotal * (disc / 100);
+      const calculatedTotalPrice = itemTotal - itemDiscount;
+      
+      // Create a new object to ensure all fields are properly set
+      const finalItem = {
+        itemName: String(item.itemName).trim(),
+        quantity: qty,
+        unitPrice: price,
+        discount: disc,
+        totalPrice: Number(calculatedTotalPrice) // MUST be a number, required by schema
+      };
+      
+      // Validate the item before returning
+      if (!finalItem.itemName || finalItem.quantity < 1 || finalItem.unitPrice < 0 || isNaN(finalItem.totalPrice)) {
+        throw new Error(`Invalid item at index ${index}: ${JSON.stringify(finalItem)}`);
+      }
+      
+      return finalItem;
+    });
+
+    // #region agent log
+    try {
+      fs.appendFileSync(logPath, JSON.stringify({location:'sales.js:250',message:'Final items prepared',data:{itemCount:finalItems.length,allHaveTotalPrice:finalItems.every(item=>item.totalPrice!==undefined&&!isNaN(item.totalPrice)),firstItemTotalPrice:finalItems[0]?.totalPrice},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})+'\n');
+    } catch(e) {}
+    // #endregion
 
     // CREATE SALE OBJECT
     const saleData = {
       customerName: String(customerName).trim(),
       customerEmail: customerEmail ? String(customerEmail).trim() : undefined,
       customerPhone: customerPhone ? String(customerPhone).trim() : undefined,
-      items: normalizedItems,
+      items: finalItems, // Use finalItems with guaranteed totalPrice
       paymentMethod,
       notes: notes ? String(notes).trim() : undefined,
       agent: req.user.userId,
+      client: (client && client.trim() !== '') ? client : undefined, // Link to client if provided and not empty
       saleDate: new Date()
     };
+
+    // #region agent log
+    try {
+      fs.appendFileSync(logPath, JSON.stringify({location:'sales.js:268',message:'Sale data prepared',data:{hasClient:!!saleData.client,clientId:saleData.client,agentId:saleData.agent,itemCount:saleData.items.length,firstItemTotalPrice:saleData.items[0]?.totalPrice},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})+'\n');
+    } catch(e) {}
+    // #endregion
 
     console.log('Creating sale with data:', {
       customerName: saleData.customerName,
@@ -246,12 +319,73 @@ router.post('/', getCurrentUser, async (req, res) => {
       agent: saleData.agent
     });
 
-    const sale = new Sale(saleData);
-    console.log('Sale object created');
+    // #region agent log
+    try {
+      fs.appendFileSync(logPath, JSON.stringify({location:'sales.js:312',message:'Creating Sale model instance',data:{hasClient:!!saleData.client,itemCount:saleData.items.length,firstItemHasTotalPrice:!!(saleData.items[0]?.totalPrice),firstItemTotalPriceValue:saleData.items[0]?.totalPrice,firstItemKeys:Object.keys(saleData.items[0]||{}),allItemsHaveTotalPrice:saleData.items.every(i=>i.totalPrice!==undefined&&!isNaN(i.totalPrice))},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})+'\n');
+    } catch(e) {}
+    // #endregion
+
+    // Validate items one more time before creating Sale - CRITICAL STEP
+    for (let i = 0; i < saleData.items.length; i++) {
+      const item = saleData.items[i];
+      // Recalculate totalPrice to ensure it's always correct
+      const qty = Number(item.quantity) || 0;
+      const price = Number(item.unitPrice) || 0;
+      const disc = Number(item.discount) || 0;
+      const itemTotal = qty * price;
+      const itemDiscount = itemTotal * (disc / 100);
+      saleData.items[i].totalPrice = Number(itemTotal - itemDiscount);
+      
+      // Verify the item has all required fields
+      if (!saleData.items[i].itemName || saleData.items[i].quantity < 1 || 
+          saleData.items[i].unitPrice < 0 || !saleData.items[i].totalPrice || 
+          isNaN(saleData.items[i].totalPrice)) {
+        throw new Error(`Invalid item at index ${i}: missing required fields or invalid values`);
+      }
+    }
+
+    // #region agent log
+    try {
+      fs.appendFileSync(logPath, JSON.stringify({location:'sales.js:330',message:'Items validated before Sale creation',data:{itemCount:saleData.items.length,items:saleData.items.map(i=>({itemName:i.itemName,quantity:i.quantity,unitPrice:i.unitPrice,totalPrice:i.totalPrice,hasTotalPrice:!!i.totalPrice}))},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})+'\n');
+    } catch(e) {}
+    // #endregion
+
+    let sale;
+    try {
+      sale = new Sale(saleData);
+      console.log('Sale object created successfully');
+    } catch (createError) {
+      // #region agent log
+      try {
+        fs.appendFileSync(logPath, JSON.stringify({location:'sales.js:340',message:'Sale creation failed',data:{error:createError.message,errorName:createError.name,itemsStructure:saleData.items},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})+'\n');
+      } catch(e) {}
+      // #endregion
+      throw new Error(`Failed to create Sale object: ${createError.message}. Items: ${JSON.stringify(saleData.items)}`);
+    }
+    
+    // #region agent log
+    try {
+      fs.appendFileSync(logPath, JSON.stringify({location:'sales.js:285',message:'Sale object created',data:{hasItems:!!sale.items,saleItemsCount:sale.items?.length,firstItemTotalPrice:sale.items?.[0]?.totalPrice},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})+'\n');
+    } catch(e) {}
+    // #endregion
 
     // SAVE TO DATABASE
     console.log('Attempting to save to MongoDB...');
+    
+    // #region agent log
+    try {
+      fs.appendFileSync(logPath, JSON.stringify({location:'sales.js:265',message:'Before save() call',data:{hasClient:!!sale.client},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})+'\n');
+    } catch(e) {}
+    // #endregion
+    
     const savedSale = await sale.save();
+    
+    // #region agent log
+    try {
+      fs.appendFileSync(logPath, JSON.stringify({location:'sales.js:268',message:'After save() call',data:{saleId:savedSale._id,hasClient:!!savedSale.client},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})+'\n');
+    } catch(e) {}
+    // #endregion
+    
     console.log('✅ Sale saved to database:', savedSale._id);
 
     // POPULATE AND RESPOND
@@ -268,16 +402,52 @@ router.post('/', getCurrentUser, async (req, res) => {
 
   } catch (error) {
     const elapsed = Date.now() - startTime;
+    
+    // #region agent log
+    try {
+      const errorDetails = {
+        errorMessage: error.message,
+        errorName: error.name,
+        errorType: error.constructor.name,
+        hasValidationErrors: !!error.errors,
+        validationErrors: error.errors ? Object.keys(error.errors) : null,
+        validationErrorDetails: error.errors ? Object.entries(error.errors).map(([key, val]) => ({field:key,message:val.message})) : null
+      };
+      fs.appendFileSync(logPath, JSON.stringify({location:'sales.js:360',message:'Error caught',data:errorDetails,timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})+'\n');
+    } catch(e) {}
+    // #endregion
+    
     console.error(`\n❌ Error creating sale (${elapsed}ms):`);
     console.error('Error message:', error.message);
     console.error('Error type:', error.constructor.name);
+    console.error('Error name:', error.name);
+    if (error.errors) {
+      console.error('Validation errors:', JSON.stringify(error.errors, null, 2));
+      // Log each validation error in detail
+      Object.entries(error.errors).forEach(([field, err]) => {
+        console.error(`  - ${field}: ${err.message}`);
+      });
+    }
     console.error('Stack trace:', error.stack);
+    console.log('Request body was:', JSON.stringify(req.body, null, 2));
+    if (req.body.items) {
+      console.log('Items in request:', JSON.stringify(req.body.items, null, 2));
+    }
     console.log('=== POST /api/sales ERROR ===\n');
+
+    // Return more detailed error information
+    let errorMessage = error.message;
+    if (error.name === 'ValidationError' && error.errors) {
+      const validationErrors = Object.values(error.errors).map(err => err.message);
+      errorMessage = `Validation failed: ${validationErrors.join(', ')}`;
+    }
 
     res.status(500).json({
       message: 'Failed to create sale',
-      error: error.message,
-      type: error.constructor.name
+      error: errorMessage,
+      type: error.constructor.name,
+      name: error.name,
+      ...(error.errors && { validationErrors: error.errors })
     });
   }
 });
