@@ -68,15 +68,28 @@ router.post('/', getCurrentUser, upload.single('file'), async (req, res) => {
       return res.status(400).json({ message: 'No file uploaded' });
     }
 
-    // Construct the file URL (relative path from backend)
-    const fileUrl = `/uploads/${req.file.filename}`;
+    // Construct the file URL
+    // Use BACKEND_URL if available (for production), otherwise use relative path with protocol
+    let fileUrl;
+    if (process.env.BACKEND_URL) {
+      // Production: Use full absolute URL from environment
+      fileUrl = `${process.env.BACKEND_URL}/uploads/${req.file.filename}`;
+    } else {
+      // Development: Use request origin to construct full URL
+      const protocol = req.protocol || 'http';
+      const host = req.get('host') || 'localhost:5000';
+      fileUrl = `${protocol}://${host}/uploads/${req.file.filename}`;
+    }
+
+    // Also keep relative path for backward compatibility
+    const relativePath = `/uploads/${req.file.filename}`;
 
     console.log('✅ File uploaded successfully:', fileUrl);
 
     res.status(201).json({
       message: 'File uploaded successfully',
       url: fileUrl,
-      path: fileUrl,
+      path: relativePath,
       filename: req.file.filename,
       size: req.file.size,
       mimetype: req.file.mimetype

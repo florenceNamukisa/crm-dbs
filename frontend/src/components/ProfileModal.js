@@ -46,21 +46,31 @@ const ProfileModal = ({ isOpen, onClose }) => {
       const formData = new FormData();
       formData.append('file', file);
       
+      console.log('🔼 Uploading file...', file.name);
+      
       // Upload file first
       const uploadResponse = await uploadAPI.uploadFile(formData);
-      const photoUrl = uploadResponse.data.url || uploadResponse.data.path || uploadResponse.data;
+      console.log('📤 Upload response:', uploadResponse.data);
+      
+      const photoUrl = uploadResponse.data.url || uploadResponse.data.path;
+      console.log('🖼️ Photo URL from upload:', photoUrl);
       
       // Update user profile with the photo URL
-      await usersAPI.update(user._id || user.id, { 
+      console.log('💾 Updating user profile with photo URL:', photoUrl);
+      const updateResponse = await usersAPI.update(user._id || user.id, { 
         profileImage: photoUrl 
       });
+      console.log('✅ User updated with photo:', updateResponse.data);
       
       // Refresh user data from backend to ensure consistency
       try {
         const meResponse = await authAPI.getMe();
         const updatedUserData = meResponse.data;
+        console.log('🔄 Refreshed user data from backend:', updatedUserData);
         updateUser(updatedUserData);
+        console.log('✅ Auth context updated with new profile image');
       } catch (refreshError) {
+        console.warn('⚠️ Could not refresh user data, updating locally:', refreshError.message);
         // If refresh fails, still update with the photo URL
         updateUser({ 
           ...user, 
@@ -74,7 +84,8 @@ const ProfileModal = ({ isOpen, onClose }) => {
       
       toast.success('Photo uploaded successfully');
     } catch (error) {
-      console.error('Error uploading photo:', error);
+      console.error('❌ Error uploading photo:', error);
+      console.error('❌ Error response:', error.response?.data);
       toast.error(error.response?.data?.message || 'Failed to upload photo');
     } finally {
       setUploading(false);

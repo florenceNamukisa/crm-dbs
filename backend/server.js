@@ -242,11 +242,11 @@ app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Login URL: http://localhost:${PORT}`);
 
-  // Test email configuration
-  const emailTest = await testEmailConfig();
-  if (emailTest) {
-  } else {
-  }
+  // Email configuration test disabled due to timeout issues
+  // const emailTest = await testEmailConfig();
+  // if (emailTest) {
+  // } else {
+  // }
 
   await createDefaultAdmin();
 
