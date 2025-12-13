@@ -16,6 +16,7 @@ import { reportsRoutes } from './routes/reports.js';
 import { salesRoutes } from './routes/sales.js';
 import { stockRoutes } from './routes/stock.js';
 import { notificationRoutes } from './routes/notifications.js';
+import { uploadRoutes } from './routes/upload.js';
 import { testEmailConfig } from './services/emailService.js';
 
 
@@ -44,6 +45,9 @@ app.use(express.urlencoded({ extended: true }));
 // Static files (if needed for public assets)
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Serve uploaded files
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
 // MongoDB connection
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/crm_system', {
   useNewUrlParser: true,
@@ -63,6 +67,7 @@ app.use('/api/reports', reportsRoutes);
 app.use('/api/sales', salesRoutes);
 app.use('/api/stock', stockRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/upload', uploadRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {

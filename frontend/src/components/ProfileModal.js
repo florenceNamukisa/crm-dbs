@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { X, User, Mail, Camera, Lock, Moon, Sun, Upload } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-import { authAPI, usersAPI } from '../services/api';
+import { authAPI, usersAPI, uploadAPI } from '../services/api';
 import toast from 'react-hot-toast';
 
 const ProfileModal = ({ isOpen, onClose }) => {
@@ -44,16 +44,38 @@ const ProfileModal = ({ isOpen, onClose }) => {
     try {
       setUploading(true);
       const formData = new FormData();
-      formData.append('photo', file);
+      formData.append('file', file);
       
-      // TODO: Implement photo upload API endpoint
-      // const response = await usersAPI.uploadPhoto(formData);
-      // updateUser({ ...user, photo: response.data.photo });
+      // Upload file first
+      const uploadResponse = await uploadAPI.uploadFile(formData);
+      const photoUrl = uploadResponse.data.url || uploadResponse.data.path || uploadResponse.data;
+      
+      // Update user profile with the photo URL
+      await usersAPI.update(user._id || user.id, { 
+        profileImage: photoUrl 
+      });
+      
+      // Refresh user data from backend to ensure consistency
+      try {
+        const meResponse = await authAPI.getMe();
+        const updatedUserData = meResponse.data;
+        updateUser(updatedUserData);
+      } catch (refreshError) {
+        // If refresh fails, still update with the photo URL
+        updateUser({ 
+          ...user, 
+          profileImage: photoUrl,
+          photo: photoUrl // Also set photo for backward compatibility
+        });
+      }
+      
+      // Clear preview since we've saved it
+      setPhotoPreview(null);
       
       toast.success('Photo uploaded successfully');
     } catch (error) {
       console.error('Error uploading photo:', error);
-      toast.error('Failed to upload photo');
+      toast.error(error.response?.data?.message || 'Failed to upload photo');
     } finally {
       setUploading(false);
     }
@@ -90,9 +112,9 @@ const ProfileModal = ({ isOpen, onClose }) => {
           <div className="flex flex-col items-center space-y-4">
             <div className="relative">
               <div className="w-32 h-32 rounded-full bg-orange-100 flex items-center justify-center overflow-hidden border-4 border-orange-500">
-                {photoPreview || user?.photo ? (
+                {photoPreview || user?.profileImage || user?.photo ? (
                   <img
-                    src={photoPreview || user.photo}
+                    src={photoPreview || user.profileImage || user.photo}
                     alt={user?.name}
                     className="w-full h-full object-cover"
                   />
@@ -213,3 +235,4 @@ const ProfileModal = ({ isOpen, onClose }) => {
 };
 
 export default ProfileModal;
+

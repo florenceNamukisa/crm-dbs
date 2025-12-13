@@ -60,6 +60,7 @@ router.post('/login', async (req, res) => {
       isFirstLogin: user.isFirstLogin,
       isActive: user.isActive,
       status: user.status,
+      profileImage: user.profileImage || null,
       performanceScore: user.performanceScore,
       totalDeals: user.totalDeals,
       successfulDeals: user.successfulDeals,

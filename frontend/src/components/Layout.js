@@ -171,33 +171,6 @@ const Layout = ({ children }) => {
             </div>
           </div>
 
-          {/* User Info - Clickable */}
-          <button
-            onClick={() => setShowProfileModal(true)}
-            className="w-full px-6 py-4 border-b border-orange-700 hover:bg-orange-700/50 transition-colors text-left"
-          >
-            <div className="flex items-center space-x-3">
-              <div className="w-12 h-12 bg-orange-800 rounded-full flex items-center justify-center overflow-hidden">
-                {user?.photo ? (
-                  <img src={user.photo} alt={user?.name} className="w-full h-full object-cover" />
-                ) : (
-                  <User className="w-6 h-6 text-white" />
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-white truncate">
-                  {user?.name}
-                </p>
-                <p className="text-sm text-white text-opacity-90 capitalize">
-                  {user?.role}
-                </p>
-                <p className="text-xs text-white text-opacity-80 truncate">
-                  {user?.email}
-                </p>
-              </div>
-            </div>
-          </button>
-
           {/* Navigation */}
           <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
             {navItems.map((item) => {
@@ -266,36 +239,6 @@ const Layout = ({ children }) => {
                     </div>
                   </div>
                 </div>
-
-                {/* Mobile User Info - Clickable */}
-                <button
-                  onClick={() => {
-                    setShowProfileModal(true);
-                    setSidebarOpen(false);
-                  }}
-                  className="w-full px-6 py-4 border-b border-orange-700 hover:bg-orange-700/50 transition-colors text-left"
-                >
-                  <div className="flex items-center space-x-3">
-                    <div className="w-12 h-12 bg-orange-800 rounded-full flex items-center justify-center overflow-hidden">
-                      {user?.photo ? (
-                        <img src={user.photo} alt={user?.name} className="w-full h-full object-cover" />
-                      ) : (
-                        <User className="w-6 h-6 text-white" />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-white truncate">
-                        {user?.name}
-                      </p>
-                      <p className="text-sm text-white text-opacity-90 capitalize">
-                        {user?.role}
-                      </p>
-                      <p className="text-xs text-white text-opacity-80 truncate">
-                        {user?.email}
-                      </p>
-                    </div>
-                  </div>
-                </button>
 
                 {/* Mobile Navigation */}
                 <nav className="px-4 py-6 space-y-2">
@@ -378,27 +321,26 @@ const Layout = ({ children }) => {
                 </button>
               )}
               
-              {/* Profile Dropdown */}
+              {/* Profile Photo - Clickable */}
               <div className="relative">
                 <button
                   onClick={() => {
-                    setShowUserMenu(!showUserMenu);
                     setShowProfileModal(true);
                   }}
-                  className="flex items-center space-x-2 sm:space-x-3 p-2 rounded-lg hover:bg-gray-100 transition-colors group"
+                  className="p-1 rounded-full hover:bg-gray-100 transition-colors group"
+                  title="View Profile"
                 >
-                  <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-orange-500 flex items-center justify-center overflow-hidden border-2 border-orange-500">
-                    {user?.photo ? (
-                      <img src={user.photo} alt={user?.name} className="w-full h-full object-cover" />
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-orange-500 flex items-center justify-center overflow-hidden border-2 border-orange-500 cursor-pointer hover:border-orange-600 transition-colors">
+                    {user?.profileImage || user?.photo ? (
+                      <img 
+                        src={user.profileImage || user.photo} 
+                        alt={user?.name || 'Profile'} 
+                        className="w-full h-full object-cover" 
+                      />
                     ) : (
-                      <User className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+                      <User className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
                     )}
                   </div>
-                  <div className="hidden sm:flex flex-col items-start">
-                    <span className="text-sm font-medium text-gray-900">{user?.name}</span>
-                    <span className="text-xs text-gray-500 capitalize">{user?.role}</span>
-                  </div>
-                  <ChevronDown className="hidden sm:block w-4 h-4 text-gray-500 group-hover:text-gray-700" />
                 </button>
               </div>
             </div>

@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
+import Layout from './components/Layout';
 
 // Lazy load pages for better performance
 const Login = lazy(() => import('./pages/Login'));
@@ -16,9 +17,6 @@ const UserManagement = lazy(() => import('./pages/admin/UserManagement'));
 const Reports = lazy(() => import('./pages/admin/Reports'));
 const Settings = lazy(() => import('./pages/admin/Settings'));
 const ChangePassword = lazy(() => import('./pages/ChangePassword'));
-
-// Components
-import Layout from './components/Layout';
 
 // Minimal loading component
 const PageLoader = () => (
