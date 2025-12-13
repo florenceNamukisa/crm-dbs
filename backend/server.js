@@ -41,9 +41,7 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Pug configuration
-app.set('view engine', 'pug');
-app.set('views', path.join(__dirname, 'views'));
+// Static files (if needed for public assets)
 app.use(express.static(path.join(__dirname, 'public')));
 
 // MongoDB connection
@@ -84,7 +82,54 @@ app.get('/api/sales/test', (req, res) => {
   });
 });
 
-// Global error handler - logs all errors to console for debugging
+// Serve frontend static files (only in development/local)
+if (process.env.NODE_ENV !== 'production') {
+  app.use(express.static(path.join(__dirname, '../frontend/dist')));
+}
+
+// Root route and SPA fallback - serve index.html for all non-API routes (must be before error handler)
+app.get('*', (req, res, next) => {
+  // Skip API routes
+  if (req.path.startsWith('/api/')) {
+    return next();
+  }
+  
+  // In production (Render), frontend is on Vercel, so return API info
+  if (process.env.NODE_ENV === 'production') {
+    return res.json({
+      success: true,
+      message: 'CRM-DBS Backend API',
+      version: '1.0.0',
+      endpoints: {
+        health: '/health',
+        api: '/api',
+        docs: 'See API documentation'
+      },
+      frontend: 'Frontend is deployed separately on Vercel'
+    });
+  }
+  
+  // In development, try to serve React app's index.html
+  const indexPath = path.join(__dirname, '../frontend/dist/index.html');
+  res.sendFile(indexPath, (err) => {
+    if (err) {
+      console.error('Error serving index.html:', err);
+      // If index.html doesn't exist, return API info
+      res.json({
+        success: true,
+        message: 'CRM-DBS Backend API',
+        version: '1.0.0',
+        endpoints: {
+          health: '/health',
+          api: '/api'
+        },
+        note: 'Frontend not found. Run "npm run build" in frontend directory for local development.'
+      });
+    }
+  });
+});
+
+// Global error handler - MUST be last (logs all errors to console for debugging)
 app.use((err, req, res, next) => {
   console.error('🔴 GLOBAL ERROR HANDLER CAUGHT:', {
     timestamp: new Date().toISOString(),
@@ -95,20 +140,12 @@ app.use((err, req, res, next) => {
     body: req.body
   });
   
-  res.status(500).json({
+  res.status(err.status || 500).json({
     success: false,
     error: 'Internal server error',
     message: err.message,
     timestamp: new Date().toISOString()
   });
-});
-
-// Serve frontend
-app.use(express.static(path.join(__dirname, '../frontend/dist')));
-
-// Home route
-app.get('/', (req, res) => {
-  res.render('login', { title: 'Login' });
 });
 
 // Create default admin on startup
