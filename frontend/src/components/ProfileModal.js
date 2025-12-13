@@ -62,6 +62,15 @@ const ProfileModal = ({ isOpen, onClose }) => {
       });
       console.log('✅ User updated with photo:', updateResponse.data);
       
+      // Immediately update local state to show the photo
+      console.log('📍 Updating auth context immediately with photo URL');
+      updateUser({ 
+        ...user,
+        profileImage: photoUrl,
+        photo: photoUrl
+      });
+      console.log('📍 Auth context updated immediately');
+      
       // Refresh user data from backend to ensure consistency
       try {
         const meResponse = await authAPI.getMe();
@@ -69,6 +78,11 @@ const ProfileModal = ({ isOpen, onClose }) => {
         console.log('🔄 Refreshed user data from backend:', updatedUserData);
         updateUser(updatedUserData);
         console.log('✅ Auth context updated with new profile image');
+        
+        // Keep preview visible for smooth transition (2 seconds), then let fresh data show
+        setTimeout(() => {
+          setPhotoPreview(null);
+        }, 500);
       } catch (refreshError) {
         console.warn('⚠️ Could not refresh user data, updating locally:', refreshError.message);
         // If refresh fails, still update with the photo URL
@@ -77,10 +91,12 @@ const ProfileModal = ({ isOpen, onClose }) => {
           profileImage: photoUrl,
           photo: photoUrl // Also set photo for backward compatibility
         });
+        
+        // Keep preview visible briefly
+        setTimeout(() => {
+          setPhotoPreview(null);
+        }, 500);
       }
-      
-      // Clear preview since we've saved it
-      setPhotoPreview(null);
       
       toast.success('Photo uploaded successfully');
     } catch (error) {
@@ -128,6 +144,16 @@ const ProfileModal = ({ isOpen, onClose }) => {
                     src={photoPreview || user.profileImage || user.photo}
                     alt={user?.name}
                     className="w-full h-full object-cover"
+                    onError={(e) => {
+                      console.warn('❌ Failed to load image:', e.target.src);
+                      // If image fails to load and we have profileImage, log it
+                      if (user?.profileImage) {
+                        console.log('Image URL that failed:', user.profileImage);
+                      }
+                    }}
+                    onLoad={() => {
+                      console.log('✅ Profile image loaded successfully:', photoPreview || user?.profileImage || user?.photo);
+                    }}
                   />
                 ) : (
                   <User className="w-16 h-16 text-orange-500" />

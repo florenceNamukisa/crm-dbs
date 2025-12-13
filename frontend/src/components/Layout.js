@@ -335,7 +335,13 @@ const Layout = ({ children }) => {
                       <img 
                         src={user.profileImage || user.photo} 
                         alt={user?.name || 'Profile'} 
-                        className="w-full h-full object-cover" 
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          console.warn('❌ Failed to load profile image in navbar:', e.target.src);
+                        }}
+                        onLoad={() => {
+                          console.log('✅ Profile image loaded in navbar');
+                        }}
                       />
                     ) : (
                       <User className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
