@@ -13,6 +13,7 @@ const ProfileModal = ({ isOpen, onClose }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [photoPreview, setPhotoPreview] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [imageKey, setImageKey] = useState(0);  // Force re-render of image
   const fileInputRef = useRef(null);
 
   if (!isOpen) return null;
@@ -33,14 +34,15 @@ const ProfileModal = ({ isOpen, onClose }) => {
       return;
     }
 
-    // Preview image
+    // Preview image FIRST (show immediately to user)
     const reader = new FileReader();
     reader.onloadend = () => {
       setPhotoPreview(reader.result);
+      console.log('✅ Photo preview set:', reader.result.substring(0, 50) + '...');
     };
     reader.readAsDataURL(file);
 
-    // Upload photo
+    // Then upload in background
     try {
       setUploading(true);
       const formData = new FormData();
@@ -48,60 +50,58 @@ const ProfileModal = ({ isOpen, onClose }) => {
       
       console.log('🔼 Uploading file...', file.name);
       
-      // Upload file first
+      // Upload file to backend
       const uploadResponse = await uploadAPI.uploadFile(formData);
       console.log('📤 Upload response:', uploadResponse.data);
       
       const photoUrl = uploadResponse.data.url || uploadResponse.data.path;
-      console.log('🖼️ Photo URL from upload:', photoUrl);
+      console.log('🖼️ Photo URL from backend:', photoUrl);
       
-      // Update user profile with the photo URL
-      console.log('💾 Updating user profile with photo URL:', photoUrl);
+      if (!photoUrl) {
+        throw new Error('No URL returned from upload');
+      }
+      
+      // Update user in database with the photo URL
+      console.log('💾 Saving photo URL to database...');
       const updateResponse = await usersAPI.update(user._id || user.id, { 
         profileImage: photoUrl 
       });
-      console.log('✅ User updated with photo:', updateResponse.data);
+      console.log('✅ Database updated:', updateResponse.data.profileImage);
       
-      // Immediately update local state to show the photo
-      console.log('📍 Updating auth context immediately with photo URL');
-      updateUser({ 
+      // Update local auth context IMMEDIATELY with the URL from backend
+      // This is critical so the UI re-renders with the actual saved URL
+      console.log('📍 Updating auth context with photo URL:', photoUrl);
+      const updatedUserData = {
         ...user,
         profileImage: photoUrl,
-        photo: photoUrl
-      });
-      console.log('📍 Auth context updated immediately');
+        photo: photoUrl  // Backup field for compatibility
+      };
+      updateUser(updatedUserData);
+      console.log('✅ Auth context updated, user.profileImage is now:', updatedUserData.profileImage);
       
-      // Refresh user data from backend to ensure consistency
+      // Then refresh from backend to ensure sync
       try {
         const meResponse = await authAPI.getMe();
-        const updatedUserData = meResponse.data;
-        console.log('🔄 Refreshed user data from backend:', updatedUserData);
-        updateUser(updatedUserData);
-        console.log('✅ Auth context updated with new profile image');
-        
-        // Keep preview visible for smooth transition (2 seconds), then let fresh data show
-        setTimeout(() => {
-          setPhotoPreview(null);
-        }, 500);
+        console.log('🔄 Fresh user data from backend:', meResponse.data.profileImage);
+        updateUser(meResponse.data);
       } catch (refreshError) {
-        console.warn('⚠️ Could not refresh user data, updating locally:', refreshError.message);
-        // If refresh fails, still update with the photo URL
-        updateUser({ 
-          ...user, 
-          profileImage: photoUrl,
-          photo: photoUrl // Also set photo for backward compatibility
-        });
-        
-        // Keep preview visible briefly
-        setTimeout(() => {
-          setPhotoPreview(null);
-        }, 500);
+        console.warn('⚠️ Could not refresh from backend, using local update:', refreshError.message);
+        // Already updated locally above, so continue
       }
+      
+      // Only clear preview after we have the URL saved
+      // This ensures photo stays visible throughout the process
+      setTimeout(() => {
+        setPhotoPreview(null);
+        setImageKey(prev => prev + 1);  // Force re-render of image element
+        console.log('✅ Preview cleared, now showing saved image from database');
+      }, 500);
       
       toast.success('Photo uploaded successfully');
     } catch (error) {
       console.error('❌ Error uploading photo:', error);
       console.error('❌ Error response:', error.response?.data);
+      setPhotoPreview(null);  // Clear preview on error
       toast.error(error.response?.data?.message || 'Failed to upload photo');
     } finally {
       setUploading(false);
@@ -141,6 +141,7 @@ const ProfileModal = ({ isOpen, onClose }) => {
               <div className="w-32 h-32 rounded-full bg-orange-100 flex items-center justify-center overflow-hidden border-4 border-orange-500">
                 {photoPreview || user?.profileImage || user?.photo ? (
                   <img
+                    key={imageKey}
                     src={photoPreview || user.profileImage || user.photo}
                     alt={user?.name}
                     className="w-full h-full object-cover"
