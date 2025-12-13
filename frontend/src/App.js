@@ -21,7 +21,7 @@ const ChangePassword = lazy(() => import('./pages/ChangePassword'));
 // Minimal loading component
 const PageLoader = () => (
   <div className="flex items-center justify-center min-h-screen">
-    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
+    <p className="text-gray-600">Loading...</p>
   </div>
 );
 

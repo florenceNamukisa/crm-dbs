@@ -165,11 +165,7 @@ const ProfileModal = ({ isOpen, onClose }) => {
                 disabled={uploading}
                 className="absolute bottom-0 right-0 bg-orange-500 text-white p-2 rounded-full hover:bg-orange-600 transition-colors shadow-lg"
               >
-                {uploading ? (
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <Camera className="w-5 h-5" />
-                )}
+                <Camera className="w-5 h-5" />
               </button>
               <input
                 ref={fileInputRef}

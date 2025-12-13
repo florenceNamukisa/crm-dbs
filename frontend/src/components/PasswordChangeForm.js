@@ -316,10 +316,7 @@ const PasswordChangeForm = () => {
               className="w-full bg-gradient-to-r from-orange-500 to-orange-600 text-white py-3 px-4 rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-semibold shadow-lg hover:shadow-xl"
             >
               {loading ? (
-                <div className="flex items-center justify-center space-x-2">
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  <span>Setting Password...</span>
-                </div>
+                <span>Setting Password...</span>
               ) : (
                 'Set New Password & Continue'
               )}

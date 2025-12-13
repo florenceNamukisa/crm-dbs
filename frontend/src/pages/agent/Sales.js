@@ -348,7 +348,6 @@ const Sales = () => {
         </div>
         {loading ? (
           <div className="p-12 text-center">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600"></div>
             <p className="mt-2 text-gray-600">Loading sales...</p>
           </div>
         ) : sales.length === 0 ? (
@@ -487,7 +486,6 @@ const Sales = () => {
                       <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-64 overflow-y-auto">
                         {loadingClients ? (
                           <div className="px-4 py-3 text-sm text-gray-500 flex items-center">
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-500 mr-3"></div>
                             Loading clients...
                           </div>
                         ) : filteredClients.length === 0 ? (
