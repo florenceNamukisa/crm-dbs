@@ -12,8 +12,18 @@ export const useAuth = () => {
 };
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  // Initialize with cached data immediately for instant rendering
+  const getInitialUser = () => {
+    try {
+      const storedUser = localStorage.getItem('user');
+      return storedUser ? JSON.parse(storedUser) : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const [user, setUser] = useState(getInitialUser());
+  const [loading, setLoading] = useState(false); // Start as false since we have cached data
   const [token, setToken] = useState(localStorage.getItem('token'));
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
@@ -25,19 +35,14 @@ export const AuthProvider = ({ children }) => {
 
       if (storedToken && storedUser) {
         try {
-          // First try to use stored session without validation
-          const parsedUser = JSON.parse(storedUser);
-          setUser(parsedUser);
-          setToken(storedToken);
-
-          // Then validate in background (don't block UI)
+          // User already set from initial state, just validate in background
           try {
             const response = await authAPI.getMe();
             const userData = response.data;
             setUser(userData);
             localStorage.setItem('user', JSON.stringify(userData));
           } catch (validationError) {
-            // If validation fails, keep the stored session but mark for refresh
+            // If validation fails, keep the stored session
             console.warn('Token validation failed, but keeping session for user experience');
           }
         } catch (parseError) {
@@ -48,10 +53,9 @@ export const AuthProvider = ({ children }) => {
           setUser(null);
         }
       }
-
-      setLoading(false);
     };
 
+    // Run validation in background without blocking
     initializeAuth();
 
     // Set up periodic token refresh (every 30 minutes)

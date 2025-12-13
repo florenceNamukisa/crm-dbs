@@ -34,6 +34,7 @@ export const ThemeProvider = ({ children }) => {
   // Apply theme to CSS variables and document
   const applyTheme = (themeConfig) => {
     const root = document.documentElement;
+    const body = document.body;
 
     // Set CSS custom properties for primary color
     root.style.setProperty('--primary-color', themeConfig.primaryColor);
@@ -42,23 +43,11 @@ export const ThemeProvider = ({ children }) => {
     // Apply dark mode if needed
     if (themeConfig.mode === 'dark') {
       root.classList.add('dark');
+      body.classList.add('dark');
     } else {
       root.classList.remove('dark');
+      body.classList.remove('dark');
     }
-
-    // Apply primary color to specific elements
-    const primaryElements = document.querySelectorAll('.bg-orange-500, .text-orange-500, .border-orange-500, .hover\\:bg-orange-600, .hover\\:text-orange-600');
-    primaryElements.forEach(element => {
-      if (element.classList.contains('bg-orange-500')) {
-        element.style.backgroundColor = themeConfig.primaryColor;
-      }
-      if (element.classList.contains('text-orange-500')) {
-        element.style.color = themeConfig.primaryColor;
-      }
-      if (element.classList.contains('border-orange-500')) {
-        element.style.borderColor = themeConfig.primaryColor;
-      }
-    });
   };
 
   // Helper function to adjust color brightness

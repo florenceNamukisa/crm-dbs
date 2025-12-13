@@ -13,16 +13,22 @@ import {
   PieChart,
   UserPlus,
   Bell,
-  TrendingUp
+  TrendingUp,
+  ChevronDown
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { notificationsAPI } from '../services/api';
 import NotificationCenter from './NotificationCenter';
+import ProfileModal from './ProfileModal';
+import LogoutModal from './LogoutModal';
 import logo from '../assets/logo.png';
 
 const Layout = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
   const { user, logout } = useAuth();
   const location = useLocation();
@@ -111,11 +117,13 @@ const Layout = ({ children }) => {
   const navItems = isAdmin ? adminNavItems : agentNavItems;
 
   const handleLogout = () => {
-    const confirmed = window.confirm('Are you sure you want to logout?');
-    if (confirmed) {
-      logout();
-      navigate('/login');
-    }
+    setShowLogoutModal(true);
+  };
+
+  const confirmLogout = () => {
+    logout();
+    navigate('/login');
+    setShowLogoutModal(false);
   };
 
   const NavItem = ({ item, isActive, onClick }) => {
@@ -149,7 +157,7 @@ const Layout = ({ children }) => {
   };
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-screen bg-gray-50 overflow-hidden">
       {/* Desktop Sidebar - Always Visible */}
       <div className="hidden lg:flex lg:flex-shrink-0">
         <div className="w-64 flex flex-col bg-orange-600 shadow-xl border-r border-orange-700 text-white">
@@ -163,11 +171,18 @@ const Layout = ({ children }) => {
             </div>
           </div>
 
-          {/* User Info */}
-          <div className="px-6 py-4 border-b border-orange-700">
+          {/* User Info - Clickable */}
+          <button
+            onClick={() => setShowProfileModal(true)}
+            className="w-full px-6 py-4 border-b border-orange-700 hover:bg-orange-700/50 transition-colors text-left"
+          >
             <div className="flex items-center space-x-3">
-              <div className="w-12 h-12 bg-orange-800 rounded-full flex items-center justify-center">
-                <User className="w-6 h-6 text-white" />
+              <div className="w-12 h-12 bg-orange-800 rounded-full flex items-center justify-center overflow-hidden">
+                {user?.photo ? (
+                  <img src={user.photo} alt={user?.name} className="w-full h-full object-cover" />
+                ) : (
+                  <User className="w-6 h-6 text-white" />
+                )}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-white truncate">
@@ -181,7 +196,7 @@ const Layout = ({ children }) => {
                 </p>
               </div>
             </div>
-          </div>
+          </button>
 
           {/* Navigation */}
           <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
@@ -252,11 +267,21 @@ const Layout = ({ children }) => {
                   </div>
                 </div>
 
-                {/* Mobile User Info */}
-                <div className="px-6 py-4 border-b border-orange-700">
+                {/* Mobile User Info - Clickable */}
+                <button
+                  onClick={() => {
+                    setShowProfileModal(true);
+                    setSidebarOpen(false);
+                  }}
+                  className="w-full px-6 py-4 border-b border-orange-700 hover:bg-orange-700/50 transition-colors text-left"
+                >
                   <div className="flex items-center space-x-3">
-                    <div className="w-12 h-12 bg-orange-800 rounded-full flex items-center justify-center">
-                      <User className="w-6 h-6 text-white" />
+                    <div className="w-12 h-12 bg-orange-800 rounded-full flex items-center justify-center overflow-hidden">
+                      {user?.photo ? (
+                        <img src={user.photo} alt={user?.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <User className="w-6 h-6 text-white" />
+                      )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-white truncate">
@@ -270,7 +295,7 @@ const Layout = ({ children }) => {
                       </p>
                     </div>
                   </div>
-                </div>
+                </button>
 
                 {/* Mobile Navigation */}
                 <nav className="px-4 py-6 space-y-2">
@@ -299,7 +324,10 @@ const Layout = ({ children }) => {
                 </div>
                 
                 <button
-                  onClick={handleLogout}
+                  onClick={() => {
+                    setSidebarOpen(false);
+                    handleLogout();
+                  }}
                   className="flex items-center space-x-3 w-full px-4 py-3 rounded-lg text-sm font-medium text-white hover:bg-orange-700 transition-colors group"
                 >
                   <LogOut className="w-4 h-4 text-white" />
@@ -324,21 +352,21 @@ const Layout = ({ children }) => {
                 <Menu className="w-6 h-6" />
               </button>
               
-              <div className="ml-4 lg:ml-0">
-                <h1 className="text-2xl font-semibold text-gray-900">
+              <div className="ml-2 sm:ml-4 lg:ml-0">
+                <h1 className="text-lg sm:text-xl lg:text-2xl font-semibold text-gray-900 truncate">
                   {navItems.find(item => item.path === location.pathname)?.label || 'Dashboard'}
                 </h1>
-                <p className="text-sm text-gray-600">
+                <p className="text-xs sm:text-sm text-gray-600 hidden sm:block">
                   {navItems.find(item => item.path === location.pathname)?.description || 'Welcome to CRM Pro'}
                 </p>
               </div>
             </div>
             
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-3 sm:space-x-4">
               {isAdmin && (
                 <button
                   onClick={() => setShowNotifications(true)}
-                  className="p-2 text-gray-400 hover:text-gray-500 relative"
+                  className="p-2 text-gray-400 hover:text-gray-500 relative transition-colors"
                   title="Notifications"
                 >
                   <Bell className="w-5 h-5" />
@@ -350,16 +378,35 @@ const Layout = ({ children }) => {
                 </button>
               )}
               
-              <div className="hidden sm:flex flex-col items-end">
-                <span className="text-sm font-medium text-gray-900">{user?.name}</span>
-                <span className="text-xs text-gray-500 capitalize">{user?.role}</span>
+              {/* Profile Dropdown */}
+              <div className="relative">
+                <button
+                  onClick={() => {
+                    setShowUserMenu(!showUserMenu);
+                    setShowProfileModal(true);
+                  }}
+                  className="flex items-center space-x-2 sm:space-x-3 p-2 rounded-lg hover:bg-gray-100 transition-colors group"
+                >
+                  <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-orange-500 flex items-center justify-center overflow-hidden border-2 border-orange-500">
+                    {user?.photo ? (
+                      <img src={user.photo} alt={user?.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <User className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+                    )}
+                  </div>
+                  <div className="hidden sm:flex flex-col items-start">
+                    <span className="text-sm font-medium text-gray-900">{user?.name}</span>
+                    <span className="text-xs text-gray-500 capitalize">{user?.role}</span>
+                  </div>
+                  <ChevronDown className="hidden sm:block w-4 h-4 text-gray-500 group-hover:text-gray-700" />
+                </button>
               </div>
             </div>
           </div>
         </header>
 
         <main className="flex-1 overflow-auto bg-gray-50">
-          <div className="p-4 sm:p-6 lg:p-8">
+          <div className="p-3 sm:p-4 md:p-6 lg:p-8">
             {children}
           </div>
         </main>
@@ -376,6 +423,22 @@ const Layout = ({ children }) => {
           }}
         />
       )}
+
+      {/* Profile Modal */}
+      <ProfileModal
+        isOpen={showProfileModal}
+        onClose={() => {
+          setShowProfileModal(false);
+          setShowUserMenu(false);
+        }}
+      />
+
+      {/* Logout Modal */}
+      <LogoutModal
+        isOpen={showLogoutModal}
+        onClose={() => setShowLogoutModal(false)}
+        onConfirm={confirmLogout}
+      />
     </div>
   );
 };
