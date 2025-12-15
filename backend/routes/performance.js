@@ -107,10 +107,14 @@ router.get('/overall', getCurrentUser, async (req, res) => {
   }
 });
 
-// Make rankings public for debugging
-router.get('/rankings', async (req, res) => {
+// Get agent rankings
+router.get('/rankings', getCurrentUser, async (req, res) => {
   try {
-    console.log('Rankings endpoint hit');
+    // Only admins can access rankings
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Access denied. Admin only.' });
+    }
+
     const rankings = await getAgentRankings();
     res.json(rankings);
   } catch (error) {

@@ -16,7 +16,6 @@ import { reportsRoutes } from './routes/reports.js';
 import { salesRoutes } from './routes/sales.js';
 import { stockRoutes } from './routes/stock.js';
 import { notificationRoutes } from './routes/notifications.js';
-import { uploadRoutes } from './routes/upload.js';
 import { testEmailConfig } from './services/emailService.js';
 
 
@@ -45,9 +44,6 @@ app.use(express.urlencoded({ extended: true }));
 // Static files (if needed for public assets)
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Serve uploaded files
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
 // MongoDB connection
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/crm_system', {
   useNewUrlParser: true,
@@ -67,89 +63,29 @@ app.use('/api/reports', reportsRoutes);
 app.use('/api/sales', salesRoutes);
 app.use('/api/stock', stockRoutes);
 app.use('/api/notifications', notificationRoutes);
-app.use('/api/upload', uploadRoutes);
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development',
-    mongoConnected: mongoose.connection.readyState === 1
-  });
-});
 
-// Test endpoint for sales
-app.get('/api/sales/test', (req, res) => {
-  res.json({
-    message: 'Sales API is working',
-    timestamp: new Date().toISOString()
-  });
-});
+// Serve frontend static files
+app.use(express.static(path.join(__dirname, '../frontend/dist')));
 
-// Serve frontend static files (only in development/local)
-if (process.env.NODE_ENV !== 'production') {
-  app.use(express.static(path.join(__dirname, '../frontend/dist')));
-}
-
-// Root route and SPA fallback - serve index.html for all non-API routes (must be before error handler)
+// SPA fallback - serve index.html for all non-API routes
 app.get('*', (req, res, next) => {
   // Skip API routes
   if (req.path.startsWith('/api/')) {
     return next();
   }
   
-  // In production (Render), frontend is on Vercel, so return API info
-  if (process.env.NODE_ENV === 'production') {
-    return res.json({
-      success: true,
-      message: 'CRM-DBS Backend API',
-      version: '1.0.0',
-      endpoints: {
-        health: '/health',
-        api: '/api',
-        docs: 'See API documentation'
-      },
-      frontend: 'Frontend is deployed separately on Vercel'
-    });
-  }
-  
-  // In development, try to serve React app's index.html
+  // Serve React app's index.html for all other routes
   const indexPath = path.join(__dirname, '../frontend/dist/index.html');
   res.sendFile(indexPath, (err) => {
     if (err) {
       console.error('Error serving index.html:', err);
-      // If index.html doesn't exist, return API info
-      res.json({
-        success: true,
-        message: 'CRM-DBS Backend API',
-        version: '1.0.0',
-        endpoints: {
-          health: '/health',
-          api: '/api'
-        },
-        note: 'Frontend not found. Run "npm run build" in frontend directory for local development.'
+      // If index.html doesn't exist, return a simple response
+      res.status(404).json({
+        message: 'Frontend not built. Please run "npm run build" in the frontend directory.',
+        path: req.path
       });
     }
-  });
-});
-
-// Global error handler - MUST be last (logs all errors to console for debugging)
-app.use((err, req, res, next) => {
-  console.error('🔴 GLOBAL ERROR HANDLER CAUGHT:', {
-    timestamp: new Date().toISOString(),
-    method: req.method,
-    path: req.path,
-    error: err.message,
-    stack: err.stack,
-    body: req.body
-  });
-  
-  res.status(err.status || 500).json({
-    success: false,
-    error: 'Internal server error',
-    message: err.message,
-    timestamp: new Date().toISOString()
   });
 });
 
@@ -162,7 +98,7 @@ const createDefaultAdmin = async () => {
     if (!adminExists) {
       await User.default.create({
         name: 'System Administrator',
-        email: 'admin@crm.com',
+        email: 'xtreative@crm.com',
         password: 'admin123',
         role: 'admin',
         isFirstLogin: false
@@ -242,11 +178,11 @@ app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Login URL: http://localhost:${PORT}`);
 
-  // Email configuration test disabled due to timeout issues
-  // const emailTest = await testEmailConfig();
-  // if (emailTest) {
-  // } else {
-  // }
+  // Test email configuration
+  const emailTest = await testEmailConfig();
+  if (emailTest) {
+  } else {
+  }
 
   await createDefaultAdmin();
 

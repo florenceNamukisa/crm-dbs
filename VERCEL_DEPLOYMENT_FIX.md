@@ -180,3 +180,5 @@ After following these steps:
 - ✅ Profile and logout modals work
 - ✅ Responsive design works
 
+
+

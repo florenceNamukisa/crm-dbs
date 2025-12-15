@@ -13,6 +13,7 @@ const Clients = lazy(() => import('./pages/agent/Clients'));
 const Deals = lazy(() => import('./pages/agent/Deals'));
 const Schedules = lazy(() => import('./pages/agent/Schedules'));
 const Sales = lazy(() => import('./pages/agent/Sales'));
+const SalesManagement = lazy(() => import('./pages/agent/SalesManagement'));
 const UserManagement = lazy(() => import('./pages/admin/UserManagement'));
 const Reports = lazy(() => import('./pages/admin/Reports'));
 const Settings = lazy(() => import('./pages/admin/Settings'));
@@ -21,7 +22,7 @@ const ChangePassword = lazy(() => import('./pages/ChangePassword'));
 // Minimal loading component
 const PageLoader = () => (
   <div className="flex items-center justify-center min-h-screen">
-    <p className="text-gray-600">Loading...</p>
+    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
   </div>
 );
 
@@ -120,7 +121,7 @@ function App() {
                 } />
                 <Route path="/agent/sales" element={
                   <ProtectedRoute allowedRoles={['agent']}>
-                    <Sales />
+                    <SalesManagement />
                   </ProtectedRoute>
                 } />
                 

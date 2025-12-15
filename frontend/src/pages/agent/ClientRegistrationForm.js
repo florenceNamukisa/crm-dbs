@@ -834,7 +834,10 @@ const ClientRegistrationForm = ({ onClose, onSuccess }) => {
                   className="bg-orange-500 text-white px-6 py-3 rounded-lg hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   {loading ? (
-                    <span>Processing...</span>
+                    <div className="flex items-center space-x-2">
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      <span>Processing...</span>
+                    </div>
                   ) : currentStep === 3 ? (
                     'Register Client'
                   ) : (

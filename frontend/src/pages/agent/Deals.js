@@ -37,7 +37,7 @@ const Deals = () => {
   const [deals, setDeals] = useState([]);
   const [clients, setClients] = useState([]);
   const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [view, setView] = useState('table');
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -51,16 +51,49 @@ const Deals = () => {
   // Filter deals for pipeline view (exclude won/lost)
   const pipelineDeals = deals.filter(deal => deal.stage !== 'won' && deal.stage !== 'lost');
 
-  // Determine which deals to display based on filters
-  // If no stage filter (All Stages), show all deals
-  // If specific stage filter, show deals matching that stage
-  const displayDeals = deals;
+  // Determine which deals to display in table based on filters
+  // Apply search, stage, and value range filters ONLY to table display
+  const displayDeals = deals.filter(deal => {
+    // Search filter
+    if (filters.search) {
+      const searchLower = filters.search.toLowerCase();
+      const matchesSearch = 
+        deal.title?.toLowerCase().includes(searchLower) ||
+        deal.description?.toLowerCase().includes(searchLower) ||
+        deal.client?.name?.toLowerCase().includes(searchLower) ||
+        deal.client?.companyName?.toLowerCase().includes(searchLower);
+      if (!matchesSearch) return false;
+    }
+
+    // Stage filter
+    if (filters.stage && deal.stage !== filters.stage) {
+      return false;
+    }
+
+    // Value range filter
+    if (filters.minValue && deal.value < Number(filters.minValue)) {
+      return false;
+    }
+    if (filters.maxValue && deal.value > Number(filters.maxValue)) {
+      return false;
+    }
+
+    return true;
+  });
 
 
+  // Load all deals on component mount (without filter params sent to API)
   useEffect(() => {
     loadDeals();
-    loadStats();
-  }, [filters]);
+  }, [user]);
+
+  // Reload stats when deals change
+  useEffect(() => {
+    if (deals.length > 0) {
+      // Stats are calculated from deals locally, no need to call API
+      // But refresh if needed for sync
+    }
+  }, [deals]);
 
   // Load clients when opening the create modal so dropdown has data
   useEffect(() => {
@@ -71,26 +104,21 @@ const Deals = () => {
 
   const loadDeals = async () => {
     try {
-      setLoading(true);
       setError(null);
       
+      // Fetch ALL deals for stats calculation (no filter params to API)
       const params = {
-        agentId: user.role === 'agent' ? (user?._id || user?.id) : undefined,
-        search: filters.search,
-        stage: filters.stage,
-        minValue: filters.minValue,
-        maxValue: filters.maxValue
+        agentId: user.role === 'agent' ? (user?._id || user?.id) : undefined
+        // Don't send filter params to API - filters are applied client-side only
       };
 
       const response = await dealsAPI.getAll(params);
-      setDeals(response.data?.deals || response.data || []);
+      const fetchedDeals = response.data?.deals || response.data || [];
+      setDeals(fetchedDeals);
     } catch (err) {
       console.error('Error fetching deals:', err);
       setError('Failed to load deals');
-      setDeals([]);
       toast.error('Failed to load deals');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -120,8 +148,7 @@ const Deals = () => {
       await dealsAPI.create(dealData);
       setShowCreateModal(false);
       toast.success('Deal created successfully');
-      loadDeals();
-      loadStats();
+      loadDeals(); // Refresh deals after creating
     } catch (err) {
       console.error('Error creating deal:', err);
       const message = err.response?.data?.message || err.message || 'Failed to create deal';
@@ -144,7 +171,6 @@ const Deals = () => {
 
       // Refresh data from server to ensure consistency
       loadDeals();
-      loadStats();
     } catch (err) {
       console.error('Error updating deal:', err);
       toast.error('Failed to update deal');
@@ -158,8 +184,7 @@ const Deals = () => {
       try {
         await dealsAPI.delete(dealId);
         toast.success('Deal deleted successfully');
-        loadDeals();
-        loadStats();
+        loadDeals(); // Refresh deals after deleting
       } catch (err) {
         console.error('Error deleting deal:', err);
         toast.error('Failed to delete deal');
@@ -169,10 +194,11 @@ const Deals = () => {
 
   // Calculate stats from deals if API stats are not available
   const calculatedStats = React.useMemo(() => {
-    // Use all deals for stats calculation - cards show overall stats, not filtered
+    // Use ALL deals for stats calculation - cards show overall stats, not filtered
     const dealsForStats = deals;
 
-    if (stats && dealsForStats.length > 0) {
+    // Use API stats if available and complete, otherwise calculate from deals
+    if (stats && stats.totalStats) {
       return stats;
     }
 
@@ -188,51 +214,68 @@ const Deals = () => {
     let totalValue = 0;
     let wonDealsCount = 0;
     let wonValue = 0;
+    let lostDealsCount = 0;
     let lostValue = 0;
     let pipelineCount = 0;
+    let totalDeals = 0;
 
     dealsForStats.forEach(deal => {
+      totalDeals++;
+      const dealValue = deal.value || 0;
+      
+      // Find and update stage stats
       const stageIndex = stageStats.findIndex(s => s._id === deal.stage);
       if (stageIndex !== -1) {
         stageStats[stageIndex].count++;
-        stageStats[stageIndex].totalValue += deal.value || 0;
-        stageStats[stageIndex].avgProbability = Math.round(
-          stageStats[stageIndex].totalValue / stageStats[stageIndex].count
-        );
+        stageStats[stageIndex].totalValue += dealValue;
       }
 
-      totalValue += deal.value || 0;
+      // Track total value
+      totalValue += dealValue;
+
+      // Count won deals
       if (deal.stage === 'won') {
         wonDealsCount++;
-        wonValue += deal.value || 0;
+        wonValue += dealValue;
       }
-      if (deal.stage === 'lost') lostValue += deal.value || 0;
-      if (deal.stage !== 'won' && deal.stage !== 'lost') pipelineCount++;
+
+      // Count lost deals
+      if (deal.stage === 'lost') {
+        lostDealsCount++;
+        lostValue += dealValue;
+      }
+
+      // Count pipeline deals (not won, not lost)
+      if (deal.stage !== 'won' && deal.stage !== 'lost') {
+        pipelineCount++;
+      }
     });
+
+    // Calculate average probabilities
+    stageStats.forEach(stage => {
+      if (stage.count > 0) {
+        stage.avgProbability = Math.round(stage.totalValue / stage.count);
+      }
+    });
+
+    const winRate = totalDeals > 0 ? parseFloat(((wonDealsCount / totalDeals) * 100).toFixed(1)) : 0;
 
     return {
       stageStats,
       totalStats: {
-        totalDeals: dealsForStats.length,
-        totalValue,
-        wonDealsCount,
-        wonValue,
-        lostValue,
-        pipelineCount,
-        // winRate as percentage with one decimal (won deals / total deals)
-        winRate: dealsForStats.length > 0 ? parseFloat(((wonDealsCount / dealsForStats.length) * 100).toFixed(1)) : 0
+        totalDeals: totalDeals,
+        totalValue: totalValue,
+        wonDealsCount: wonDealsCount,
+        wonValue: wonValue,
+        lostDealsCount: lostDealsCount,
+        lostValue: lostValue,
+        pipelineCount: pipelineCount,
+        winRate: winRate
       }
     };
   }, [stats, deals]);
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <p className="text-gray-500">Loading deals...</p>
-      </div>
-    );
-  }
-
+  // Data loads in background, no blocking UI
   const formatUGX = (val) => `UGX ${Number(val || 0).toLocaleString('en-UG', { maximumFractionDigits: 0 })}`;
 
   return (
@@ -270,7 +313,7 @@ const Deals = () => {
       )}
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -280,6 +323,7 @@ const Deals = () => {
           <p className="text-2xl font-bold text-orange-500">
             {formatUGX(calculatedStats.totalStats?.totalValue || 0)}
           </p>
+          <p className="text-xs text-gray-500 mt-1">All deals</p>
         </motion.div>
         
         <motion.div
@@ -292,7 +336,7 @@ const Deals = () => {
           <p className="text-2xl font-bold text-green-500">
             {calculatedStats.totalStats?.wonDealsCount || 0}
           </p>
-          <p className="text-xs text-gray-500 mt-1">Number of won deals</p>
+          <p className="text-xs text-gray-500 mt-1">{formatUGX(calculatedStats.totalStats?.wonValue || 0)}</p>
         </motion.div>
         
         <motion.div
@@ -307,18 +351,31 @@ const Deals = () => {
           </p>
           <p className="text-xs text-gray-500 mt-1">Active deals</p>
         </motion.div>
-        
+
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
           className="bg-white rounded-xl shadow-sm p-6"
         >
+          <h3 className="text-lg font-semibold text-gray-900">Lost Deals</h3>
+          <p className="text-2xl font-bold text-red-500">
+            {calculatedStats.totalStats?.lostDealsCount || 0}
+          </p>
+          <p className="text-xs text-gray-500 mt-1">{formatUGX(calculatedStats.totalStats?.lostValue || 0)}</p>
+        </motion.div>
+        
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4 }}
+          className="bg-white rounded-xl shadow-sm p-6"
+        >
           <h3 className="text-lg font-semibold text-gray-900">Win Rate</h3>
           <p className="text-2xl font-bold text-purple-500">
             {calculatedStats?.totalStats?.winRate || 0}%
           </p>
-          <p className="text-xs text-gray-500 mt-1">Won deals / Total deals</p>
+          <p className="text-xs text-gray-500 mt-1">Won / Total</p>
         </motion.div>
       </div>
 
@@ -412,10 +469,20 @@ const Deals = () => {
           {displayDeals.length === 0 ? (
             <div className="text-center py-12">
               <div className="text-gray-500 text-lg mb-2">
-                {filters.stage ? `No ${filters.stage} deals found` : deals.length === 0 ? 'No deals found' : 'No deals in pipeline'}
+                {deals.length === 0 
+                  ? 'No deals found' 
+                  : (filters.search || filters.stage || filters.minValue || filters.maxValue)
+                    ? 'No deals match your filters'
+                    : 'No active deals in pipeline'
+                }
               </div>
               <p className="text-gray-400 text-sm">
-                {filters.stage ? `No deals match the "${filters.stage}" filter` : deals.length === 0 ? 'Create your first deal to get started' : 'All deals are either won or lost'}
+                {deals.length === 0 
+                  ? 'Create your first deal to get started'
+                  : (filters.search || filters.stage || filters.minValue || filters.maxValue)
+                    ? 'Try adjusting your filters'
+                    : 'All deals are either won or lost'
+                }
               </p>
               {(filters.search || filters.stage || filters.minValue || filters.maxValue) && (
                 <button
@@ -429,10 +496,6 @@ const Deals = () => {
           ) : (
             <>
               <DealsTableView deals={displayDeals} onUpdateStage={handleUpdateDealStage} onDeleteDeal={handleDeleteDeal} formatUGX={formatUGX} />
-              {/* Charts below the table (actual data) */}
-              <div className="pt-6">
-                <DealsChartsView stats={calculatedStats} formatUGX={formatUGX} />
-              </div>
             </>
           )}
         </>
@@ -441,10 +504,20 @@ const Deals = () => {
         displayDeals.length === 0 ? (
           <div className="text-center py-12">
             <div className="text-gray-500 text-lg mb-2">
-              {filters.stage ? `No ${filters.stage} deals found` : deals.length === 0 ? 'No deals found' : 'No deals in pipeline'}
+              {deals.length === 0 
+                ? 'No deals found' 
+                : (filters.search || filters.stage || filters.minValue || filters.maxValue)
+                  ? 'No deals match your filters'
+                  : 'No active deals in pipeline'
+              }
             </div>
             <p className="text-gray-400 text-sm">
-              {filters.stage ? `No deals match the "${filters.stage}" filter` : deals.length === 0 ? 'Create your first deal to get started' : 'All deals are either won or lost'}
+              {deals.length === 0 
+                ? 'Create your first deal to get started'
+                : (filters.search || filters.stage || filters.minValue || filters.maxValue)
+                  ? 'Try adjusting your filters'
+                  : 'All deals are either won or lost'
+              }
             </p>
             {(filters.search || filters.stage || filters.minValue || filters.maxValue) && (
               <button
@@ -577,52 +650,92 @@ const DealsKanbanView = ({ deals, onUpdateStage, formatUGX }) => {
 const PIE_COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff7a45', '#a28fd0', '#f87171'];
 
 const DealsChartsView = ({ stats, formatUGX }) => {
-  const pieData = (stats?.stageStats || []).map(s => ({ name: s._id, value: s.count }));
-  const barData = (stats?.stageStats || []).map(s => ({ stage: s._id, value: s.totalValue || 0 }));
+  if (!stats || !stats.stageStats) {
+    return (
+      <div className="bg-white rounded-xl shadow-sm p-6 text-center text-gray-500">
+        <p>No deal data available</p>
+      </div>
+    );
+  }
+
+  // Filter out stages with no deals
+  const activeStageStats = stats.stageStats.filter(s => s.count > 0);
+  const pieData = activeStageStats.map(s => ({ name: s._id, value: s.count }));
+  const barData = activeStageStats.map(s => ({ stage: s._id, value: s.totalValue || 0 }));
 
   return (
     <div className="bg-white rounded-xl shadow-sm p-6">
-      <h3 className="text-lg font-semibold text-gray-900 mb-4">Deal Statistics</h3>
+      <h3 className="text-lg font-semibold text-gray-900 mb-6">Deal Statistics (All Deals)</h3>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="p-4">
-          <h4 className="text-sm font-medium text-gray-700 mb-2">Win Rate</h4>
+        <div className="p-4 bg-gray-50 rounded-lg">
+          <h4 className="text-sm font-medium text-gray-700 mb-3">Win Rate</h4>
           <div className="text-3xl font-bold text-purple-600">
             {stats?.totalStats?.winRate ?? 0}%
           </div>
-          <div className="text-sm text-gray-600 mt-2">
-            {stats?.totalStats?.wonValue ? `Won: ${formatUGX(stats.totalStats.wonValue)}` : 'No won deals yet'}
+          <div className="text-xs text-gray-600 mt-3 space-y-1">
+            <div>Won: {stats?.totalStats?.wonDealsCount || 0} deals</div>
+            <div>Total: {stats?.totalStats?.totalDeals || 0} deals</div>
           </div>
         </div>
 
-        <div className="p-4">
-          <h4 className="text-sm font-medium text-gray-700 mb-2">Deals by Stage (count)</h4>
-          <div style={{ width: '100%', height: 220 }}>
-            <ResponsiveContainer>
-              <PieChart>
-                <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
-                  {pieData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                  ))}
-                </Pie>
-                <ReTooltip />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
+        <div className="p-4 bg-gray-50 rounded-lg">
+          <h4 className="text-sm font-medium text-gray-700 mb-3">Deals by Stage</h4>
+          {pieData.length > 0 ? (
+            <div style={{ width: '100%', height: 220 }}>
+              <ResponsiveContainer>
+                <PieChart>
+                  <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
+                    {pieData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <ReTooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="text-gray-500 text-sm text-center py-8">No stage data</div>
+          )}
         </div>
 
-        <div className="p-4">
-          <h4 className="text-sm font-medium text-gray-700 mb-2">Total Value by Stage</h4>
-          <div style={{ width: '100%', height: 220 }}>
-            <ResponsiveContainer>
-              <BarChart data={barData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="stage" />
-                <YAxis />
-                <ReTooltip />
-                <Legend />
-                <Bar dataKey="value" fill="#ff7a45" />
-              </BarChart>
-            </ResponsiveContainer>
+        <div className="p-4 bg-gray-50 rounded-lg">
+          <h4 className="text-sm font-medium text-gray-700 mb-3">Total Value by Stage</h4>
+          {barData.length > 0 ? (
+            <div style={{ width: '100%', height: 220 }}>
+              <ResponsiveContainer>
+                <BarChart data={barData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="stage" fontSize={12} />
+                  <YAxis fontSize={12} />
+                  <ReTooltip formatter={(value) => formatUGX(value)} />
+                  <Bar dataKey="value" fill="#ff7a45" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="text-gray-500 text-sm text-center py-8">No value data</div>
+          )}
+        </div>
+      </div>
+
+      {/* Additional stats row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-6 border-t border-gray-200">
+        <div>
+          <div className="text-xs text-gray-600 mb-1">Pipeline Deals</div>
+          <div className="text-2xl font-bold text-blue-600">{stats?.totalStats?.pipelineCount || 0}</div>
+        </div>
+        <div>
+          <div className="text-xs text-gray-600 mb-1">Won Deals Value</div>
+          <div className="text-lg font-bold text-green-600">{formatUGX(stats?.totalStats?.wonValue || 0)}</div>
+        </div>
+        <div>
+          <div className="text-xs text-gray-600 mb-1">Lost Deals Value</div>
+          <div className="text-lg font-bold text-red-600">{formatUGX(stats?.totalStats?.lostValue || 0)}</div>
+        </div>
+        <div>
+          <div className="text-xs text-gray-600 mb-1">Total Pipeline Value</div>
+          <div className="text-lg font-bold text-purple-600">
+            {formatUGX(stats?.totalStats?.totalValue - (stats?.totalStats?.wonValue || 0) - (stats?.totalStats?.lostValue || 0) || 0)}
           </div>
         </div>
       </div>

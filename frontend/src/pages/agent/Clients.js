@@ -37,7 +37,7 @@ import ClientRegistrationForm from './ClientRegistrationForm';
 const Clients = () => {
   const { user } = useAuth();
   const [clients, setClients] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -63,7 +63,6 @@ const Clients = () => {
 
   const loadClients = async () => {
     try {
-      setLoading(true);
       const params = {
         agentId: user.role === 'agent' ? user.id : undefined,
         search: searchTerm,
@@ -87,8 +86,6 @@ const Clients = () => {
       console.error('Failed to load clients:', error);
       toast.error('Failed to load clients');
       setClients([]);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -699,16 +696,6 @@ const Clients = () => {
       </div>
     );
   };
-
-  if (loading && clients.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <p className="mt-4 text-gray-600">Loading clients...</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">

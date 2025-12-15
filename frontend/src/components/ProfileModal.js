@@ -13,7 +13,6 @@ const ProfileModal = ({ isOpen, onClose }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [photoPreview, setPhotoPreview] = useState(null);
   const [uploading, setUploading] = useState(false);
-  const [imageKey, setImageKey] = useState(0);  // Force re-render of image
   const fileInputRef = useRef(null);
 
   if (!isOpen) return null;
@@ -34,74 +33,48 @@ const ProfileModal = ({ isOpen, onClose }) => {
       return;
     }
 
-    // Preview image FIRST (show immediately to user)
+    // Preview image
     const reader = new FileReader();
     reader.onloadend = () => {
       setPhotoPreview(reader.result);
-      console.log('✅ Photo preview set:', reader.result.substring(0, 50) + '...');
     };
     reader.readAsDataURL(file);
 
-    // Then upload in background
+    // Upload photo
     try {
       setUploading(true);
       const formData = new FormData();
       formData.append('file', file);
       
-      console.log('🔼 Uploading file...', file.name);
-      
-      // Upload file to backend
+      // Upload file first
       const uploadResponse = await uploadAPI.uploadFile(formData);
-      console.log('📤 Upload response:', uploadResponse.data);
+      const photoUrl = uploadResponse.data.url || uploadResponse.data.path || uploadResponse.data;
       
-      const photoUrl = uploadResponse.data.url || uploadResponse.data.path;
-      console.log('🖼️ Photo URL from backend:', photoUrl);
-      
-      if (!photoUrl) {
-        throw new Error('No URL returned from upload');
-      }
-      
-      // Update user in database with the photo URL
-      console.log('💾 Saving photo URL to database...');
-      const updateResponse = await usersAPI.update(user._id || user.id, { 
+      // Update user profile with the photo URL
+      await usersAPI.update(user._id || user.id, { 
         profileImage: photoUrl 
       });
-      console.log('✅ Database updated:', updateResponse.data.profileImage);
       
-      // Update local auth context IMMEDIATELY with the URL from backend
-      // This is critical so the UI re-renders with the actual saved URL
-      console.log('📍 Updating auth context with photo URL:', photoUrl);
-      const updatedUserData = {
-        ...user,
-        profileImage: photoUrl,
-        photo: photoUrl  // Backup field for compatibility
-      };
-      updateUser(updatedUserData);
-      console.log('✅ Auth context updated, user.profileImage is now:', updatedUserData.profileImage);
-      
-      // Then refresh from backend to ensure sync
+      // Refresh user data from backend to ensure consistency
       try {
         const meResponse = await authAPI.getMe();
-        console.log('🔄 Fresh user data from backend:', meResponse.data.profileImage);
-        updateUser(meResponse.data);
+        const updatedUserData = meResponse.data;
+        updateUser(updatedUserData);
       } catch (refreshError) {
-        console.warn('⚠️ Could not refresh from backend, using local update:', refreshError.message);
-        // Already updated locally above, so continue
+        // If refresh fails, still update with the photo URL
+        updateUser({ 
+          ...user, 
+          profileImage: photoUrl,
+          photo: photoUrl // Also set photo for backward compatibility
+        });
       }
       
-      // Only clear preview after we have the URL saved
-      // This ensures photo stays visible throughout the process
-      setTimeout(() => {
-        setPhotoPreview(null);
-        setImageKey(prev => prev + 1);  // Force re-render of image element
-        console.log('✅ Preview cleared, now showing saved image from database');
-      }, 500);
+      // Clear preview since we've saved it
+      setPhotoPreview(null);
       
       toast.success('Photo uploaded successfully');
     } catch (error) {
-      console.error('❌ Error uploading photo:', error);
-      console.error('❌ Error response:', error.response?.data);
-      setPhotoPreview(null);  // Clear preview on error
+      console.error('Error uploading photo:', error);
       toast.error(error.response?.data?.message || 'Failed to upload photo');
     } finally {
       setUploading(false);
@@ -141,20 +114,9 @@ const ProfileModal = ({ isOpen, onClose }) => {
               <div className="w-32 h-32 rounded-full bg-orange-100 flex items-center justify-center overflow-hidden border-4 border-orange-500">
                 {photoPreview || user?.profileImage || user?.photo ? (
                   <img
-                    key={imageKey}
                     src={photoPreview || user.profileImage || user.photo}
                     alt={user?.name}
                     className="w-full h-full object-cover"
-                    onError={(e) => {
-                      console.warn('❌ Failed to load image:', e.target.src);
-                      // If image fails to load and we have profileImage, log it
-                      if (user?.profileImage) {
-                        console.log('Image URL that failed:', user.profileImage);
-                      }
-                    }}
-                    onLoad={() => {
-                      console.log('✅ Profile image loaded successfully:', photoPreview || user?.profileImage || user?.photo);
-                    }}
                   />
                 ) : (
                   <User className="w-16 h-16 text-orange-500" />
@@ -165,7 +127,11 @@ const ProfileModal = ({ isOpen, onClose }) => {
                 disabled={uploading}
                 className="absolute bottom-0 right-0 bg-orange-500 text-white p-2 rounded-full hover:bg-orange-600 transition-colors shadow-lg"
               >
-                <Camera className="w-5 h-5" />
+                {uploading ? (
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Camera className="w-5 h-5" />
+                )}
               </button>
               <input
                 ref={fileInputRef}
@@ -269,4 +235,6 @@ const ProfileModal = ({ isOpen, onClose }) => {
 };
 
 export default ProfileModal;
+
+
 

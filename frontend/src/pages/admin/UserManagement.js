@@ -288,6 +288,7 @@ const UserManagement = () => {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
+          <div className="w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
           <p className="mt-4 text-gray-600">Loading users...</p>
         </div>
       </div>
@@ -487,7 +488,10 @@ const UserManagement = () => {
                   disabled={formLoading}
                 >
                   {formLoading ? (
-                    <span>Registering...</span>
+                    <div className="flex items-center justify-center space-x-2">
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      <span>Registering...</span>
+                    </div>
                   ) : (
                     'Register Agent'
                   )}
