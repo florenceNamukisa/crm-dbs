@@ -22,6 +22,9 @@ const createTransporter = async () => {
     const secure = process.env.EMAIL_SECURE === 'true';
 
     const transportConfig = {
+      connectionTimeout: process.env.EMAIL_CONNECTION_TIMEOUT ? Number(process.env.EMAIL_CONNECTION_TIMEOUT) : 10000,
+      greetingTimeout: process.env.EMAIL_GREETING_TIMEOUT ? Number(process.env.EMAIL_GREETING_TIMEOUT) : 10000,
+      socketTimeout: process.env.EMAIL_SOCKET_TIMEOUT ? Number(process.env.EMAIL_SOCKET_TIMEOUT) : 15000,
       auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS

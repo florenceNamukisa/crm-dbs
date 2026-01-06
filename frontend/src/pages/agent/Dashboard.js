@@ -87,6 +87,23 @@ const AgentDashboard = () => {
       const userId = user?._id || user?.id;
       if (!userId) return;
 
+      // Determine date range based on timeFilter
+      const now = new Date();
+      let startDate, endDate = new Date();
+      
+      if (timeFilter === 'daily') {
+        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      } else if (timeFilter === 'weekly') {
+        const dayOfWeek = now.getDay();
+        startDate = new Date(now.getTime() - dayOfWeek * 24 * 60 * 60 * 1000);
+        startDate.setHours(0, 0, 0, 0);
+        endDate = new Date(startDate.getTime() + 7 * 24 * 60 * 60 * 1000);
+      } else if (timeFilter === 'monthly') {
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      }
+
       // Fetch performance, deals stats, clients, sales, and deals in parallel
       const [performanceResponse, dealsStatsResponse, clientsResponse, dealsResponse, salesResponse] = await Promise.all([
         performanceAPI.getAgentPerformance(userId),
@@ -100,27 +117,35 @@ const AgentDashboard = () => {
       const dealsStats = dealsStatsResponse?.data || {};
       const clients = clientsResponse?.data?.clients || clientsResponse?.clients || [];
       const deals = dealsResponse?.data?.deals || dealsResponse?.data || dealsResponse || [];
-      const sales = salesResponse?.data?.sales || [];
+      const allSales = salesResponse?.data?.sales || [];
+
+      // Filter sales by date range
+      const sales = allSales.filter(sale => {
+        const saleDate = new Date(sale.saleDate);
+        return saleDate >= startDate && saleDate < endDate;
+      });
+
+      // Filter deals by date range
+      const filteredDeals = deals.filter(deal => {
+        const dealDate = new Date(deal.closedAt || deal.updatedAt || deal.createdAt || Date.now());
+        return dealDate >= startDate && dealDate < endDate;
+      });
 
       // Get current user rating from user object or performance data
       const rating = user?.performanceScore || perf.overallRating || 0;
       setCurrentUserRating(rating);
 
-      // compute sales by month from sales data (more accurate than deals)
-      const salesByMonth = new Array(12).fill(0);
+      // Calculate totals for filtered period
       let totalSales = 0;
-
       sales.forEach(sale => {
-        const saleDate = new Date(sale.saleDate);
-        const month = saleDate.getMonth();
         const amount = Number(sale.finalAmount) || 0;
-        salesByMonth[month] += amount;
         totalSales += amount;
       });
 
-      // Compute deals won vs lost by month
-      const wonLostByMonth = new Array(12).fill(0).map(() => ({ won: 0, lost: 0 }));
-      deals.forEach(deal => {
+      // Compute deals won vs lost for filtered period
+      let wonCount = 0;
+      let lostCount = 0;
+      filteredDeals.forEach(deal => {
         const isWon = (deal.stage && String(deal.stage).toLowerCase() === 'won') ||
                       (deal.status && String(deal.status).toLowerCase() === 'won') ||
                       deal.isWon === true || deal.won === true;
@@ -128,17 +153,11 @@ const AgentDashboard = () => {
                        (deal.status && String(deal.status).toLowerCase() === 'lost') ||
                        deal.isLost === true;
 
-        if (isWon || isLost) {
-          const date = new Date(deal.closedAt || deal.updatedAt || deal.createdAt || Date.now());
-          const month = date.getMonth();
-
-          if (isWon) {
-            wonLostByMonth[month].won += 1;
-          } else if (isLost) {
-            wonLostByMonth[month].lost += 1;
-          }
-        }
+        if (isWon) wonCount += 1;
+        if (isLost) lostCount += 1;
       });
+
+      const pendingDealsCount = filteredDeals.filter(d => !((d.stage && (String(d.stage).toLowerCase() === 'won' || String(d.stage).toLowerCase() === 'lost')) || (d.status && (String(d.status).toLowerCase() === 'won' || String(d.status).toLowerCase() === 'lost')))).length;
 
       setPerformance(perf);
       // progress: compute as percentage of monthly goal
@@ -146,16 +165,11 @@ const AgentDashboard = () => {
       const progressValue = monthlyGoal > 0 ? Math.min(100, Math.round((totalSales / monthlyGoal) * 100)) : 0;
       setProgress(progressValue);
 
-      // compute counts from the agent-specific deals list for accuracy
-      const wonDeals = deals.filter(d => ((d.stage && String(d.stage).toLowerCase() === 'won') || (d.status && String(d.status).toLowerCase() === 'won') || d.isWon === true || d.won === true));
-      const lostDeals = deals.filter(d => ((d.stage && String(d.stage).toLowerCase() === 'lost') || (d.status && String(d.status).toLowerCase() === 'lost') || d.isLost === true));
-      const pendingDealsCount = deals.filter(d => !((d.stage && (String(d.stage).toLowerCase() === 'won' || String(d.stage).toLowerCase() === 'lost')) || (d.status && (String(d.status).toLowerCase() === 'won' || String(d.status).toLowerCase() === 'lost')))).length;
-
       setStats({
         clientsMet: Array.isArray(clients) ? clients.length : (perf.clientsMet || 0),
-        dealsWon: wonDeals.length || (dealsStats?.totalStats?.wonCount || 0),
-        dealsLost: lostDeals.length || (dealsStats?.totalStats?.lostCount || 0),
-        pendingDeals: pendingDealsCount || (dealsStats?.totalStats?.pendingCount || 0),
+        dealsWon: wonCount,
+        dealsLost: lostCount,
+        pendingDeals: pendingDealsCount,
         scheduledMeetings: perf.scheduledMeetings || 0,
         totalSales: sales.length,
         totalSalesAmount: totalSales,
@@ -164,14 +178,82 @@ const AgentDashboard = () => {
       });
 
       setSalesTotal(totalSales);
-      setMonthlySalesData(salesByMonth.map((value, idx) => ({ month: monthNames[idx], sales: value })));
-      setDealsWonLostData(wonLostByMonth.map((data, idx) => ({
-        month: monthNames[idx],
-        won: data.won,
-        lost: data.lost
-      })));
+      
+      // For monthly view, show all 12 months; for daily/weekly, show period breakdown
+      if (timeFilter === 'monthly') {
+        const salesByMonth = new Array(12).fill(0);
+        allSales.forEach(sale => {
+          const saleDate = new Date(sale.saleDate);
+          const month = saleDate.getMonth();
+          const amount = Number(sale.finalAmount) || 0;
+          salesByMonth[month] += amount;
+        });
+        setMonthlySalesData(salesByMonth.map((value, idx) => ({ month: monthNames[idx], sales: value })));
+        
+        const wonLostByMonth = new Array(12).fill(0).map(() => ({ won: 0, lost: 0 }));
+        deals.forEach(deal => {
+          const isWon = (deal.stage && String(deal.stage).toLowerCase() === 'won') ||
+                        (deal.status && String(deal.status).toLowerCase() === 'won') ||
+                        deal.isWon === true || deal.won === true;
+          const isLost = (deal.stage && String(deal.stage).toLowerCase() === 'lost') ||
+                         (deal.status && String(deal.status).toLowerCase() === 'lost') ||
+                         deal.isLost === true;
+
+          if (isWon || isLost) {
+            const date = new Date(deal.closedAt || deal.updatedAt || deal.createdAt || Date.now());
+            const month = date.getMonth();
+
+            if (isWon) wonLostByMonth[month].won += 1;
+            if (isLost) wonLostByMonth[month].lost += 1;
+          }
+        });
+        setDealsWonLostData(wonLostByMonth.map((data, idx) => ({ month: monthNames[idx], won: data.won, lost: data.lost })));
+      } else if (timeFilter === 'daily') {
+        // Show hourly breakdown for daily view
+        const salesByHour = new Array(24).fill(0);
+        sales.forEach(sale => {
+          const saleDate = new Date(sale.saleDate);
+          const hour = saleDate.getHours();
+          const amount = Number(sale.finalAmount) || 0;
+          salesByHour[hour] += amount;
+        });
+        setMonthlySalesData(salesByHour.map((value, idx) => ({ month: `${idx}:00`, sales: value })));
+        setDealsWonLostData([{ month: 'Today', won: wonCount, lost: lostCount }]);
+      } else if (timeFilter === 'weekly') {
+        // Show daily breakdown for weekly view
+        const salesByDay = new Array(7).fill(0);
+        const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const wonLostByDay = new Array(7).fill(0).map(() => ({ won: 0, lost: 0 }));
+        
+        sales.forEach(sale => {
+          const saleDate = new Date(sale.saleDate);
+          const dayOfWeek = saleDate.getDay();
+          const amount = Number(sale.finalAmount) || 0;
+          salesByDay[dayOfWeek] += amount;
+        });
+        
+        filteredDeals.forEach(deal => {
+          const isWon = (deal.stage && String(deal.stage).toLowerCase() === 'won') ||
+                        (deal.status && String(deal.status).toLowerCase() === 'won') ||
+                        deal.isWon === true || deal.won === true;
+          const isLost = (deal.stage && String(deal.stage).toLowerCase() === 'lost') ||
+                         (deal.status && String(deal.status).toLowerCase() === 'lost') ||
+                         deal.isLost === true;
+
+          if (isWon || isLost) {
+            const dealDate = new Date(deal.closedAt || deal.updatedAt || deal.createdAt || Date.now());
+            const dayOfWeek = dealDate.getDay();
+            if (isWon) wonLostByDay[dayOfWeek].won += 1;
+            if (isLost) wonLostByDay[dayOfWeek].lost += 1;
+          }
+        });
+        
+        setMonthlySalesData(salesByDay.map((value, idx) => ({ month: dayLabels[idx], sales: value })));
+        setDealsWonLostData(wonLostByDay.map((data, idx) => ({ month: dayLabels[idx], won: data.won, lost: data.lost })));
+      }
 
     } catch (error) {
+      console.error('Error loading dashboard data:', error);
       toast.error('Failed to load dashboard data');
     }
   };
@@ -519,7 +601,7 @@ const AgentDashboard = () => {
               <span className="text-orange-500">→</span>
             </button>
 
-            <button onClick={() => navigate('/sales')} className="w-full flex items-center justify-between p-4 bg-orange-50 rounded-lg hover:bg-orange-100 transition-colors">
+            <button onClick={() => navigate('/agent/sales')} className="w-full flex items-center justify-between p-4 bg-orange-50 rounded-lg hover:bg-orange-100 transition-colors">
               <div className="flex items-center space-x-3">
                 <TrendingUp className="w-5 h-5 text-orange-500" />
                 <span className="font-medium text-gray-900">Sales</span>

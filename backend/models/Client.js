@@ -203,4 +203,11 @@ const clientSchema = new mongoose.Schema({
   timestamps: true
 });
 
+// Add indexes for faster queries
+clientSchema.index({ agent: 1 }); // Fast agent lookups
+clientSchema.index({ email: 1 }); // Fast email lookups
+clientSchema.index({ status: 1 }); // Fast status filtering
+clientSchema.index({ nin: 1 }); // Fast NIN lookups
+clientSchema.index({ createdAt: -1 }); // Fast date-based sorting
+
 export default mongoose.model('Client', clientSchema);

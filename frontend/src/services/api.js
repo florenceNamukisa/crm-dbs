@@ -1,6 +1,26 @@
 import axios from 'axios';
 
+// Simple in-memory cache for API responses
+const cache = new Map();
+const CACHE_DURATION = 30000; // 30 seconds cache
 
+const getCacheKey = (url, params) => {
+  const paramStr = params ? JSON.stringify(params) : '';
+  return `${url}:${paramStr}`;
+};
+
+const getFromCache = (key) => {
+  const cached = cache.get(key);
+  if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+    return cached.data;
+  }
+  cache.delete(key);
+  return null;
+};
+
+const setCache = (key, data) => {
+  cache.set(key, { data, timestamp: Date.now() });
+};
 
 
 const API_URL = process.env.REACT_APP_API_URL || 'https://crm-dbs.onrender.com/api';
@@ -11,6 +31,19 @@ const api = axios.create({
 // Add token to requests
 api.interceptors.request.use(
   (config) => {
+    // Return cached response for GET requests if available
+    if (config.method === 'get') {
+      const cacheKey = getCacheKey(config.url, config.params);
+      const cachedData = getFromCache(cacheKey);
+      if (cachedData) {
+        return Promise.reject({
+          config,
+          response: { data: cachedData },
+          _fromCache: true
+        });
+      }
+    }
+
     const token = localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -20,13 +53,24 @@ api.interceptors.request.use(
     return config;
   },
   (error) => {
+    // Handle cached responses
+    if (error._fromCache) {
+      return Promise.resolve(error.response);
+    }
     return Promise.reject(error);
   }
 );
 
 // Handle token expiration and network errors with improved resilience
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Cache GET request responses
+    if (response.config.method === 'get') {
+      const cacheKey = getCacheKey(response.config.url, response.config.params);
+      setCache(cacheKey, response.data);
+    }
+    return response;
+  },
   (error) => {
     const isAuthError = error.response?.status === 401 || error.response?.status === 403;
     const isNetworkError = error.code === 'ERR_NETWORK' || error.code === 'NETWORK_ERROR' || !error.response;

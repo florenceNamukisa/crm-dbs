@@ -29,7 +29,12 @@ router.get('/', getCurrentUser, async (req, res) => {
       return res.status(403).json({ message: 'Access denied. Admin only.' });
     }
 
-    const users = await User.find().select('-password -otp');
+    // Optimize query: use lean() for faster JSON, sort by createdAt, limit fields
+    const users = await User.find()
+      .select('-password -otp')
+      .lean()
+      .sort({ createdAt: -1 });
+    
     res.json(users);
   } catch (error) {
     console.error('Error fetching users:', error);

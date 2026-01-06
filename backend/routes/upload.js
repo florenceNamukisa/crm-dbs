@@ -1,46 +1,15 @@
 import express from 'express';
-import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import multer from 'multer';
 import { fileURLToPath } from 'url';
 
 const router = express.Router();
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Ensure uploads directory exists
-const uploadsDir = path.join(__dirname, '../uploads');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadsDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
-  }
-});
-
-const fileFilter = (req, file, cb) => {
-  // Allow only image files
-  const allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-  if (allowedMimes.includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(new Error('Only image files are allowed'), false);
-  }
-};
-
-const upload = multer({
-  storage,
-  fileFilter,
-  limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
-});
-
-// Middleware to verify user is logged in
+// Middleware to get current user
 const getCurrentUser = async (req, res, next) => {
   try {
     const token = req.headers.authorization?.split(' ')[1];
@@ -57,86 +26,59 @@ const getCurrentUser = async (req, res, next) => {
   }
 };
 
-// POST - Upload a file
+const uploadDir = path.join(__dirname, '..', 'uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname || '').toLowerCase();
+    const safeExt = ext && ext.length <= 10 ? ext : '';
+    const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+    cb(null, `upload-${unique}${safeExt}`);
+  }
+});
+
+const fileFilter = (req, file, cb) => {
+  if (!file?.mimetype?.startsWith('image/')) {
+    return cb(new Error('Only image uploads are allowed'));
+  }
+  return cb(null, true);
+};
+
+const upload = multer({
+  storage,
+  fileFilter,
+  limits: { fileSize: 5 * 1024 * 1024 }
+});
+
+router.get('/', (req, res) => {
+  res.json({ status: 'ok', route: 'upload' });
+});
+
 router.post('/', getCurrentUser, upload.single('file'), async (req, res) => {
   try {
-    console.log('=== POST /api/upload ===');
-    console.log('User:', req.user?.userId);
-    console.log('File:', req.file);
-
     if (!req.file) {
       return res.status(400).json({ message: 'No file uploaded' });
     }
 
-    // Construct the file URL
-    // Use BACKEND_URL if available (for production), otherwise use relative path with protocol
-    let fileUrl;
-    if (process.env.BACKEND_URL) {
-      // Production: Use full absolute URL from environment
-      fileUrl = `${process.env.BACKEND_URL}/uploads/${req.file.filename}`;
-    } else {
-      // Development: Use request origin to construct full URL
-      const protocol = req.protocol || 'http';
-      const host = req.get('host') || 'localhost:5000';
-      fileUrl = `${protocol}://${host}/uploads/${req.file.filename}`;
-    }
+    const publicPath = `/uploads/${req.file.filename}`;
+    const proto = (req.headers['x-forwarded-proto'] || req.protocol || 'https').toString();
+    const host = req.get('host');
+    const baseUrl = host ? `${proto}://${host}` : '';
 
-    // Also keep relative path for backward compatibility
-    const relativePath = `/uploads/${req.file.filename}`;
-
-    console.log('✅ File uploaded successfully:', fileUrl);
-
-    res.status(201).json({
-      message: 'File uploaded successfully',
-      url: fileUrl,
-      path: relativePath,
+    return res.status(201).json({
       filename: req.file.filename,
-      size: req.file.size,
-      mimetype: req.file.mimetype
+      path: publicPath,
+      url: baseUrl ? `${baseUrl}${publicPath}` : publicPath
     });
   } catch (error) {
-    console.error('❌ Error uploading file:', error);
-    res.status(500).json({
-      message: 'Failed to upload file',
-      error: error.message
-    });
-  }
-});
-
-// DELETE - Delete a file
-router.delete('/:filename', getCurrentUser, async (req, res) => {
-  try {
-    console.log('=== DELETE /api/upload/:filename ===');
-    console.log('User:', req.user?.userId);
-    console.log('Filename:', req.params.filename);
-
-    const filename = req.params.filename;
-    const filePath = path.join(uploadsDir, filename);
-
-    // Security check - prevent directory traversal
-    if (!filePath.startsWith(uploadsDir)) {
-      return res.status(403).json({ message: 'Access denied' });
-    }
-
-    // Check if file exists
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ message: 'File not found' });
-    }
-
-    // Delete the file
-    fs.unlinkSync(filePath);
-    console.log('✅ File deleted successfully:', filename);
-
-    res.json({
-      message: 'File deleted successfully',
-      filename
-    });
-  } catch (error) {
-    console.error('❌ Error deleting file:', error);
-    res.status(500).json({
-      message: 'Failed to delete file',
-      error: error.message
-    });
+    console.error('Upload error:', error);
+    return res.status(500).json({ message: 'Upload failed', error: error.message });
   }
 });
 
