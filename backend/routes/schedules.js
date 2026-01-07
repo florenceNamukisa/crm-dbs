@@ -1,17 +1,27 @@
 import express from 'express';
 import Schedule from '../models/Schedule.js';
 
-// Generate meeting link based on mode
+// Generate pseudo-realistic meeting link based on mode
 const generateMeetingLink = (mode) => {
+  const randomSegment = (length = 10) =>
+    Math.random().toString(36).substring(2, 2 + length);
+
   switch (mode) {
-    case 'zoom':
-      // In a real app, you'd integrate with Zoom API to create a meeting
-      return 'https://zoom.us/j/example-meeting-id';
-    case 'google-meet':
-      // In a real app, you'd use Google Calendar API to create a meeting
-      return 'https://meet.google.com/example-meeting-code';
-    case 'teams':
-      return 'https://teams.microsoft.com/l/meetup-join/example-meeting';
+    case 'zoom': {
+      const meetingId = `${Math.floor(1000000000 + Math.random() * 9000000000)}`;
+      return `https://zoom.us/j/${meetingId}`;
+    }
+    case 'google-meet': {
+      // pattern like xxx-yyyy-zzz
+      const part1 = randomSegment(3);
+      const part2 = randomSegment(4);
+      const part3 = randomSegment(3);
+      return `https://meet.google.com/${part1}-${part2}-${part3}`;
+    }
+    case 'teams': {
+      const id = `${randomSegment(8)}-${randomSegment(4)}-${randomSegment(4)}-${randomSegment(4)}-${randomSegment(12)}`;
+      return `https://teams.microsoft.com/l/meetup-join/${id}`;
+    }
     default:
       return null;
   }
@@ -153,12 +163,28 @@ router.post('/', async (req, res) => {
 
     // Send notification if scheduled
     if (schedule.reminders && schedule.reminders.length > 0) {
-      await sendNotification(schedule, 'created');
+      try {
+        const { sendNotification } = await import('../utils/notifications.js');
+        await sendNotification(schedule, 'created');
+      } catch (notifyError) {
+        console.error('Error sending schedule notification:', notifyError);
+        // Do not fail schedule creation if notification fails
+      }
     }
 
     res.status(201).json(schedule);
   } catch (error) {
     console.error('Error creating schedule:', error);
+
+    // Surface validation errors clearly instead of generic 500
+    if (error.name === 'ValidationError') {
+      const errors = Object.values(error.errors || {}).map((e) => e.message);
+      return res.status(400).json({
+        message: 'Validation failed',
+        errors,
+      });
+    }
+
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
