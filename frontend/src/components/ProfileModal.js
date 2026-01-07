@@ -46,9 +46,25 @@ const ProfileModal = ({ isOpen, onClose }) => {
       const formData = new FormData();
       formData.append('file', file);
       
+      // Log the upload attempt for debugging
+      const API_URL = process.env.REACT_APP_API_URL || 'https://crm-dbs.onrender.com/api';
+      console.log('Uploading photo to:', `${API_URL}/upload`);
+      console.log('File details:', { name: file.name, type: file.type, size: file.size });
+      
       // Upload file first
       const uploadResponse = await uploadAPI.uploadFile(formData);
+      
+      if (!uploadResponse || !uploadResponse.data) {
+        throw new Error('Invalid response from upload server');
+      }
+      
       const photoUrl = uploadResponse.data.url || uploadResponse.data.path || uploadResponse.data;
+      
+      if (!photoUrl) {
+        throw new Error('No photo URL returned from server');
+      }
+      
+      console.log('Photo uploaded successfully, URL:', photoUrl);
       
       // Update user profile with the photo URL
       await usersAPI.update(user._id || user.id, { 
@@ -61,6 +77,7 @@ const ProfileModal = ({ isOpen, onClose }) => {
         const updatedUserData = meResponse.data;
         updateUser(updatedUserData);
       } catch (refreshError) {
+        console.warn('Failed to refresh user data, using local update:', refreshError);
         // If refresh fails, still update with the photo URL
         updateUser({ 
           ...user, 
@@ -75,7 +92,40 @@ const ProfileModal = ({ isOpen, onClose }) => {
       toast.success('Photo uploaded successfully');
     } catch (error) {
       console.error('Error uploading photo:', error);
-      toast.error(error.response?.data?.message || 'Failed to upload photo');
+      
+      // Provide detailed error messages
+      let errorMessage = 'Failed to upload photo';
+      
+      if (error.response) {
+        // Server responded with error status
+        const status = error.response.status;
+        const data = error.response.data;
+        
+        if (status === 404) {
+          errorMessage = 'Upload endpoint not found. Please check if the backend server is running and the API URL is correct.';
+          console.error('404 Error - Check API URL:', process.env.REACT_APP_API_URL || 'https://crm-dbs.onrender.com/api');
+        } else if (status === 401 || status === 403) {
+          errorMessage = 'Authentication failed. Please log in again.';
+        } else if (status === 400) {
+          errorMessage = data?.message || 'Invalid file. Please check file type and size.';
+        } else if (status >= 500) {
+          errorMessage = 'Server error. Please try again later.';
+        } else {
+          errorMessage = data?.message || `Upload failed (${status})`;
+        }
+      } else if (error.request) {
+        // Request was made but no response received
+        errorMessage = 'Network error. Please check your internet connection and ensure the backend server is running.';
+        console.error('Network error - No response received:', error.message);
+      } else {
+        // Something else happened
+        errorMessage = error.message || 'An unexpected error occurred';
+      }
+      
+      toast.error(errorMessage);
+      
+      // Reset preview on error
+      setPhotoPreview(null);
     } finally {
       setUploading(false);
     }
@@ -235,6 +285,10 @@ const ProfileModal = ({ isOpen, onClose }) => {
 };
 
 export default ProfileModal;
+
+
+
+
 
 
 

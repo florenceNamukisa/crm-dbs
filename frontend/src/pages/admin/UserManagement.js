@@ -39,10 +39,42 @@ const UserManagement = () => {
     try {
       setLoading(true);
       const response = await usersAPI.getAll();
-      setUsers(response.data || []);
+      
+      // Handle different response structures
+      let usersData = [];
+      if (Array.isArray(response.data)) {
+        usersData = response.data;
+      } else if (response.data?.users && Array.isArray(response.data.users)) {
+        usersData = response.data.users;
+      } else if (response.data?.data && Array.isArray(response.data.data)) {
+        usersData = response.data.data;
+      }
+      
+      setUsers(usersData);
+      
+      // Only show error if we truly got no data
+      if (usersData.length === 0 && !response.data) {
+        toast.error('No users found');
+      }
     } catch (error) {
       console.error('Failed to load users:', error);
-      toast.error('Failed to load users');
+      
+      // Check if error actually contains data (sometimes API returns data in error)
+      if (error.data && Array.isArray(error.data)) {
+        setUsers(error.data);
+        return;
+      }
+      
+      // Check error response structure
+      if (error.response?.data) {
+        if (Array.isArray(error.response.data)) {
+          setUsers(error.response.data);
+          return;
+        }
+        toast.error(error.response.data.message || 'Failed to load users');
+      } else {
+        toast.error('Failed to load users. Please check your connection.');
+      }
       setUsers([]);
     } finally {
       setLoading(false);
@@ -302,15 +334,26 @@ const UserManagement = () => {
           <h1 className="text-3xl font-bold text-gray-900">User Management</h1>
           <p className="text-gray-600 mt-1">Manage your team members and their access</p>
         </div>
-        {user?.role === 'admin' && (
+        <div className="flex items-center space-x-3">
           <button
-            onClick={() => setShowAddModal(true)}
-            className="bg-orange-500 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-orange-600 transition-colors"
+            onClick={loadUsers}
+            disabled={loading}
+            className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-gray-200 transition-colors disabled:opacity-50"
+            title="Refresh users list"
           >
-            <UserPlus className="w-5 h-5" />
-            <span>Add Agent</span>
+            <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+            <span>Refresh</span>
           </button>
-        )}
+          {user?.role === 'admin' && (
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="bg-orange-500 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-orange-600 transition-colors"
+            >
+              <UserPlus className="w-5 h-5" />
+              <span>Add Agent</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Search Bar */}

@@ -22,6 +22,19 @@ const setCache = (key, data) => {
   cache.set(key, { data, timestamp: Date.now() });
 };
 
+const clearCache = (pattern) => {
+  if (pattern) {
+    // Clear cache entries matching pattern
+    for (const key of cache.keys()) {
+      if (key.includes(pattern)) {
+        cache.delete(key);
+      }
+    }
+  } else {
+    // Clear all cache
+    cache.clear();
+  }
+};
 
 const API_URL = process.env.REACT_APP_API_URL || 'https://crm-dbs.onrender.com/api';
 const api = axios.create({
@@ -31,19 +44,6 @@ const api = axios.create({
 // Add token to requests
 api.interceptors.request.use(
   (config) => {
-    // Return cached response for GET requests if available
-    if (config.method === 'get') {
-      const cacheKey = getCacheKey(config.url, config.params);
-      const cachedData = getFromCache(cacheKey);
-      if (cachedData) {
-        return Promise.reject({
-          config,
-          response: { data: cachedData },
-          _fromCache: true
-        });
-      }
-    }
-
     const token = localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -53,10 +53,6 @@ api.interceptors.request.use(
     return config;
   },
   (error) => {
-    // Handle cached responses
-    if (error._fromCache) {
-      return Promise.resolve(error.response);
-    }
     return Promise.reject(error);
   }
 );
@@ -65,9 +61,8 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => {
     // Cache GET request responses
-    if (response.config.method === 'get') {
-      const cacheKey = getCacheKey(response.config.url, response.config.params);
-      setCache(cacheKey, response.data);
+    if (response.config.method === 'get' && response.config._cacheKey) {
+      setCache(response.config._cacheKey, response.data);
     }
     return response;
   },
@@ -148,10 +143,39 @@ export const authAPI = {
 
 // Users API
 export const usersAPI = {
-  getAll: () => api.get('/users'),
-  registerAgent: (userData) => api.post('/users', userData),
-  update: (id, userData) => api.put(`/users/${id}`, userData),
-  delete: (id) => api.delete(`/users/${id}`),
+  getAll: async () => {
+    // Check cache first for fast loading
+    const cacheKey = getCacheKey('/users');
+    const cachedData = getFromCache(cacheKey);
+    if (cachedData) {
+      // Return cached data immediately, but still fetch in background for freshness
+      setTimeout(() => {
+        api.get('/users').then(response => {
+          setCache(cacheKey, response.data);
+        }).catch(() => {
+          // Ignore background fetch errors
+        });
+      }, 0);
+      return Promise.resolve({ data: cachedData, _fromCache: true });
+    }
+    
+    // No cache, fetch from API
+    const response = await api.get('/users');
+    setCache(cacheKey, response.data);
+    return response;
+  },
+  registerAgent: async (userData) => {
+    clearCache('/users'); // Clear cache when user is added
+    return api.post('/users', userData);
+  },
+  update: async (id, userData) => {
+    clearCache('/users'); // Clear cache when user is updated
+    return api.put(`/users/${id}`, userData);
+  },
+  delete: async (id) => {
+    clearCache('/users'); // Clear cache when user is deleted
+    return api.delete(`/users/${id}`);
+  },
   resendOTP: (id) => api.post(`/users/${id}/resend-otp`),
   getById: (id) => api.get(`/users/${id}`),
 };
@@ -248,11 +272,13 @@ export const stockAPI = {
 
 // File Upload API
 export const uploadAPI = {
-  uploadFile: (formData) => api.post('/upload', formData, {
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
-  }),
+  uploadFile: (formData) => {
+    // Don't set Content-Type header - let axios set it automatically with boundary
+    // Setting it manually can cause issues with multipart/form-data
+    return api.post('/upload', formData, {
+      timeout: 30000, // 30 second timeout for file uploads
+    });
+  },
   deleteFile: (fileId) => api.delete(`/upload/${fileId}`),
 };
 

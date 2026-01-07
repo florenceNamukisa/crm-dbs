@@ -60,7 +60,35 @@ router.get('/', (req, res) => {
   res.json({ status: 'ok', route: 'upload' });
 });
 
-router.post('/', getCurrentUser, upload.single('file'), async (req, res) => {
+// Error handling middleware for multer errors
+const handleMulterError = (err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({ message: 'File size exceeds 5MB limit' });
+    }
+    if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+      return res.status(400).json({ message: 'Unexpected file field' });
+    }
+    return res.status(400).json({ message: 'File upload error', error: err.message });
+  }
+  if (err) {
+    // Handle fileFilter errors
+    if (err.message === 'Only image uploads are allowed') {
+      return res.status(400).json({ message: err.message });
+    }
+    return res.status(400).json({ message: 'Upload error', error: err.message });
+  }
+  next();
+};
+
+router.post('/', getCurrentUser, (req, res, next) => {
+  upload.single('file')(req, res, (err) => {
+    if (err) {
+      return handleMulterError(err, req, res, next);
+    }
+    next();
+  });
+}, async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ message: 'No file uploaded' });
@@ -70,6 +98,13 @@ router.post('/', getCurrentUser, upload.single('file'), async (req, res) => {
     const proto = (req.headers['x-forwarded-proto'] || req.protocol || 'https').toString();
     const host = req.get('host');
     const baseUrl = host ? `${proto}://${host}` : '';
+
+    console.log('File uploaded successfully:', {
+      filename: req.file.filename,
+      size: req.file.size,
+      mimetype: req.file.mimetype,
+      uploadedBy: req.user?.id || req.user?.userId
+    });
 
     return res.status(201).json({
       filename: req.file.filename,
