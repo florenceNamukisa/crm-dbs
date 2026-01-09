@@ -1,5 +1,6 @@
 // routes/notifications.js
 import express from 'express';
+import mongoose from 'mongoose';
 import Notification from '../models/Notification.js';
 
 const router = express.Router();
@@ -27,7 +28,9 @@ router.get('/', getCurrentUser, async (req, res) => {
     const { page = 1, limit = 20, isRead, type } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
-    let query = { recipient: req.user.userId };
+    // Convert userId to ObjectId for proper MongoDB matching
+    const recipientId = new mongoose.Types.ObjectId(req.user.userId);
+    let query = { recipient: recipientId };
 
     if (isRead !== undefined) {
       query.isRead = isRead === 'true';
@@ -38,8 +41,7 @@ router.get('/', getCurrentUser, async (req, res) => {
     }
 
     const notifications = await Notification.find(query)
-      .populate('actor', 'name email avatar')
-      .populate('entityId', 'name title')
+      .populate('actor', 'name email')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
@@ -57,6 +59,7 @@ router.get('/', getCurrentUser, async (req, res) => {
       }
     });
   } catch (error) {
+    console.error('Error fetching notifications:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
@@ -64,13 +67,15 @@ router.get('/', getCurrentUser, async (req, res) => {
 // Get unread notification count
 router.get('/unread-count', getCurrentUser, async (req, res) => {
   try {
+    const recipientId = new mongoose.Types.ObjectId(req.user.userId);
     const count = await Notification.countDocuments({
-      recipient: req.user.userId,
+      recipient: recipientId,
       isRead: false
     });
 
     res.json({ count });
   } catch (error) {
+    console.error('Error getting unread count:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
@@ -78,8 +83,9 @@ router.get('/unread-count', getCurrentUser, async (req, res) => {
 // Mark notification as read
 router.put('/:id/read', getCurrentUser, async (req, res) => {
   try {
+    const recipientId = new mongoose.Types.ObjectId(req.user.userId);
     const notification = await Notification.findOneAndUpdate(
-      { _id: req.params.id, recipient: req.user.userId },
+      { _id: req.params.id, recipient: recipientId },
       { isRead: true },
       { new: true }
     );
@@ -90,6 +96,7 @@ router.put('/:id/read', getCurrentUser, async (req, res) => {
 
     res.json(notification);
   } catch (error) {
+    console.error('Error marking notification as read:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
@@ -97,13 +104,15 @@ router.put('/:id/read', getCurrentUser, async (req, res) => {
 // Mark all notifications as read
 router.put('/mark-all-read', getCurrentUser, async (req, res) => {
   try {
+    const recipientId = new mongoose.Types.ObjectId(req.user.userId);
     const result = await Notification.updateMany(
-      { recipient: req.user.userId, isRead: false },
+      { recipient: recipientId, isRead: false },
       { isRead: true }
     );
 
     res.json({ message: `${result.modifiedCount} notifications marked as read` });
   } catch (error) {
+    console.error('Error marking all as read:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
@@ -111,9 +120,10 @@ router.put('/mark-all-read', getCurrentUser, async (req, res) => {
 // Delete notification
 router.delete('/:id', getCurrentUser, async (req, res) => {
   try {
+    const recipientId = new mongoose.Types.ObjectId(req.user.userId);
     const notification = await Notification.findOneAndDelete({
       _id: req.params.id,
-      recipient: req.user.userId
+      recipient: recipientId
     });
 
     if (!notification) {
@@ -129,7 +139,7 @@ router.delete('/:id', getCurrentUser, async (req, res) => {
 // Get notification stats
 router.get('/stats/summary', getCurrentUser, async (req, res) => {
   try {
-    const userId = req.user.userId;
+    const userId = new mongoose.Types.ObjectId(req.user.userId);
 
     const stats = await Notification.aggregate([
       { $match: { recipient: userId } },

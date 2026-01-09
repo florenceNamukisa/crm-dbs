@@ -36,7 +36,7 @@ const clearCache = (pattern) => {
   }
 };
 
-const API_URL = process.env.REACT_APP_API_URL || 'https://crm-dbs.onrender.com/api';
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 const api = axios.create({
   baseURL: API_URL,
 });
@@ -158,7 +158,7 @@ export const usersAPI = {
       }, 0);
       return Promise.resolve({ data: cachedData, _fromCache: true });
     }
-    
+
     // No cache, fetch from API
     const response = await api.get('/users');
     setCache(cacheKey, response.data);

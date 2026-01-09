@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { Bell, X, Eye, Trash2, CheckCircle, AlertCircle, User, Target, Calendar, FileText, DollarSign } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Bell, X, Eye, Trash2, CheckCircle, AlertCircle, User, Target, Calendar, FileText, DollarSign, ExternalLink } from 'lucide-react';
 import { notificationsAPI } from '../services/api';
 import toast from 'react-hot-toast';
 
 const NotificationCenter = ({ isOpen, onClose }) => {
+  const navigate = useNavigate();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -13,6 +15,14 @@ const NotificationCenter = ({ isOpen, onClose }) => {
     if (isOpen) {
       loadNotifications();
       loadUnreadCount();
+
+      // Auto-refresh notifications every 30 seconds when panel is open
+      const interval = setInterval(() => {
+        loadNotifications();
+        loadUnreadCount();
+      }, 30000);
+
+      return () => clearInterval(interval);
     }
   }, [isOpen]);
 
@@ -138,6 +148,34 @@ const NotificationCenter = ({ isOpen, onClose }) => {
     return date.toLocaleDateString();
   };
 
+  // Get navigation path based on notification type
+  const getEntityPath = (notification) => {
+    const entityType = notification.entityType?.toLowerCase();
+    const type = notification.type;
+
+    // Map notification types to admin routes
+    if (type?.includes('deal') || entityType === 'deal') {
+      return '/admin/reports'; // Admin can view deals in reports
+    }
+    if (type?.includes('client') || entityType === 'client') {
+      return '/admin/reports'; // Admin can view clients in reports
+    }
+    if (type?.includes('sale') || entityType === 'sale') {
+      return '/admin/reports'; // Admin can view sales in reports
+    }
+    if (type?.includes('meeting') || entityType === 'meeting' || entityType === 'schedule') {
+      return '/admin/reports'; // Admin can view schedules in reports
+    }
+    return '/admin'; // Default to admin dashboard
+  };
+
+  const handleViewDetails = (notification) => {
+    const path = getEntityPath(notification);
+    onClose(); // Close the notification center
+    setSelectedNotification(null);
+    navigate(path);
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -189,9 +227,8 @@ const NotificationCenter = ({ isOpen, onClose }) => {
                 <div
                   key={notification._id}
                   onClick={() => handleNotificationClick(notification)}
-                  className={`p-4 border-l-4 hover:bg-gray-50 transition-colors cursor-pointer ${
-                    getPriorityColor(notification.priority)
-                  } ${!notification.isRead ? 'bg-blue-50' : ''}`}
+                  className={`p-4 border-l-4 hover:bg-gray-50 transition-colors cursor-pointer ${getPriorityColor(notification.priority)
+                    } ${!notification.isRead ? 'bg-blue-50' : ''}`}
                 >
                   <div className="flex items-start space-x-3">
                     <div className="flex-shrink-0">
@@ -307,34 +344,42 @@ const NotificationCenter = ({ isOpen, onClose }) => {
                 <div className="flex items-center space-x-2 text-xs text-gray-500">
                   <span>{new Date(selectedNotification.createdAt).toLocaleString()}</span>
                   <span>•</span>
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                    selectedNotification.priority === 'high' ? 'bg-red-100 text-red-800' :
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${selectedNotification.priority === 'high' ? 'bg-red-100 text-red-800' :
                     selectedNotification.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                    'bg-green-100 text-green-800'
-                  }`}>
+                      'bg-green-100 text-green-800'
+                    }`}>
                     {selectedNotification.priority || 'low'}
                   </span>
                 </div>
               </div>
 
-              <div className="flex space-x-3 mt-6">
+              <div className="flex flex-col space-y-3 mt-6">
                 <button
-                  onClick={() => setSelectedNotification(null)}
-                  className="flex-1 bg-gray-100 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-200 transition-colors"
+                  onClick={() => handleViewDetails(selectedNotification)}
+                  className="w-full flex items-center justify-center space-x-2 bg-orange-500 text-white py-2 px-4 rounded-lg hover:bg-orange-600 transition-colors"
                 >
-                  Close
+                  <ExternalLink className="w-4 h-4" />
+                  <span>View Details</span>
                 </button>
-                {!selectedNotification.isRead && (
+                <div className="flex space-x-3">
                   <button
-                    onClick={() => {
-                      markAsRead(selectedNotification._id);
-                      setSelectedNotification(null);
-                    }}
-                    className="flex-1 bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors"
+                    onClick={() => setSelectedNotification(null)}
+                    className="flex-1 bg-gray-100 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-200 transition-colors"
                   >
-                    Mark as Read
+                    Close
                   </button>
-                )}
+                  {!selectedNotification.isRead && (
+                    <button
+                      onClick={() => {
+                        markAsRead(selectedNotification._id);
+                        setSelectedNotification(null);
+                      }}
+                      className="flex-1 bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors"
+                    >
+                      Mark as Read
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>

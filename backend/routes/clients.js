@@ -186,6 +186,23 @@ router.put('/:id', getCurrentUser, async (req, res) => {
       .populate('agent', 'name email')
       .populate('assignedAgents', 'name email');
 
+    // Create notification for admins
+    try {
+      await createNotification({
+        type: 'client_updated',
+        actorId: req.user.userId,
+        entityType: 'client',
+        entityId: updatedClient._id,
+        metadata: {
+          clientName: updatedClient.name,
+          clientEmail: updatedClient.email,
+          clientPhone: updatedClient.phone
+        }
+      });
+    } catch (notificationError) {
+      console.warn('Failed to create client update notification:', notificationError.message);
+    }
+
     res.json(updatedClient);
   } catch (error) {
     console.error('Error updating client:', error);
