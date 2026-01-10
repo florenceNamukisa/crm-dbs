@@ -29,9 +29,19 @@ const __dirname = path.dirname(__filename);
 const app = express();
 
 // CORS configuration with environment support
-const corsOrigins = process.env.CORS_ORIGINS
+const defaultOrigins = [
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'https://crm-tool-ebon.vercel.app',
+  'https://crm.xtreative.com',
+  'https://www.crm.xtreative.com'
+];
+
+const envOrigins = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(',').map(origin => origin.trim())
-  : ['http://localhost:3000', 'http://localhost:3001', 'https://crm-tool-ebon.vercel.app', 'https://crm.xtreative.com'];
+  : [];
+
+const corsOrigins = [...new Set([...defaultOrigins, ...envOrigins])];
 
 // Middleware
 app.use(cors({
