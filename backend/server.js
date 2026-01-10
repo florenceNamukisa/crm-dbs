@@ -31,7 +31,7 @@ const app = express();
 // CORS configuration with environment support
 const corsOrigins = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(',').map(origin => origin.trim())
-  : ['http://localhost:3000', 'http://localhost:3001', 'https://crm-tool-ebon.vercel.app'];
+  : ['http://localhost:3000', 'http://localhost:3001', 'https://crm-tool-ebon.vercel.app', 'https://crm.xtreative.com'];
 
 // Middleware
 app.use(cors({
