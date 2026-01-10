@@ -29,8 +29,8 @@ const __dirname = path.dirname(__filename);
 const app = express();
 
 // CORS configuration with environment support
-const corsOrigins = process.env.CORS_ORIGINS 
-  ? process.env.CORS_ORIGINS.split(',')
+const corsOrigins = process.env.CORS_ORIGINS
+  ? process.env.CORS_ORIGINS.split(',').map(origin => origin.trim())
   : ['http://localhost:3000', 'http://localhost:3001', 'https://crm-tool-ebon.vercel.app'];
 
 // Middleware
@@ -54,8 +54,8 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/crm_syste
   useNewUrlParser: true,
   useUnifiedTopology: true,
 })
-.then(() => console.log('MongoDB connected successfully'))
-.catch(err => console.error('MongoDB connection error:', err));
+  .then(() => console.log('MongoDB connected successfully'))
+  .catch(err => console.error('MongoDB connection error:', err));
 
 // Routes
 app.use('/api/auth', authRoutes);
