@@ -23,7 +23,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const [user, setUser] = useState(getInitialUser());
-  const [loading, setLoading] = useState(false); // Start as false since we have cached data
+  const [loading, setLoading] = useState(false); // Start as false since we 
   const [token, setToken] = useState(localStorage.getItem('token'));
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
@@ -115,6 +115,7 @@ export const AuthProvider = ({ children }) => {
       setUser(userData);
 
       return {
+        
         success: true,
         user: userData,
         requiresPasswordChange: requiresPasswordChange || false

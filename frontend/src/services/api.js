@@ -138,7 +138,10 @@ export const authAPI = {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     return Promise.resolve();
-  }
+  },
+  forgotPassword: (email) => api.post('/auth/forgot-password', { email }),
+  verifyOTP: (data) => api.post('/auth/verify-otp', data),
+  resetPassword: (data) => api.post('/auth/reset-password', data),
 };
 
 // Users API
@@ -240,7 +243,8 @@ export const reportsAPI = {
   getReportTemplates: () => api.get('/reports/templates'),
   downloadReport: (reportId) => api.get(`/reports/download/${reportId}`, { responseType: 'blob' }),
   share: (payload) => api.post('/reports/share', payload),
-  importFile: (formData) => api.post('/reports/import', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
+  importFile: (formData) => api.post('/reports/import', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  getAnalytics: (params) => api.get('/reports/analytics', { params })
 };
 
 // Sales API

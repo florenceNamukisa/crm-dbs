@@ -190,9 +190,71 @@ const emailTemplates = {
     };
   },
 
+  passwordReset: (templateData) => {
+    const { name, otp } = templateData;
+
+    return {
+      subject: `Password Reset Request - CRM System`,
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
+            .container { max-width: 600px; margin: 0 auto; background: #ffffff; }
+            .header { background: linear-gradient(135deg, #cc2b2b, #ff5252); color: white; padding: 30px; text-align: center; } /* Red for urgency/security */
+            .content { padding: 30px; }
+            .otp-code { 
+              font-family: 'Courier New', monospace; 
+              font-size: 32px; 
+              font-weight: bold; 
+              color: #cc2b2b; 
+              text-align: center; 
+              letter-spacing: 8px;
+              margin: 20px 0;
+              padding: 15px;
+              background: #fff;
+              border: 2px dashed #cc2b2b;
+              border-radius: 8px;
+            }
+            .warning { background: #fff3cd; padding: 15px; border-radius: 6px; margin: 15px 0; border-left: 4px solid #ffc107; }
+            .footer { text-align: center; margin-top: 30px; padding: 20px; color: #666; font-size: 12px; border-top: 1px solid #eee; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>🔐 Password Reset Request</h1>
+            </div>
+            
+            <div class="content">
+              <h2>Hello ${name},</h2>
+              <p>We received a request to reset the password for your CRM account.</p>
+              <p>Use the following One-Time Password (OTP) to reset your password:</p>
+              
+              <div class="otp-code">${otp}</div>
+              
+              <p style="text-align: center;"><em>This code is valid for <strong>15 minutes</strong>.</em></p>
+
+              <div class="warning">
+                <p><strong>⚠️ Security Notice:</strong> If you did not request a password reset, you can safely ignore this email. Your password will remain unchanged.</p>
+              </div>
+
+              <div class="footer">
+                <p>This is an automated security message from your CRM System.</p>
+                <p>© ${new Date().getFullYear()} CRM System. All rights reserved.</p>
+              </div>
+            </div>
+          </div>
+        </body>
+        </html>
+      `
+    };
+  },
+
   agentWelcome: (templateData) => {
     const { name, email, otp } = templateData;
-    
+
     return {
       subject: `Welcome to CRM System, ${name}! - Your Login Credentials`,
       html: `
@@ -294,14 +356,14 @@ export const sendEmail = async (to, templateName, templateData) => {
   try {
     const transporter = await createTransporter();
     const template = emailTemplates[templateName];
-    
+
     if (!template) {
       throw new Error(`Email template '${templateName}' not found`);
     }
 
     // Call the template function with the data
     const emailContent = template(templateData);
-    
+
     const mailOptions = {
       from: process.env.EMAIL_FROM || '"CRM System" <noreply@crm-system.com>',
       to,
@@ -309,7 +371,7 @@ export const sendEmail = async (to, templateName, templateData) => {
       html: emailContent.html
     };
 
-    
+
     const result = await transporter.sendMail(mailOptions);
 
     const previewUrl = nodemailer.getTestMessageUrl(result);
