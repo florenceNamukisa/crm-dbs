@@ -1,17 +1,28 @@
 import express from 'express';
 import Schedule from '../models/Schedule.js';
+import { createNotification } from '../utils/notifications.js';
 
-// Generate meeting link based on mode
+// Generate pseudo-realistic meeting link based on mode
 const generateMeetingLink = (mode) => {
+  const randomSegment = (length = 10) =>
+    Math.random().toString(36).substring(2, 2 + length);
+
   switch (mode) {
-    case 'zoom':
-      // In a real app, you'd integrate with Zoom API to create a meeting
-      return 'https://zoom.us/j/example-meeting-id';
-    case 'google-meet':
-      // In a real app, you'd use Google Calendar API to create a meeting
-      return 'https://meet.google.com/example-meeting-code';
-    case 'teams':
-      return 'https://teams.microsoft.com/l/meetup-join/example-meeting';
+    case 'zoom': {
+      const meetingId = `${Math.floor(1000000000 + Math.random() * 9000000000)}`;
+      return `https://zoom.us/j/${meetingId}`;
+    }
+    case 'google-meet': {
+      // pattern like xxx-yyyy-zzz
+      const part1 = randomSegment(3);
+      const part2 = randomSegment(4);
+      const part3 = randomSegment(3);
+      return `https://meet.google.com/${part1}-${part2}-${part3}`;
+    }
+    case 'teams': {
+      const id = `${randomSegment(8)}-${randomSegment(4)}-${randomSegment(4)}-${randomSegment(4)}-${randomSegment(12)}`;
+      return `https://teams.microsoft.com/l/meetup-join/${id}`;
+    }
     default:
       return null;
   }
@@ -39,17 +50,17 @@ const getCurrentUser = async (req, res, next) => {
 // Get all schedules with filters
 router.get('/', getCurrentUser, async (req, res) => {
   try {
-    const { 
-      agentId, 
-      clientId, 
-      type, 
-      status, 
-      startDate, 
+    const {
+      agentId,
+      clientId,
+      type,
+      status,
+      startDate,
       endDate,
       page = 1,
       limit = 10
     } = req.query;
-    
+
     let query = {};
 
     // Agents can only see their own schedules, admins see all
@@ -62,23 +73,23 @@ router.get('/', getCurrentUser, async (req, res) => {
     if (clientId) query.client = clientId;
     if (type) query.type = type;
     if (status) query.status = status;
-    
+
     // Date range filter
     if (startDate || endDate) {
       query.date = {};
       if (startDate) query.date.$gte = new Date(startDate);
       if (endDate) query.date.$lte = new Date(endDate);
     }
-    
+
     const schedules = await Schedule.find(query)
       .populate('client', 'name email phone company')
       .populate('agent', 'name email role')
       .sort({ date: 1 })
       .limit(limit * 1)
       .skip((page - 1) * limit);
-    
+
     const total = await Schedule.countDocuments(query);
-    
+
     res.json({
       schedules,
       totalPages: Math.ceil(total / limit),
@@ -97,11 +108,11 @@ router.get('/:id', async (req, res) => {
     const schedule = await Schedule.findById(req.params.id)
       .populate('client', 'name email phone company')
       .populate('agent', 'name email role');
-    
+
     if (!schedule) {
       return res.status(404).json({ message: 'Schedule not found' });
     }
-    
+
     res.json(schedule);
   } catch (error) {
     console.error('Error fetching schedule:', error);
@@ -151,14 +162,49 @@ router.post('/', async (req, res) => {
       }
     }
 
-    // Send notification if scheduled
+    // Create notification for admins when a meeting/schedule is created
+    try {
+      await createNotification({
+        type: 'meeting_created',
+        actorId: schedule.agent?._id || schedule.agent,
+        entityType: 'meeting',
+        entityId: schedule._id,
+        metadata: {
+          meetingTitle: schedule.title,
+          date: schedule.date ? new Date(schedule.date).toLocaleDateString() : 'TBD',
+          clientName: schedule.client?.name || 'Unknown Client',
+          meetingType: schedule.type,
+          mode: schedule.mode
+        }
+      });
+    } catch (notifyError) {
+      console.warn('Failed to create schedule notification:', notifyError.message);
+    }
+
+    // Send additional notification for reminders if scheduled
     if (schedule.reminders && schedule.reminders.length > 0) {
-      await sendNotification(schedule, 'created');
+      try {
+        const { sendNotification } = await import('../utils/notifications.js');
+        await sendNotification(schedule, 'created');
+      } catch (notifyError) {
+        console.error('Error sending schedule reminder notification:', notifyError);
+        // Do not fail schedule creation if notification fails
+      }
     }
 
     res.status(201).json(schedule);
   } catch (error) {
     console.error('Error creating schedule:', error);
+
+    // Surface validation errors clearly instead of generic 500
+    if (error.name === 'ValidationError') {
+      const errors = Object.values(error.errors || {}).map((e) => e.message);
+      return res.status(400).json({
+        message: 'Validation failed',
+        errors,
+      });
+    }
+
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
@@ -171,13 +217,13 @@ router.put('/:id', async (req, res) => {
       req.body,
       { new: true, runValidators: true }
     )
-    .populate('client', 'name email phone company')
-    .populate('agent', 'name email role');
-    
+      .populate('client', 'name email phone company')
+      .populate('agent', 'name email role');
+
     if (!schedule) {
       return res.status(404).json({ message: 'Schedule not found' });
     }
-    
+
     res.json(schedule);
   } catch (error) {
     console.error('Error updating schedule:', error);
@@ -189,11 +235,11 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const schedule = await Schedule.findByIdAndDelete(req.params.id);
-    
+
     if (!schedule) {
       return res.status(404).json({ message: 'Schedule not found' });
     }
-    
+
     res.json({ message: 'Schedule deleted successfully' });
   } catch (error) {
     console.error('Error deleting schedule:', error);
@@ -209,13 +255,13 @@ router.patch('/:id/complete', async (req, res) => {
       { status: 'completed' },
       { new: true }
     )
-    .populate('client', 'name email phone company')
-    .populate('agent', 'name email role');
-    
+      .populate('client', 'name email phone company')
+      .populate('agent', 'name email role');
+
     if (!schedule) {
       return res.status(404).json({ message: 'Schedule not found' });
     }
-    
+
     res.json(schedule);
   } catch (error) {
     console.error('Error completing schedule:', error);
@@ -227,14 +273,14 @@ router.patch('/:id/complete', async (req, res) => {
 router.patch('/:id/reschedule', async (req, res) => {
   try {
     const { date, duration, notes } = req.body;
-    
+
     const schedule = await Schedule.findByIdAndUpdate(
       req.params.id,
-      { 
-        date, 
+      {
+        date,
         duration,
         status: 'scheduled',
-        $push: { 
+        $push: {
           history: {
             action: 'rescheduled',
             date: new Date(),
@@ -244,13 +290,13 @@ router.patch('/:id/reschedule', async (req, res) => {
       },
       { new: true }
     )
-    .populate('client', 'name email phone company')
-    .populate('agent', 'name email role');
-    
+      .populate('client', 'name email phone company')
+      .populate('agent', 'name email role');
+
     if (!schedule) {
       return res.status(404).json({ message: 'Schedule not found' });
     }
-    
+
     res.json(schedule);
   } catch (error) {
     console.error('Error rescheduling:', error);
@@ -263,16 +309,16 @@ router.get('/agent/:agentId/upcoming', async (req, res) => {
   try {
     const { agentId } = req.params;
     const today = new Date();
-    
+
     const upcomingSchedules = await Schedule.find({
       agent: agentId,
       date: { $gte: today },
       status: 'scheduled'
     })
-    .populate('client', 'name email phone company')
-    .sort({ date: 1 })
-    .limit(10);
-    
+      .populate('client', 'name email phone company')
+      .sort({ date: 1 })
+      .limit(10);
+
     res.json(upcomingSchedules);
   } catch (error) {
     console.error('Error fetching upcoming schedules:', error);
@@ -331,7 +377,7 @@ router.put('/:id/complete', async (req, res) => {
       },
       { new: true }
     ).populate('client', 'name email')
-     .populate('agent', 'name email');
+      .populate('agent', 'name email');
 
     if (!schedule) {
       return res.status(404).json({ message: 'Schedule not found' });

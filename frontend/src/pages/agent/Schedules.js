@@ -448,32 +448,55 @@ const ScheduleForm = ({ onClose, onSubmit, schedule, isEdit = false, clients = [
 
   const handleSubmit = (e) => {
     e.preventDefault();
+
+    // Auto-generate a meeting link/location for virtual modes if empty
+    let adjustedFormData = { ...formData };
+    if (
+      !adjustedFormData.location.trim() &&
+      adjustedFormData.type === 'meeting' &&
+      ['zoom', 'google-meet', 'teams'].includes(adjustedFormData.mode)
+    ) {
+      adjustedFormData.location = generateDefaultLink(adjustedFormData.mode);
+    }
     
     // Validate required fields
-    if (!formData.title.trim()) {
+    if (!adjustedFormData.title.trim()) {
       toast.error('Please enter a title');
       return;
     }
-    if (!formData.client) {
+    if (!adjustedFormData.client) {
       toast.error('Please select a client');
       return;
     }
-    if (!formData.date) {
+    if (!adjustedFormData.date) {
       toast.error('Please select a date and time');
       return;
     }
-    if (!formData.location.trim()) {
+    if (!adjustedFormData.location.trim()) {
       toast.error('Please enter a location or meeting link');
       return;
     }
     
     // Convert date to ISO string
     const submitData = {
-      ...formData,
-      date: new Date(formData.date).toISOString()
+      ...adjustedFormData,
+      date: new Date(adjustedFormData.date).toISOString()
     };
     
     onSubmit(submitData);
+  };
+
+  const generateDefaultLink = (mode) => {
+    if (mode === 'zoom') {
+      return 'https://zoom.us/j/example-meeting-id';
+    }
+    if (mode === 'google-meet') {
+      return 'https://meet.google.com/example-meeting-code';
+    }
+    if (mode === 'teams') {
+      return 'https://teams.microsoft.com/l/meetup-join/example-meeting';
+    }
+    return '';
   };
 
   const handleReminderToggle = (reminder) => {
@@ -611,7 +634,17 @@ const ScheduleForm = ({ onClose, onSubmit, schedule, isEdit = false, clients = [
               <select
                 required
                 value={formData.mode}
-                onChange={(e) => setFormData(prev => ({ ...prev, mode: e.target.value }))}
+                onChange={(e) => {
+                  const newMode = e.target.value;
+                  setFormData(prev => {
+                    const updated = { ...prev, mode: newMode };
+                    // Auto-fill location/link when switching to virtual modes if empty
+                    if (!prev.location && ['zoom', 'google-meet', 'teams'].includes(newMode)) {
+                      updated.location = generateDefaultLink(newMode);
+                    }
+                    return updated;
+                  });
+                }}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-colors"
               >
                 <option value="in-person">In Person</option>

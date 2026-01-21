@@ -18,6 +18,8 @@ const UserManagement = lazy(() => import('./pages/admin/UserManagement'));
 const Reports = lazy(() => import('./pages/admin/Reports'));
 const Settings = lazy(() => import('./pages/admin/Settings'));
 const ChangePassword = lazy(() => import('./pages/ChangePassword'));
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
+const ResetPassword = lazy(() => import('./pages/ResetPassword'));
 
 // Minimal loading component
 const PageLoader = () => (
@@ -70,7 +72,17 @@ function App() {
                     <Login />
                   </PublicRoute>
                 } />
-                
+                <Route path="/forgot-password" element={
+                  <PublicRoute>
+                    <ForgotPassword />
+                  </PublicRoute>
+                } />
+                <Route path="/reset-password" element={
+                  <PublicRoute>
+                    <ResetPassword />
+                  </PublicRoute>
+                } />
+
                 {/* Admin Routes */}
                 <Route path="/admin" element={
                   <ProtectedRoute allowedRoles={['admin']}>
@@ -92,7 +104,7 @@ function App() {
                     <Settings />
                   </ProtectedRoute>
                 } />
-                
+
                 {/* Agent Routes */}
                 <Route path="/change-password" element={
                   <ProtectedRoute>
@@ -124,13 +136,13 @@ function App() {
                     <SalesManagement />
                   </ProtectedRoute>
                 } />
-                
+
                 <Route path="/" element={<Navigate to="/login" replace />} />
                 <Route path="*" element={<Navigate to="/login" replace />} />
               </Routes>
             </Suspense>
 
-            <Toaster 
+            <Toaster
               position="top-right"
               toastOptions={{
                 duration: 3000,

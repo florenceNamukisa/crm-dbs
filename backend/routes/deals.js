@@ -215,7 +215,8 @@ router.post('/', getCurrentUser, [
 // Update deal
 router.put('/:id', getCurrentUser, async (req, res) => {
   try {
-    const deal = await Deal.findById(req.params.id);
+    const deal = await Deal.findById(req.params.id)
+      .populate('client', 'name');
 
     if (!deal) {
       return res.status(404).json({ message: 'Deal not found' });
@@ -226,6 +227,8 @@ router.put('/:id', getCurrentUser, async (req, res) => {
       return res.status(403).json({ message: 'Access denied' });
     }
 
+    const previousStage = deal.stage;
+
     // If closing the deal, set closedAt date
     if (req.body.stage && ['won', 'lost'].includes(req.body.stage) && !deal.closedAt) {
       req.body.closedAt = new Date();
@@ -235,6 +238,67 @@ router.put('/:id', getCurrentUser, async (req, res) => {
       .populate('client', 'name email phone')
       .populate('agent', 'name email')
       .populate('teamMembers', 'name email');
+
+    // Create notification for admins based on the change
+    try {
+      if (req.body.stage && req.body.stage !== previousStage) {
+        // Stage changed
+        if (req.body.stage === 'won') {
+          await createNotification({
+            type: 'deal_won',
+            actorId: req.user.userId,
+            entityType: 'deal',
+            entityId: deal._id,
+            metadata: {
+              dealTitle: updatedDeal.title,
+              value: updatedDeal.value,
+              clientName: updatedDeal.client?.name || 'Unknown Client',
+              previousStage: previousStage
+            }
+          });
+        } else if (req.body.stage === 'lost') {
+          await createNotification({
+            type: 'deal_lost',
+            actorId: req.user.userId,
+            entityType: 'deal',
+            entityId: deal._id,
+            metadata: {
+              dealTitle: updatedDeal.title,
+              value: updatedDeal.value,
+              clientName: updatedDeal.client?.name || 'Unknown Client',
+              previousStage: previousStage
+            }
+          });
+        } else {
+          await createNotification({
+            type: 'deal_updated',
+            actorId: req.user.userId,
+            entityType: 'deal',
+            entityId: deal._id,
+            metadata: {
+              dealTitle: updatedDeal.title,
+              change: `Stage changed from ${previousStage} to ${req.body.stage}`,
+              clientName: updatedDeal.client?.name || 'Unknown Client'
+            }
+          });
+        }
+      } else {
+        // General update (not stage change)
+        await createNotification({
+          type: 'deal_updated',
+          actorId: req.user.userId,
+          entityType: 'deal',
+          entityId: deal._id,
+          metadata: {
+            dealTitle: updatedDeal.title,
+            change: 'Deal details updated',
+            clientName: updatedDeal.client?.name || 'Unknown Client'
+          }
+        });
+      }
+    } catch (notificationError) {
+      console.warn('Failed to create deal update notification:', notificationError.message);
+    }
 
     res.json(updatedDeal);
   } catch (error) {
@@ -248,7 +312,8 @@ router.patch('/:id/status', getCurrentUser, async (req, res) => {
   try {
     const { status } = req.body;
 
-    const deal = await Deal.findById(req.params.id);
+    const deal = await Deal.findById(req.params.id)
+      .populate('client', 'name');
 
     if (!deal) {
       return res.status(404).json({ message: 'Deal not found' });
@@ -259,6 +324,7 @@ router.patch('/:id/status', getCurrentUser, async (req, res) => {
       return res.status(403).json({ message: 'Access denied' });
     }
 
+    const previousStage = deal.stage;
     const updateData = { stage: status };
 
     // If closing the deal, set closedAt date
@@ -269,6 +335,51 @@ router.patch('/:id/status', getCurrentUser, async (req, res) => {
     const updatedDeal = await Deal.findByIdAndUpdate(req.params.id, updateData, { new: true })
       .populate('client', 'name email phone')
       .populate('agent', 'name email');
+
+    // Create notification for admins
+    try {
+      if (status === 'won') {
+        await createNotification({
+          type: 'deal_won',
+          actorId: req.user.userId,
+          entityType: 'deal',
+          entityId: deal._id,
+          metadata: {
+            dealTitle: updatedDeal.title,
+            value: updatedDeal.value,
+            clientName: updatedDeal.client?.name || 'Unknown Client',
+            previousStage: previousStage
+          }
+        });
+      } else if (status === 'lost') {
+        await createNotification({
+          type: 'deal_lost',
+          actorId: req.user.userId,
+          entityType: 'deal',
+          entityId: deal._id,
+          metadata: {
+            dealTitle: updatedDeal.title,
+            value: updatedDeal.value,
+            clientName: updatedDeal.client?.name || 'Unknown Client',
+            previousStage: previousStage
+          }
+        });
+      } else if (status !== previousStage) {
+        await createNotification({
+          type: 'deal_updated',
+          actorId: req.user.userId,
+          entityType: 'deal',
+          entityId: deal._id,
+          metadata: {
+            dealTitle: updatedDeal.title,
+            change: `Stage changed from ${previousStage} to ${status}`,
+            clientName: updatedDeal.client?.name || 'Unknown Client'
+          }
+        });
+      }
+    } catch (notificationError) {
+      console.warn('Failed to create deal status notification:', notificationError.message);
+    }
 
     res.json(updatedDeal);
   } catch (error) {

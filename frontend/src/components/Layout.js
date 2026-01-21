@@ -36,10 +36,17 @@ const Layout = ({ children }) => {
 
   const isAdmin = user?.role === 'admin';
 
-  // Load unread notifications count for admin
+  // Load unread notifications count for admin with periodic polling
   useEffect(() => {
     if (isAdmin) {
       loadUnreadNotifications();
+
+      // Poll for new notifications every 30 seconds
+      const interval = setInterval(() => {
+        loadUnreadNotifications();
+      }, 30000);
+
+      return () => clearInterval(interval);
     }
   }, [isAdmin]);
 
@@ -55,62 +62,62 @@ const Layout = ({ children }) => {
   };
 
   const adminNavItems = [
-    { 
-      path: '/admin', 
-      icon: Home, 
-      label: 'Dashboard', 
-     
+    {
+      path: '/admin',
+      icon: Home,
+      label: 'Dashboard',
+
     },
-    { 
-      path: '/admin/users', 
-      icon: UserPlus, 
-      label: 'User Management', 
-   
+    {
+      path: '/admin/users',
+      icon: UserPlus,
+      label: 'User Management',
+
     },
-    { 
-      path: '/admin/reports', 
-      icon: PieChart, 
-      label: 'Reports', 
-     
+    {
+      path: '/admin/reports',
+      icon: PieChart,
+      label: 'Reports',
+
     },
-    { 
-      path: '/admin/settings', 
-      icon: Settings, 
-      label: 'Settings', 
-  
+    {
+      path: '/admin/settings',
+      icon: Settings,
+      label: 'Settings',
+
     },
   ];
 
   const agentNavItems = [
-    { 
-      path: '/agent', 
-      icon: Home, 
-      label: 'Dashboard', 
-       
+    {
+      path: '/agent',
+      icon: Home,
+      label: 'Dashboard',
+
     },
-    { 
-      path: '/agent/clients', 
-      icon: Users, 
-      label: 'Clients', 
-    
+    {
+      path: '/agent/clients',
+      icon: Users,
+      label: 'Clients',
+
     },
-    { 
-      path: '/agent/deals', 
-      icon: Target, 
-      label: 'Deals', 
-   
+    {
+      path: '/agent/deals',
+      icon: Target,
+      label: 'Deals',
+
     },
-    { 
-      path: '/agent/sales', 
-      icon: TrendingUp, 
-      label: 'Sales', 
-   
+    {
+      path: '/agent/sales',
+      icon: TrendingUp,
+      label: 'Sales',
+
     },
-    { 
-      path: '/agent/schedules', 
-      icon: Calendar, 
-      label: 'Schedules', 
-     
+    {
+      path: '/agent/schedules',
+      icon: Calendar,
+      label: 'Schedules',
+
     },
   ];
 
@@ -132,17 +139,15 @@ const Layout = ({ children }) => {
       <Link
         to={item.path}
         onClick={onClick}
-        className={`flex items-center space-x-4 px-4 py-3 rounded-xl text-sm font-medium transition-all group ${
-          isActive
+        className={`flex items-center space-x-4 px-4 py-3 rounded-xl text-sm font-medium transition-all group ${isActive
             ? 'bg-orange-700 text-white shadow-md'
             : 'text-white hover:bg-orange-500/90'
-        }`}
+          }`}
       >
-        <div className={`p-2 rounded-lg ${
-          isActive
+        <div className={`p-2 rounded-lg ${isActive
             ? 'bg-orange-800 text-white'
             : 'bg-orange-600/20 text-white'
-        }`}>
+          }`}>
           <Icon className="w-4 h-4" />
         </div>
         <div className="flex-1 min-w-0">
@@ -180,7 +185,7 @@ const Layout = ({ children }) => {
                   key={item.path}
                   item={item}
                   isActive={isActive}
-                  onClick={() => {}}
+                  onClick={() => { }}
                 />
               );
             })}
@@ -195,7 +200,7 @@ const Layout = ({ children }) => {
                 <span className="text-white font-medium capitalize">{user?.status || 'offline'}</span>
               </span>
             </div>
-            
+
             <button
               onClick={handleLogout}
               className="flex items-center space-x-3 w-full px-4 py-3 rounded-lg text-sm font-medium text-white hover:bg-orange-700 transition-colors group"
@@ -226,16 +231,16 @@ const Layout = ({ children }) => {
               </div>
               <div className="flex-1 h-0 overflow-y-auto">
                 {/* Mobile Header */}
-                  <div className="flex items-center h-16 px-6 border-b border-orange-700 bg-orange-600 text-white">
+                <div className="flex items-center h-16 px-6 border-b border-orange-700 bg-orange-600 text-white">
                   <div className="flex items-center space-x-3">
                     <svg className="w-10 h-10" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M125 93L175 43L175 143L125 93Z" fill="white"/>
-                      <path d="M75 93L125 43L125 143L75 93Z" fill="white"/>
-                      <path d="M75 93L25 143L125 143L75 93Z" fill="white"/>
-                      <path d="M125 93L125 43L25 143L125 143Z" fill="white"/>
+                      <path d="M125 93L175 43L175 143L125 93Z" fill="white" />
+                      <path d="M75 93L125 43L125 143L75 93Z" fill="white" />
+                      <path d="M75 93L25 143L125 143L75 93Z" fill="white" />
+                      <path d="M125 93L125 43L25 143L125 143Z" fill="white" />
                     </svg>
                     <div>
-                        <span className="text-xl font-bold text-white">CRM</span>
+                      <span className="text-xl font-bold text-white">CRM</span>
                     </div>
                   </div>
                 </div>
@@ -265,7 +270,7 @@ const Layout = ({ children }) => {
                     <span className="text-white font-medium">Online</span>
                   </span>
                 </div>
-                
+
                 <button
                   onClick={() => {
                     setSidebarOpen(false);
@@ -294,7 +299,7 @@ const Layout = ({ children }) => {
               >
                 <Menu className="w-6 h-6" />
               </button>
-              
+
               <div className="ml-2 sm:ml-4 lg:ml-0">
                 <h1 className="text-lg sm:text-xl lg:text-2xl font-semibold text-gray-900 truncate">
                   {navItems.find(item => item.path === location.pathname)?.label || 'Dashboard'}
@@ -304,7 +309,7 @@ const Layout = ({ children }) => {
                 </p>
               </div>
             </div>
-            
+
             <div className="flex items-center space-x-3 sm:space-x-4">
               {isAdmin && (
                 <button
@@ -320,7 +325,7 @@ const Layout = ({ children }) => {
                   )}
                 </button>
               )}
-              
+
               {/* Profile Photo - Clickable */}
               <div className="relative">
                 <button
@@ -332,10 +337,10 @@ const Layout = ({ children }) => {
                 >
                   <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-orange-500 flex items-center justify-center overflow-hidden border-2 border-orange-500 cursor-pointer hover:border-orange-600 transition-colors">
                     {user?.profileImage || user?.photo ? (
-                      <img 
-                        src={user.profileImage || user.photo} 
-                        alt={user?.name || 'Profile'} 
-                        className="w-full h-full object-cover" 
+                      <img
+                        src={user.profileImage || user.photo}
+                        alt={user?.name || 'Profile'}
+                        className="w-full h-full object-cover"
                       />
                     ) : (
                       <User className="w-5 h-5 sm:w-6 sm:h-6 text-white" />

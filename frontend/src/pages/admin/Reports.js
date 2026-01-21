@@ -1,827 +1,414 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Download, Filter, Calendar, Users, TrendingUp, BarChart3, Star, Share2, ChevronDown, MessageCircle, Mail, Copy } from 'lucide-react';
-import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { dealsAPI, usersAPI, clientsAPI, schedulesAPI, salesAPI } from '../../services/api';
-import api, { reportsAPI } from '../../services/api';
-import { saveAs } from 'file-saver';
+import {
+  Download, Filter, Calendar, Users, TrendingUp, TrendingDown,
+  DollarSign, ShoppingBag, BarChart3, RefreshCw, ChevronDown, ChevronRight,
+  CreditCard, Banknote, Briefcase, CalendarCheck, CheckCircle, XCircle
+} from 'lucide-react';
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  PieChart, Pie, Cell
+} from 'recharts';
+import { usersAPI, reportsAPI } from '../../services/api';
 import toast from 'react-hot-toast';
-
-const PERIODS = ['daily', 'weekly', 'monthly', 'yearly'];
+import { saveAs } from 'file-saver';
 
 const Reports = () => {
-  const [period, setPeriod] = useState('monthly');
+  // Filters
+  const [filters, setFilters] = useState({
+    start: '',
+    end: '',
+    agent: ''
+  });
+
+  // Data State
   const [loading, setLoading] = useState(false);
+  const [reportData, setReportData] = useState(null);
+  const [agentsList, setAgentsList] = useState([]);
+  const [expandedRows, setExpandedRows] = useState({});
 
-  // stats
-  const [totalRevenue, setTotalRevenue] = useState(0);
-  const [totalDeals, setTotalDeals] = useState(0);
-  const [avgConversion, setAvgConversion] = useState(0);
-  const [activeAgents, setActiveAgents] = useState(0);
+  // Helper Date Functions
+  const setPeriod = (period) => {
+    const today = new Date();
+    let start = new Date();
+    let end = new Date();
 
-  // agent data
-  const [agentPerformance, setAgentPerformance] = useState([]);
-  const [dealsData, setDealsData] = useState([]);
-
-  // charts
-  const [revenueByAgent, setRevenueByAgent] = useState([]);
-  const [dealStageDistribution, setDealStageDistribution] = useState([]);
-  const [conversionTrend, setConversionTrend] = useState([]);
-  const [salesSummary, setSalesSummary] = useState({ totalSales: 0, monthly: [] });
-
-  // additional datasets for export/import
-  const [schedulesData, setSchedulesData] = useState([]);
-  const [clientsData, setClientsData] = useState([]);
-  const [agentSchedules, setAgentSchedules] = useState([]);
-
-  // filters
-  const [dateRange, setDateRange] = useState({ start: '', end: '' });
-
-  // helper: compute start/end dates for filters
-  const computeRange = (p) => {
-    const now = new Date();
-    if (p === 'daily') {
-      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
-      const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
-      return { start: start.toISOString(), end: end.toISOString() };
+    if (period === 'thisMonth') {
+      start = new Date(today.getFullYear(), today.getMonth(), 1);
+      end = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    } else if (period === 'lastMonth') {
+      start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+      end = new Date(today.getFullYear(), today.getMonth(), 0);
+    } else if (period === 'thisYear') {
+      start = new Date(today.getFullYear(), 0, 1);
+      end = new Date(today.getFullYear(), 11, 31);
     }
-    if (p === 'weekly') {
-      const start = new Date(now);
-      start.setDate(now.getDate() - 7);
-      return { start: start.toISOString(), end: now.toISOString() };
-    }
-    if (p === 'monthly') {
-      const start = new Date(now.getFullYear(), now.getMonth(), 1);
-      const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
-      return { start: start.toISOString(), end: end.toISOString() };
-    }
-    // yearly
-    const start = new Date(now.getFullYear(), 0, 1);
-    const end = new Date(now.getFullYear(), 11, 31, 23, 59, 59);
-    return { start: start.toISOString(), end: end.toISOString() };
+
+    setFilters(prev => ({
+      ...prev,
+      start: start.toISOString().split('T')[0],
+      end: end.toISOString().split('T')[0]
+    }));
   };
 
-  // Export CSV helper for agentPerformance/table
-  const buildCSVFromAgents = (agents) => {
-    if (!Array.isArray(agents) || agents.length === 0) return '';
-    const headers = ['Agent','Rating','TotalDeals','WonDeals','ConversionRate','ClosedRevenue','ExpectedRevenue'];
-    const rows = agents.map(a => [
-      `"${(a.name || '').replace(/"/g, '""')}"`,
-      a.rating,
-      a.totalDeals,
-      a.wonDeals,
-      a.conversionRate,
-      a.closedRevenue,
-      a.expectedRevenue
-    ].join(','));
-    return headers.join(',') + '\n' + rows.join('\n');
-  };
+  // Load Agents for Filter
+  useEffect(() => {
+    usersAPI.getAll().then(res => {
+      setAgentsList(res.data.filter(u => u.role === 'agent'));
+    }).catch(err => console.error(err));
+  }, []);
 
-  const [showShareModal, setShowShareModal] = useState(false);
-  const [showShareDropdown, setShowShareDropdown] = useState(false);
-  const [shareProvider, setShareProvider] = useState(''); // 'email', 'gmail', 'outlook', 'whatsapp', 'copy'
-  const [shareEmail, setShareEmail] = useState('');
-  const [sharePhone, setSharePhone] = useState('');
-  const [shareSubject, setShareSubject] = useState('CRM Report');
-
-  const handleExport = (type = 'csv') => {
-    // default export the agent performance table
-    const csv = buildCSVFromAgents(agentPerformance || []);
-    if (!csv) {
-      toast.error('No data to export');
-      return;
-    }
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const filename = `crm-report-agents-${period}-${new Date().toISOString().slice(0,10)}.${type === 'excel' ? 'xlsx' : 'csv'}`;
-    saveAs(blob, filename);
-    toast.success('Export started');
-  };
-
-  const handleImportFile = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const target = window.prompt('Import target (deals, clients, schedules)?', 'deals');
-    if (!target) return;
-    const form = new FormData();
-    form.append('file', file);
-    form.append('target', target);
+  // Load Report Data
+  const loadReports = async () => {
+    setLoading(true);
     try {
-      const resp = await reportsAPI.importFile(form);
-      toast.success(`Import completed (${resp.data.createdCount || 0} records)`);
-      // reload data after import
-      loadReportsData();
-    } catch (err) {
-      console.error('Import failed', err);
-      toast.error(err.response?.data?.message || 'Import failed');
-    }
-  };
+      const params = {};
+      if (filters.start) params.start = filters.start;
+      if (filters.end) params.end = filters.end;
+      if (filters.agent) params.agent = filters.agent;
 
-  const handleShare = async (provider = '') => {
-    const csv = buildCSVFromAgents(agentPerformance || []);
-    if (!csv) {
-      toast.error('No data to share');
-      return;
-    }
-
-    try {
-      if (provider === 'whatsapp') {
-        if (!sharePhone.trim()) {
-          toast.error('Please enter a phone number');
-          return;
-        }
-        // WhatsApp sharing via URL
-        const message = encodeURIComponent(`CRM Report: ${shareSubject}\n\n${csv.substring(0, 1000)}...`);
-        const whatsappUrl = `https://wa.me/${sharePhone.replace(/\D/g, '')}?text=${message}`;
-        window.open(whatsappUrl, '_blank');
-        toast.success('Opening WhatsApp...');
-        return;
-      }
-
-      if (provider === 'gmail') {
-        // Gmail sharing via mailto
-        const subject = encodeURIComponent(shareSubject);
-        const body = encodeURIComponent(`CRM Report Data:\n\n${csv}`);
-        const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=&su=${subject}&body=${body}`;
-        window.open(gmailUrl, '_blank');
-        toast.success('Opening Gmail...');
-        return;
-      }
-
-      if (provider === 'copy') {
-        // Copy to clipboard
-        await navigator.clipboard.writeText(csv);
-        toast.success('Report data copied to clipboard');
-        return;
-      }
-
-      // Check if Web Share API is supported for native sharing
-      if (navigator.share && !provider) {
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-        const file = new File([blob], `crm-report-${new Date().toISOString().slice(0, 10)}.csv`, { type: 'text/csv' });
-
-        // Use native Web Share API
-        await navigator.share({
-          title: 'CRM Agent Performance Report',
-          text: `CRM Agent Performance Report - Generated on ${new Date().toLocaleDateString()}`,
-          files: [file]
-        });
-        toast.success('Report shared successfully');
-      } else {
-        // Fallback: show custom modal for email
-        setShareProvider(provider || 'email');
-        setShowShareModal(true);
-        if (!navigator.share) {
-          toast.info('Web Share not supported on this device. Use the form below.');
-        }
-      }
-    } catch (err) {
-      if (err.name === 'AbortError') {
-        // User cancelled the share dialog
-        console.log('Share cancelled by user');
-      } else {
-        console.error('Share failed', err);
-        toast.error('Failed to share report');
-      }
-    }
-  };
-
-  // Calculate expected revenue based on deal stage and probability
-  const calculateExpectedRevenue = (deal) => {
-    if (!deal.value) return 0;
-
-    // Stage probability multipliers (confidence levels)
-    const stageProbability = {
-      'lead': 0.1,           // 10% - just a lead
-      'qualification': 0.25, // 25% - qualified
-      'proposal': 0.5,       // 50% - proposal sent
-      'negotiation': 0.75,   // 75% - actively negotiating
-      'won': 1.0,            // 100% - confirmed won
-      'lost': 0              // 0% - lost
-    };
-
-    const stage = (deal.stage || 'lead').toLowerCase();
-    const stageMult = stageProbability[stage] || 0.1;
-    
-    // Use custom probability if set, otherwise use stage multiplier
-    const dealProbability = (deal.probability || 0) / 100;
-    const finalProbability = dealProbability > 0 ? Math.max(dealProbability, stageMult) : stageMult;
-
-    return Number(deal.value) * finalProbability;
-  };
-
-  // Calculate actual closed revenue (only from won deals)
-  const calculateClosedRevenue = (deal) => {
-    if (!deal.value) return 0;
-    const stage = (deal.stage || 'lead').toLowerCase();
-    return stage === 'won' ? Number(deal.value) : 0;
-  };
-
-  // auto-rate agents based on performance
-  const rateAgent = (agent) => {
-    const won = agent.wonDeals || 0;
-    const total = agent.totalDeals || 1;
-    const successRate = (won / total) * 100;
-    const value = agent.totalValue || 0;
-
-    let rating = 0;
-    if (successRate >= 80 && value >= 100000) rating = 5;
-    else if (successRate >= 70 && value >= 75000) rating = 4;
-    else if (successRate >= 60 && value >= 50000) rating = 3;
-    else if (successRate >= 50 && value >= 25000) rating = 2;
-    else rating = 1;
-
-    return Math.max(1, Math.min(5, rating));
-  };
-
-  const loadReportsData = async () => {
-    try {
-      setLoading(true);
-      const range = computeRange(period);
-
-      // fetch deals and users in parallel
-      const [dealsRes, usersRes] = await Promise.all([
-        dealsAPI.getAll(range).catch(e => ({ data: [] })),
-        usersAPI.getAll().catch(e => ({ data: [] }))
-      ]);
-
-      const deals = dealsRes?.data?.deals || [];
-      const users = usersRes?.data || [];
-      // fetch schedules, clients and sales for report capture
-      const [schedulesRes, clientsRes, salesRes] = await Promise.all([
-        schedulesAPI.getAll(range).catch(e => ({ schedules: [] })),
-        clientsAPI.getAll(range).catch(e => ({ clients: [] })),
-        salesAPI.getStats(range).catch(e => ({ data: { totalSales: 0, monthly: [] } }))
-      ]);
-      // Normalize schedules response into an array regardless of response shape
-      let schedules = [];
-      if (Array.isArray(schedulesRes)) schedules = schedulesRes;
-      else if (Array.isArray(schedulesRes?.schedules)) schedules = schedulesRes.schedules;
-      else if (Array.isArray(schedulesRes?.data)) schedules = schedulesRes.data;
-      else if (Array.isArray(schedulesRes?.data?.schedules)) schedules = schedulesRes.data.schedules;
-
-      // Normalize clients response into an array regardless of response shape
-      let clients = [];
-      if (Array.isArray(clientsRes)) clients = clientsRes;
-      else if (Array.isArray(clientsRes?.clients)) clients = clientsRes.clients;
-      else if (Array.isArray(clientsRes?.data)) clients = clientsRes.data;
-      else if (Array.isArray(clientsRes?.data?.clients)) clients = clientsRes.data.clients;
-      const sales = salesRes?.data || salesRes || { totalSales: 0, monthly: [] };
-      setSchedulesData(schedules || []);
-      setClientsData(clients || []);
-      setSalesSummary({ totalSales: sales.totalSales || 0, monthly: sales.monthly || [] });
-      const agents = Array.isArray(users) ? users.filter(u => u.role === 'agent') : [];
-
-      setDealsData(deals);
-
-      // build per-agent schedule summary
-      try {
-        const agentMap = {};
-        (schedules || []).forEach(s => {
-          const agent = s.agent || {};
-          const agentId = agent._id || agent.id || (typeof s.agent === 'string' ? s.agent : 'unknown');
-          if (!agentMap[agentId]) {
-            agentMap[agentId] = { id: agentId, name: agent.name || 'Unknown', total: 0, attended: 0, missed: 0, upcoming: 0 };
-          }
-          agentMap[agentId].total += 1;
-          if (s.status === 'completed') agentMap[agentId].attended += 1;
-          else if (s.status === 'missed') agentMap[agentId].missed += 1;
-          try {
-            const dt = s.date ? new Date(s.date) : null;
-            if (dt && dt > new Date()) agentMap[agentId].upcoming += 1;
-          } catch (e) {
-            // ignore invalid date
-          }
-        });
-        const agentArr = Object.values(agentMap).sort((a,b) => b.total - a.total);
-        setAgentSchedules(agentArr);
-      } catch (e) {
-        console.warn('Failed to compute agentSchedules', e);
-      }
-
-      // compute agent performance metrics
-      const agentMap = {};
-      agents.forEach(a => {
-        agentMap[a._id || a.id] = {
-          id: a._id || a.id,
-          name: a.name,
-          email: a.email,
-          totalDeals: 0,
-          wonDeals: 0,
-          lostDeals: 0,
-          pendingDeals: 0,
-          totalValue: 0,           // sum of all deal values (for rating)
-          closedRevenue: 0,        // actual revenue from won deals
-          expectedRevenue: 0       // expected revenue (considering probability)
-        };
-      });
-
-      // aggregate deal data per agent
-      (deals || []).forEach(d => {
-        const agentId = d.agent?._id || d.agent;
-        if (agentMap[agentId]) {
-          agentMap[agentId].totalDeals++;
-          const value = Number(d.value) || 0;
-          agentMap[agentId].totalValue += value;
-
-          // Calculate revenues
-          agentMap[agentId].closedRevenue += calculateClosedRevenue(d);
-          agentMap[agentId].expectedRevenue += calculateExpectedRevenue(d);
-
-          if (d.stage && d.stage.toLowerCase() === 'won') {
-            agentMap[agentId].wonDeals++;
-          } else if (d.stage && d.stage.toLowerCase() === 'lost') {
-            agentMap[agentId].lostDeals++;
-          } else {
-            agentMap[agentId].pendingDeals++;
-          }
-        }
-      });
-
-      // compute ratings and conversions
-      const perfList = Object.values(agentMap).map(a => ({
-        ...a,
-        conversionRate: a.totalDeals > 0 ? ((a.wonDeals / a.totalDeals) * 100).toFixed(1) : 0,
-        rating: rateAgent(a)
-      }));
-
-      // sort by rating (top performers first)
-      perfList.sort((a, b) => b.rating - a.rating);
-      setAgentPerformance(perfList);
-
-      // compute stats
-      const totalRev = perfList.reduce((sum, a) => sum + a.closedRevenue, 0);
-      const totalD = deals.length;
-      const avgConv = perfList.length > 0 ? (perfList.reduce((sum, a) => sum + Number(a.conversionRate), 0) / perfList.length).toFixed(1) : 0;
-      const activeA = perfList.filter(a => a.totalDeals > 0).length;
-
-      setTotalRevenue(totalRev);
-      setTotalDeals(totalD);
-      setAvgConversion(avgConv);
-      setActiveAgents(activeA);
-
-      // revenue by agent (top 8) - use closedRevenue for actual closed deals
-      const topAgents = perfList.slice(0, 8);
-      setRevenueByAgent(topAgents.map(a => ({ name: a.name, revenue: a.closedRevenue, deals: a.wonDeals })));
-
-      // deal stage distribution
-      const stageMap = {};
-      (deals || []).forEach(d => {
-        const s = (d.stage || 'unknown').toString();
-        stageMap[s] = (stageMap[s] || 0) + 1;
-      });
-      setDealStageDistribution(Object.keys(stageMap).map(k => ({ name: k, value: stageMap[k] })));
-
-      // conversion trend over time (by week/month)
-      const trendMap = {};
-      perfList.forEach(a => {
-        const monthKey = new Date().getFullYear() + '-' + (new Date().getMonth() + 1);
-        if (!trendMap[monthKey]) trendMap[monthKey] = { period: monthKey, total: 0, won: 0 };
-        trendMap[monthKey].total += a.totalDeals;
-        trendMap[monthKey].won += a.wonDeals;
-      });
-      const trend = Object.values(trendMap).map(t => ({
-        period: t.period,
-        conversion: t.total > 0 ? ((t.won / t.total) * 100).toFixed(1) : 0
-      }));
-      setConversionTrend(trend.length > 0 ? trend : [{ period: 'Current', conversion: avgConv }]);
-
-      // store clients and schedules for export/import/share
-      setClientsData && setClientsData(clients);
-      setSchedulesData && setSchedulesData(schedules);
-
-    } catch (err) {
-      console.error('Failed to load reports', err);
-      toast.error('Failed to load reports data');
+      const res = await reportsAPI.getAnalytics(params);
+      setReportData(res.data);
+    } catch (error) {
+      console.error('Failed to load reports:', error);
+      toast.error('Failed to fetch analytics data');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadReportsData();
+    loadReports();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [period]);
+  }, [filters]); // Reload when filters change (debouncing might be needed for text inputs, but these are updated atomically)
 
-  const COLORS = ['#ff8c00', '#60a5fa', '#34d399', '#f97316', '#ef4444', '#a78bfa', '#fbbf24', '#10b981'];
+  const handleExport = () => {
+    if (!reportData?.weeklyData) return toast.error('No data to export');
 
-  const renderStars = (rating) => (
-    <div className="flex items-center space-x-1">
-      {[...Array(5)].map((_, i) => (
-        <Star
-          key={i}
-          className={`w-4 h-4 ${i < rating ? 'text-yellow-400 fill-current' : 'text-gray-300'}`}
-        />
-      ))}
-    </div>
-  );
+    const headers = ['Week', 'Revenue', 'Sales', 'Cash Sales', 'Credit Sales', 'Deals Won', 'Clients Met'];
+    const rows = reportData.weeklyData.map(w =>
+      [w.week, w.revenue, w.salesCount, w.cashSales, w.creditSales, w.dealsWon, w.clientsMet].join(',')
+    );
+    const csvContent = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    saveAs(blob, `sales-report-${new Date().toLocaleDateString()}.csv`);
+    toast.success('Report exported successfully');
+  };
 
-  const StatCard = ({ icon: Icon, title, value, change, color = 'orange' }) => (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="bg-white rounded-xl shadow-sm p-6 border border-gray-100"
-    >
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-medium text-gray-600">{title}</p>
-          <p className="text-2xl font-bold text-gray-900 mt-2">
-            {typeof value === 'number' ? (title.includes('Revenue') ? `UGX ${Number(value).toLocaleString('en-UG')}` : value.toLocaleString()) : value}
-          </p>
-          {change && (
-            <p className={`text-sm ${change > 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {change > 0 ? '+' : ''}{change}% from last period
-            </p>
-          )}
-        </div>
-        <div className="p-3 rounded-full bg-orange-50">
-          <Icon className="w-6 h-6 text-orange-500" />
-        </div>
+  const toggleRowExpand = (weekStart) => {
+    setExpandedRows(prev => ({
+      ...prev,
+      [weekStart]: !prev[weekStart]
+    }));
+  };
+
+  const formatCurrency = (value) => {
+    if (value >= 1000000) return `UGX ${(value / 1000000).toFixed(1)}M`;
+    if (value >= 1000) return `UGX ${(value / 1000).toFixed(1)}K`;
+    return `UGX ${value?.toLocaleString() || 0}`;
+  };
+
+  // Colors
+  const funnelColors = ['#f97316', '#fb923c', '#fdba74', '#fed7aa'];
+  const COLORS = ['#10b981', '#ef4444', '#f59e0b']; // Won, Lost, In Progress
+
+  if (!reportData && loading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500"></div>
       </div>
-    </motion.div>
-  );
+    );
+  }
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
+    <div className="space-y-6 pb-10 bg-gray-50 min-h-screen p-6">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Reports & Analytics</h1>
-          <p className="text-gray-600 mt-1">Real-time sales agent performance tracking and analytics</p>
+          <h1 className="text-2xl font-bold text-gray-900">Sales Reports</h1>
+          <p className="text-gray-500 text-sm mt-1">Deals, Sales, and Performance Analytics</p>
         </div>
-        <div className="flex items-center space-x-3">
-          <button onClick={() => handleExport('csv')} className="bg-white border border-gray-200 text-gray-700 px-3 py-2 rounded-lg flex items-center space-x-2 hover:bg-gray-50 transition-colors">
+
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Quick Filters */}
+          <div className="flex space-x-1 bg-white p-1 rounded-lg border border-gray-200">
+            <button onClick={() => setPeriod('thisMonth')} className="px-3 py-1 text-xs font-medium hover:bg-orange-50 hover:text-orange-600 rounded">Month</button>
+            <button onClick={() => setPeriod('lastMonth')} className="px-3 py-1 text-xs font-medium hover:bg-orange-50 hover:text-orange-600 rounded">Last Month</button>
+            <button onClick={() => setPeriod('thisYear')} className="px-3 py-1 text-xs font-medium hover:bg-orange-50 hover:text-orange-600 rounded">Year</button>
+          </div>
+
+          {/* Date Range */}
+          <div className="flex items-center space-x-2 bg-white rounded-lg px-3 py-2 border border-gray-200">
+            <input
+              type="date"
+              className="text-sm border-none focus:outline-none bg-transparent"
+              value={filters.start}
+              onChange={e => setFilters({ ...filters, start: e.target.value })}
+            />
+            <Calendar className="w-4 h-4 text-gray-400" />
+            <input
+              type="date"
+              className="text-sm border-none focus:outline-none bg-transparent"
+              value={filters.end}
+              onChange={e => setFilters({ ...filters, end: e.target.value })}
+            />
+          </div>
+
+          <button
+            onClick={loadReports}
+            className="p-2 text-gray-500 hover:text-orange-600 transition-colors bg-white rounded-lg border border-gray-200"
+            title="Refresh Data"
+          >
+            <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+          <button
+            onClick={handleExport}
+            className="flex items-center space-x-2 bg-orange-500 text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors"
+          >
             <Download className="w-4 h-4" />
             <span>Export CSV</span>
           </button>
-          <button onClick={() => handleExport('excel')} className="bg-white border border-gray-200 text-gray-700 px-3 py-2 rounded-lg flex items-center space-x-2 hover:bg-gray-50 transition-colors">
-            <Download className="w-4 h-4" />
-            <span>Export Excel</span>
-          </button>
-          <label className="bg-white border border-gray-200 text-gray-700 px-3 py-2 rounded-lg flex items-center space-x-2 hover:bg-gray-50 transition-colors cursor-pointer">
-            <input type="file" accept=".csv,.xlsx,.xls,.json" onChange={handleImportFile} className="hidden" />
-            <span>Import</span>
-          </label>
-          <div className="relative">
-            <button
-              onClick={() => setShowShareDropdown(!showShareDropdown)}
-              className="bg-orange-500 text-white px-3 py-2 rounded-lg flex items-center space-x-2 hover:bg-orange-600 transition-colors"
-            >
-              <Share2 className="w-4 h-4" />
-              <span>Share</span>
-              <ChevronDown className="w-4 h-4" />
-            </button>
-
-            {showShareDropdown && (
-              <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-10 border">
-                <div className="py-1">
-                  <button
-                    onClick={() => { handleShare('whatsapp'); setShowShareDropdown(false); }}
-                    className="flex items-center space-x-2 w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                  >
-                    <MessageCircle className="w-4 h-4 text-green-600" />
-                    <span>WhatsApp</span>
-                  </button>
-                  <button
-                    onClick={() => { handleShare('gmail'); setShowShareDropdown(false); }}
-                    className="flex items-center space-x-2 w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                  >
-                    <Mail className="w-4 h-4 text-red-600" />
-                    <span>Gmail</span>
-                  </button>
-                  <button
-                    onClick={() => { handleShare('copy'); setShowShareDropdown(false); }}
-                    className="flex items-center space-x-2 w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                  >
-                    <Copy className="w-4 h-4 text-blue-600" />
-                    <span>Copy to Clipboard</span>
-                  </button>
-                  <button
-                    onClick={() => { setShowShareModal(true); setShareProvider('email'); setShowShareDropdown(false); }}
-                    className="flex items-center space-x-2 w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                  >
-                    <Mail className="w-4 h-4 text-gray-600" />
-                    <span>Email (Custom)</span>
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
         </div>
       </div>
 
-      {/* Period Filter */}
-      <div className="bg-white rounded-xl shadow-sm p-6">
-        <div className="flex items-center space-x-4">
-          <label className="text-sm font-medium text-gray-700">Filter by Period:</label>
-          <div className="flex items-center space-x-2">
-            {PERIODS.map(p => (
-              <button
-                key={p}
-                onClick={() => setPeriod(p)}
-                className={`px-4 py-2 rounded-lg transition ${p === period ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-              >
-                {p[0].toUpperCase() + p.slice(1)}
-              </button>
-            ))}
-          </div>
+      {/* Summary Cards Row */}
+      {reportData && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-3">
+          <SummaryCard title="Total Sales" value={reportData.summary.totalSales} icon={ShoppingBag} color="bg-orange-500" />
+          <SummaryCard title="Revenue" value={formatCurrency(reportData.summary.totalRevenue)} icon={DollarSign} color="bg-orange-600" />
+          <SummaryCard title="Cash Sales" value={formatCurrency(reportData.summary.cashSalesAmount)} subValue={`${reportData.summary.cashSalesCount} sales`} icon={Banknote} color="bg-green-600" />
+          <SummaryCard title="Credit Sales" value={formatCurrency(reportData.summary.creditSalesAmount)} subValue={`${reportData.summary.creditSalesCount} sales`} icon={CreditCard} color="bg-blue-600" />
+          <SummaryCard title="Deals Won" value={reportData.summary.dealsWon} icon={CheckCircle} color="bg-emerald-500" />
+          <SummaryCard title="Deals Lost" value={reportData.summary.dealsLost} icon={XCircle} color="bg-red-500" />
+          <SummaryCard title="Clients Met" value={reportData.summary.clientsMet} icon={Users} color="bg-purple-500" />
+          <SummaryCard title="Avg Rev/Deal" value={formatCurrency(reportData.summary.avgRevenuePerDealWon)} icon={TrendingUp} color="bg-teal-500" />
         </div>
-      </div>
+      )}
 
-      {/* Stat Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard icon={TrendingUp} title="Total Revenue (Won)" value={totalRevenue} color="green" />
-        <StatCard icon={Users} title="Total Deals" value={totalDeals} color="blue" />
-        <StatCard icon={BarChart3} title="Avg Conversion Rate" value={`${avgConversion}%`} color="purple" />
-        <StatCard icon={Calendar} title="Active Agents" value={activeAgents} color="orange" />
-      </div>
-
-      {/* Charts Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Revenue by Agent */}
-        <div className="bg-white rounded-xl shadow-sm p-6">
-          <h3 className="text-lg font-semibold mb-4">Revenue by Top Agents</h3>
-          {revenueByAgent.length === 0 ? (
-            <p className="text-sm text-gray-500">No data available</p>
-          ) : (
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={revenueByAgent}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis />
-                <Tooltip formatter={(value) => `UGX ${Number(value).toLocaleString('en-UG')}`} />
-                <Bar dataKey="revenue" fill="#ff8c00" />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-
-        {/* Deal Stage Distribution */}
-        <div className="bg-white rounded-xl shadow-sm p-6">
-          <h3 className="text-lg font-semibold mb-4">Deal Stage Distribution</h3>
-          {dealStageDistribution.length === 0 ? (
-            <p className="text-sm text-gray-500">No data available</p>
-          ) : (
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie data={dealStageDistribution} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
-                  {dealStageDistribution.map((entry, idx) => (
-                    <Cell key={`cell-${idx}`} fill={COLORS[idx % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-      </div>
-
-      {/* Conversion Trend */}
-      <div className="bg-white rounded-xl shadow-sm p-6">
-        <h3 className="text-lg font-semibold mb-4">Conversion Rate Trend</h3>
-        {conversionTrend.length === 0 ? (
-          <p className="text-sm text-gray-500">No data available</p>
-        ) : (
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={conversionTrend}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="period" />
-              <YAxis />
-              <Tooltip formatter={(value) => `${value}%`} />
-              <Line type="monotone" dataKey="conversion" stroke="#ff8c00" strokeWidth={3} dot={{ r: 5 }} />
-            </LineChart>
-          </ResponsiveContainer>
-        )}
-      </div>
-
-      {/* Schedules and Clients Summary */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="bg-white rounded-xl shadow-sm p-6">
-          <h3 className="text-lg font-semibold mb-4">Schedules Summary</h3>
-          <p className="text-sm text-gray-600">Total scheduled: {Array.isArray(schedulesData) ? schedulesData.length : 0}</p>
-          <p className="text-sm text-gray-600">Attended: {(Array.isArray(schedulesData) ? schedulesData.filter(s => s.status === 'completed') : []).length}</p>
-          <p className="text-sm text-gray-600">Missed: {(Array.isArray(schedulesData) ? schedulesData.filter(s => s.status === 'missed') : []).length}</p>
-          <p className="text-sm text-gray-600">Upcoming: {(Array.isArray(schedulesData) ? schedulesData.filter(s => new Date(s.date) > new Date()) : []).length}</p>
-
-          <div className="mt-4">
-            <h4 className="text-sm font-medium mb-2">By Agent</h4>
-            {(!Array.isArray(agentSchedules) || agentSchedules.length === 0) ? (
-              <p className="text-sm text-gray-500">No agent schedules available for this period.</p>
-            ) : (
-              <div className="overflow-x-auto max-h-64 overflow-y-auto">
-                <table className="w-full text-xs">
-                  <thead className="bg-gray-50 sticky top-0">
-                    <tr>
-                      <th className="px-2 py-2 text-left font-medium text-gray-600">Agent</th>
-                      <th className="px-2 py-2 text-center font-medium text-gray-600">Total</th>
-                      <th className="px-2 py-2 text-center font-medium text-gray-600">Attended</th>
-                      <th className="px-2 py-2 text-center font-medium text-gray-600">Missed</th>
-                      <th className="px-2 py-2 text-center font-medium text-gray-600">Upcoming</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {agentSchedules.map(a => (
-                      <tr key={a.id} className="hover:bg-gray-50">
-                        <td className="px-2 py-2 font-medium text-gray-900">{a.name}</td>
-                        <td className="px-2 py-2 text-center text-gray-600">{a.total}</td>
-                        <td className="px-2 py-2 text-center text-green-600 font-medium">{a.attended}</td>
-                        <td className="px-2 py-2 text-center text-red-600 font-medium">{a.missed}</td>
-                        <td className="px-2 py-2 text-center text-blue-600">{a.upcoming}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm p-6 lg:col-span-2">
-          <h3 className="text-lg font-semibold mb-4">Clients Registered</h3>
-          {clientsData.length === 0 ? (
-            <p className="text-sm text-gray-500">No clients registered in this period</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-3 py-2 text-left">Name</th>
-                    <th className="px-3 py-2 text-left">Email</th>
-                    <th className="px-3 py-2 text-left">Phone</th>
-                    <th className="px-3 py-2 text-left">Agent</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {clientsData.slice(0,50).map(c => (
-                    <tr key={c._id} className="border-b">
-                      <td className="px-3 py-2">{c.name}</td>
-                      <td className="px-3 py-2">{c.email}</td>
-                      <td className="px-3 py-2">{c.phone}</td>
-                      <td className="px-3 py-2">{c.agent?.name}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+      {/* Charts Section */}
+      {reportData && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Revenue Trend */}
+          <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4">Revenue & Sales Trend</h3>
+            <div className="h-[300px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={reportData.charts.revenueTrend}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                  <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
+                  <YAxis yAxisId="left" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
+                  <YAxis yAxisId="right" orientation="right" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
+                  <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                  <Legend />
+                  <Line yAxisId="left" type="monotone" dataKey="revenue" stroke="#f97316" strokeWidth={3} dot={false} name="Revenue" />
+                  <Line yAxisId="right" type="monotone" dataKey="sales" stroke="#3b82f6" strokeWidth={2} dot={false} name="Sales Count" />
+                </LineChart>
+              </ResponsiveContainer>
             </div>
-          )}
-        </div>
-      </div>
-
-      {/* Sales Summary */}
-      <div className="bg-white rounded-xl shadow-sm p-6">
-        <h3 className="text-lg font-semibold mb-4">Sales Summary</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <p className="text-sm text-gray-500">Total Sales (won)</p>
-            <p className="text-2xl font-bold">UGX {Number(salesSummary.totalSales || 0).toLocaleString('en-UG')}</p>
           </div>
-          <div>
-            <p className="text-sm text-gray-500">Monthly Breakdown</p>
-            <div className="text-sm text-gray-600">
-              {(salesSummary.monthly || []).slice(0,6).map((m, i) => (
-                <div key={i} className="flex justify-between">
-                  <span>{m.month}</span>
-                  <span>UGX {Number(m.total || 0).toLocaleString('en-UG')}</span>
+
+          {/* Deal Outcomes */}
+          <div className="lg:col-span-1 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4">Deal Outcomes</h3>
+            <div className="h-[200px] w-full flex justify-center">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={reportData.charts.dealOutcomes}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={80}
+                    paddingAngle={5}
+                    dataKey="value"
+                  >
+                    {reportData.charts.dealOutcomes.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            {/* Sales Funnel List */}
+            <div className="mt-4 space-y-3">
+              <h4 className="text-sm font-medium text-gray-700">Conversion Funnel</h4>
+              {reportData.salesFunnel.map((item, index) => (
+                <div key={item.name} className="flex items-center text-sm">
+                  <div className="w-24 text-gray-500">{item.name}</div>
+                  <div className="flex-1 h-2 bg-gray-100 rounded-full mx-2 overflow-hidden">
+                    <div className="h-full bg-orange-400" style={{ width: item.percentage }}></div>
+                  </div>
+                  <div className="w-12 text-right font-medium">{item.value}</div>
                 </div>
               ))}
             </div>
           </div>
         </div>
+      )}
+
+      {/* Agent Filter */}
+      <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
+        <div className="flex flex-wrap items-center gap-4">
+          <label className="text-sm font-medium text-gray-700">Filter Stats by Agent:</label>
+          <select
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 min-w-[200px]"
+            value={filters.agent}
+            onChange={e => setFilters({ ...filters, agent: e.target.value })}
+          >
+            <option value="">All Agents</option>
+            {agentsList.map(agent => (
+              <option key={agent._id} value={agent._id}>{agent.name}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
-      {/* Agent Performance Table with Ratings */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="bg-white rounded-xl shadow-sm overflow-hidden"
-      >
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">Agent Performance & Ratings</h3>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Agent</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rating</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Deals</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Won Deals</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Conversion Rate</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Closed Revenue</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Expected Revenue</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {agentPerformance.length === 0 ? (
+      {/* Weekly Data Table */}
+      {reportData && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="p-4 border-b border-gray-100">
+            <h3 className="text-lg font-semibold text-gray-800">Weekly Performance</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gradient-to-r from-orange-500 to-orange-600 text-white">
                 <tr>
-                  <td colSpan="7" className="px-6 py-4 text-center text-sm text-gray-500">
-                    No agent data available for the selected period.
-                  </td>
+                  <th className="px-4 py-3 w-8"></th>
+                  <th className="px-4 py-3 text-left font-medium">Week</th>
+                  <th className="px-4 py-3 text-right font-medium">Revenue</th>
+                  <th className="px-4 py-3 text-center font-medium">Sales</th>
+                  <th className="px-4 py-3 text-right font-medium">Cash Sales</th>
+                  <th className="px-4 py-3 text-right font-medium">Credit Sales</th>
+                  <th className="px-4 py-3 text-center font-medium">Deals Won</th>
+                  <th className="px-4 py-3 text-center font-medium">Clients Met</th>
                 </tr>
-              ) : (
-                agentPerformance.map((agent) => (
-                  <tr key={agent.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{agent.name}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">{renderStars(agent.rating)}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{agent.totalDeals}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-semibold text-green-600">{agent.wonDeals}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{agent.conversionRate}%</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-semibold">UGX {Number(agent.closedRevenue).toLocaleString('en-UG')}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">UGX {Number(agent.expectedRevenue).toLocaleString('en-UG')}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </motion.div>
-      {/* Share Modal */}
-      {showShareModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-xl shadow-lg max-w-md w-full p-6">
-            <h3 className="text-lg font-semibold text-gray-900">
-              Share Report via {shareProvider === 'email' ? 'Email' : 'Custom Email'}
-            </h3>
-            <p className="text-sm text-gray-600 mt-2">
-              {shareProvider === 'email'
-                ? "Send the report via email"
-                : "Enter recipient details to share the report"
-              }
-            </p>
-
-            <div className="mt-4 space-y-3">
-              {(shareProvider === 'email' || shareProvider === 'gmail') && (
-                <input
-                  value={shareEmail}
-                  onChange={(e) => setShareEmail(e.target.value)}
-                  placeholder="recipient@example.com"
-                  className="w-full p-3 border rounded"
-                  type="email"
-                />
-              )}
-              {shareProvider === 'whatsapp' && (
-                <input
-                  value={sharePhone}
-                  onChange={(e) => setSharePhone(e.target.value)}
-                  placeholder="+1234567890"
-                  className="w-full p-3 border rounded"
-                  type="tel"
-                />
-              )}
-              <input
-                value={shareSubject}
-                onChange={(e) => setShareSubject(e.target.value)}
-                placeholder="Report subject/title"
-                className="w-full p-3 border rounded"
-              />
-            </div>
-            
-            <div className="mt-6 text-right space-x-2">
-              <button 
-                onClick={() => { setShowShareModal(false); setShareEmail(''); setShareProvider(null); }} 
-                className="px-4 py-2 border rounded hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={async () => {
-                  if (shareProvider === 'whatsapp' && !sharePhone.trim()) {
-                    toast.error('Please provide a phone number');
-                    return;
-                  }
-                  if ((shareProvider === 'email' || shareProvider === 'gmail') && !shareEmail.trim()) {
-                    toast.error('Please provide an email address');
-                    return;
-                  }
-
-                  try {
-                    if (shareProvider === 'whatsapp') {
-                      handleShare('whatsapp');
-                    } else if (shareProvider === 'gmail') {
-                      handleShare('gmail');
-                    } else {
-                      // Custom email via API
-                      const csv = buildCSVFromAgents(agentPerformance || []);
-                      await reportsAPI.share({ to: shareEmail, subject: shareSubject, csv, filename: `crm-report-${Date.now()}.csv` });
-                      toast.success('Report shared successfully via email');
-                    }
-                    setShowShareModal(false);
-                    setShareEmail('');
-                    setSharePhone('');
-                    setShareProvider('');
-                  } catch (err) {
-                    console.error('Share failed', err);
-                    toast.error('Failed to share report');
-                  }
-                }}
-                className="px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600"
-              >
-                Send Email
-              </button>
-            </div>
-          </motion.div>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {reportData.weeklyData.map((week, index) => (
+                  <React.Fragment key={week.weekStart}>
+                    <tr
+                      className={`hover:bg-orange-50 cursor-pointer transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}
+                      onClick={() => toggleRowExpand(week.weekStart)}
+                    >
+                      <td className="px-4 py-3">
+                        {expandedRows[week.weekStart] ?
+                          <ChevronDown className="w-4 h-4 text-orange-500" /> :
+                          <ChevronRight className="w-4 h-4 text-gray-400" />
+                        }
+                      </td>
+                      <td className="px-4 py-3 font-medium text-gray-900">{week.weekDisplay}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-orange-600">
+                        {formatCurrency(week.revenue)}
+                      </td>
+                      <td className="px-4 py-3 text-center font-medium">{week.salesCount}</td>
+                      <td className="px-4 py-3 text-right text-green-600">{formatCurrency(week.cashSales)}</td>
+                      <td className="px-4 py-3 text-right text-blue-600">{formatCurrency(week.creditSales)}</td>
+                      <td className="px-4 py-3 text-center text-emerald-600 font-medium">{week.dealsWon}</td>
+                      <td className="px-4 py-3 text-center text-purple-600">{week.clientsMet}</td>
+                    </tr>
+                    {expandedRows[week.weekStart] && (
+                      <tr className="bg-orange-50">
+                        <td colSpan={8} className="px-8 py-4">
+                          <div className="grid grid-cols-4 gap-6 text-sm">
+                            <div>
+                              <p className="text-xs text-gray-500">Deals Lost</p>
+                              <p className="font-semibold text-red-500">{week.dealsLost || 0}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500">Avg Revenue/Sale</p>
+                              <p className="font-semibold">{week.salesCount > 0 ? formatCurrency(week.revenue / week.salesCount) : 0}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500">Items Sold</p>
+                              <p className="font-semibold">{week.items || 0}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500">Conversion</p>
+                              <p className="font-semibold">{week.clientsMet > 0 ? `${((week.dealsWon / week.clientsMet) * 100).toFixed(0)}%` : '0%'} (Met → Won)</p>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
+
+      {/* Agent Performance Table */}
+      {reportData && reportData.agentPerformance.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="p-4 border-b border-gray-100">
+            <h3 className="text-lg font-semibold text-gray-800">Agent Performance</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600">Agent</th>
+                  <th className="px-4 py-3 text-right font-medium text-gray-600">Revenue</th>
+                  <th className="px-4 py-3 text-center font-medium text-gray-600">Sales</th>
+                  <th className="px-4 py-3 text-center font-medium text-gray-600">Clients Met</th>
+                  <th className="px-4 py-3 text-center font-medium text-gray-600">Won</th>
+                  <th className="px-4 py-3 text-center font-medium text-gray-600">Lost</th>
+                  <th className="px-4 py-3 text-center font-medium text-gray-600">Win Rate</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {reportData.agentPerformance.map((agent) => (
+                  <tr key={agent.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 font-medium text-gray-900">{agent.name}</td>
+                    <td className="px-4 py-3 text-right font-semibold text-orange-600">
+                      {agent.revenue > 0 ? formatCurrency(agent.revenue) : '-'}
+                    </td>
+                    <td className="px-4 py-3 text-center">{agent.salesCount}</td>
+                    <td className="px-4 py-3 text-center">{agent.meetings}</td>
+                    <td className="px-4 py-3 text-center text-emerald-600">{agent.wonDeals}</td>
+                    <td className="px-4 py-3 text-center text-red-500">{agent.lostDeals}</td>
+                    <td className="px-4 py-3 text-center">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${parseFloat(agent.winRate) > 50 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
+                        }`}>
+                        {agent.winRate}%
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Footer */}
+      <div className="text-center text-xs text-gray-400 mt-8">
+        Report generated at {new Date().toLocaleString()} • Data reflects all sales agent activities
+      </div>
     </div>
   );
 };
+
+// Summary Card Component
+const SummaryCard = ({ title, value, subValue, icon: Icon, color }) => (
+  <motion.div
+    whileHover={{ y: -2 }}
+    className={`${color} rounded-xl p-3 text-white shadow-md flex flex-col justify-between h-full min-h-[100px]`}
+  >
+    <div className="flex justify-between items-start">
+      <p className="text-xs font-medium opacity-90">{title}</p>
+      <div className="bg-white/20 p-1.5 rounded-lg">
+        <Icon className="w-4 h-4 text-white" />
+      </div>
+    </div>
+    <div className="mt-2">
+      <p className="text-xl font-bold">{value}</p>
+      {subValue && <p className="text-[10px] opacity-80 mt-1">{subValue}</p>}
+    </div>
+  </motion.div>
+);
 
 export default Reports;

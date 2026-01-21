@@ -36,7 +36,7 @@ const clearCache = (pattern) => {
   }
 };
 
-const API_URL = process.env.REACT_APP_API_URL || 'https://crm-dbs.onrender.com/api';
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 const api = axios.create({
   baseURL: API_URL,
 });
@@ -138,7 +138,10 @@ export const authAPI = {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     return Promise.resolve();
-  }
+  },
+  forgotPassword: (email) => api.post('/auth/forgot-password', { email }),
+  verifyOTP: (data) => api.post('/auth/verify-otp', data),
+  resetPassword: (data) => api.post('/auth/reset-password', data),
 };
 
 // Users API
@@ -158,7 +161,7 @@ export const usersAPI = {
       }, 0);
       return Promise.resolve({ data: cachedData, _fromCache: true });
     }
-    
+
     // No cache, fetch from API
     const response = await api.get('/users');
     setCache(cacheKey, response.data);
@@ -240,7 +243,8 @@ export const reportsAPI = {
   getReportTemplates: () => api.get('/reports/templates'),
   downloadReport: (reportId) => api.get(`/reports/download/${reportId}`, { responseType: 'blob' }),
   share: (payload) => api.post('/reports/share', payload),
-  importFile: (formData) => api.post('/reports/import', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
+  importFile: (formData) => api.post('/reports/import', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  getAnalytics: (params) => api.get('/reports/analytics', { params })
 };
 
 // Sales API

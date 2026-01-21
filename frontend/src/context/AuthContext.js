@@ -23,7 +23,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const [user, setUser] = useState(getInitialUser());
-  const [loading, setLoading] = useState(false); // Start as false since we have cached data
+  const [loading, setLoading] = useState(false); // Start as false since we 
   const [token, setToken] = useState(localStorage.getItem('token'));
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
@@ -108,26 +108,32 @@ export const AuthProvider = ({ children }) => {
     try {
       const response = await authAPI.login(email, password);
       const { token: newToken, user: userData, requiresPasswordChange } = response.data;
-      
+
       localStorage.setItem('token', newToken);
       localStorage.setItem('user', JSON.stringify(userData));
       setToken(newToken);
       setUser(userData);
-      
-      return { 
-        success: true, 
+
+      return {
+        
+        success: true,
         user: userData,
         requiresPasswordChange: requiresPasswordChange || false
       };
     } catch (error) {
-      return { 
-        success: false, 
-        message: error.response?.data?.message || 'Login failed' 
+      return {
+        success: false,
+        message: error.response?.data?.message || 'Login failed'
       };
     }
   };
 
   const logout = () => {
+    // Clear localStorage first to ensure clean state
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+
+    // Then notify the server
     authAPI.logout().finally(() => {
       setToken(null);
       setUser(null);

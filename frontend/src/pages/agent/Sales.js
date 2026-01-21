@@ -163,7 +163,7 @@ const Sales = () => {
   const handleItemBlur = (index, field) => {
     const updatedItems = [...saleForm.items];
     const item = updatedItems[index];
-    
+
     if (field === 'quantity') {
       if (item.quantity === '' || item.quantity === null || item.quantity === undefined || item.quantity < 1) {
         updatedItems[index][field] = 1;
@@ -179,7 +179,7 @@ const Sales = () => {
         updatedItems[index][field] = 100;
       }
     }
-    
+
     setSaleForm({ ...saleForm, items: updatedItems });
   };
 
@@ -262,21 +262,15 @@ const Sales = () => {
         notes: saleForm.notes.trim() || undefined
       };
 
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/f41aa935-3855-4b65-91af-b127905fefef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Sales.js:231',message:'Preparing sale data',data:{saleData,clientId:saleForm.clientId,itemCount:validItems.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
+
 
       console.log('Creating sale with data:', saleData);
 
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/f41aa935-3855-4b65-91af-b127905fefef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Sales.js:234',message:'Calling salesAPI.create',data:{hasClientId:!!saleData.client,itemCount:saleData.items.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
+
 
       const response = await salesAPI.create(saleData);
-      
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/f41aa935-3855-4b65-91af-b127905fefef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Sales.js:238',message:'Sale created successfully',data:{saleId:response?.data?.sale?._id,status:response?.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
+
+
 
       console.log('Sale created successfully:', response.data);
 
@@ -299,9 +293,7 @@ const Sales = () => {
       // Reload sales
       loadSales();
     } catch (error) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/f41aa935-3855-4b65-91af-b127905fefef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Sales.js:255',message:'Error creating sale',data:{errorMessage:error.message,status:error.response?.status,errorData:error.response?.data,hasClientId:!!saleForm.clientId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
+
       console.error('Error creating sale:', error);
       const errorMsg = error.response?.data?.message || error.message || 'Failed to create sale';
       toast.error(errorMsg);
@@ -396,11 +388,10 @@ const Sales = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          sale.paymentMethod === 'cash'
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${sale.paymentMethod === 'cash'
                             ? 'bg-green-100 text-green-800'
                             : 'bg-orange-100 text-orange-800'
-                        }`}
+                          }`}
                       >
                         {sale.paymentMethod === 'cash' ? (
                           <CheckCircle className="w-3 h-3 mr-1" />
@@ -413,10 +404,10 @@ const Sales = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {sale.saleDate
                         ? new Date(sale.saleDate).toLocaleDateString('en-UG', {
-                            year: 'numeric',
-                            month: 'short',
-                            day: 'numeric'
-                          })
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric'
+                        })
                         : 'N/A'}
                     </td>
                   </tr>
@@ -460,9 +451,8 @@ const Sales = () => {
                       onChange={(e) => handleClientSearchChange(e.target.value)}
                       onFocus={() => setShowClientDropdown(true)}
                       placeholder="Search clients by name, email, phone, or company..."
-                      className={`w-full pl-10 pr-10 py-2.5 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 ${
-                        saleForm.clientId ? 'border-green-300 bg-green-50' : 'border-gray-300'
-                      }`}
+                      className={`w-full pl-10 pr-10 py-2.5 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 ${saleForm.clientId ? 'border-green-300 bg-green-50' : 'border-gray-300'
+                        }`}
                       required
                     />
                     {saleForm.clientId && (
@@ -516,13 +506,12 @@ const Sales = () => {
                                     )}
                                   </div>
                                   <span
-                                    className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                                      client.status === 'active'
+                                    className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${client.status === 'active'
                                         ? 'bg-green-100 text-green-800'
                                         : client.status === 'vip'
-                                        ? 'bg-purple-100 text-purple-800'
-                                        : 'bg-gray-100 text-gray-800'
-                                    }`}
+                                          ? 'bg-purple-100 text-purple-800'
+                                          : 'bg-gray-100 text-gray-800'
+                                      }`}
                                   >
                                     {client.status || 'prospect'}
                                   </span>

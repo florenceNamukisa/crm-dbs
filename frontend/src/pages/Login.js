@@ -25,7 +25,7 @@ const Login = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!formData.email || !formData.password) {
       toast.error('Please fill in all fields');
       return;
@@ -35,10 +35,10 @@ const Login = () => {
 
     try {
       const result = await login(formData.email, formData.password);
-      
+
       if (result.success) {
         toast.success(`Welcome back, ${result.user.name}! 🎉`);
-        
+
         // Check if user needs to change password (first login)
         if (result.requiresPasswordChange || result.user.isFirstLogin) {
           navigate('/change-password', { replace: true });
@@ -79,7 +79,7 @@ const Login = () => {
                 <p className="text-sm text-orange-600 font-medium">Sales Excellence</p>
               </div>
             </div>
-            
+
             <h2 className="text-3xl font-bold text-gray-900 mb-2">
               Welcome back
             </h2>
@@ -121,7 +121,7 @@ const Login = () => {
                 <button
                   type="button"
                   className="text-sm text-orange-600 hover:text-orange-500 font-medium"
-                  onClick={() => {/* Add forgot password functionality */}}
+                  onClick={() => navigate('/forgot-password')}
                 >
                   Forgot password?
                 </button>
@@ -197,14 +197,14 @@ const Login = () => {
             transition={{ duration: 0.7, delay: 0.2 }}
             className="text-center text-white"
           >
-              <div className="mb-8">
+            <div className="mb-8">
               <img src={logo} alt="Logo" className="w-24 h-24 mx-auto mb-6 opacity-90 object-contain" />
               <h3 className="text-4xl font-bold mb-4">CRM Pro System</h3>
               <p className="text-orange-100 text-lg max-w-md mx-auto">
                 Streamline your sales process, manage clients efficiently, and boost your team's performance with our powerful CRM solution.
               </p>
             </div>
-            
+
             {/* Features List */}
             <div className="space-y-4 mt-12">
               <div className="flex items-center justify-center space-x-3 text-orange-100">

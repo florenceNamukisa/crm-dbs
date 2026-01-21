@@ -6,8 +6,307 @@ import { sendEmailWithAttachment } from '../services/emailService.js';
 import Client from '../models/Client.js';
 import Deal from '../models/Deal.js';
 import Schedule from '../models/Schedule.js';
+import User from '../models/User.js';
+import Sale from '../models/Sale.js';
 
 const router = express.Router();
+
+// Get Analytics Data
+// Get Analytics Data
+router.get('/analytics', async (req, res) => {
+  try {
+    const { start, end, agent } = req.query;
+
+    // Date Filters
+    const dateFilter = {};
+    const saleDateFilter = {};
+    if (start || end) {
+      dateFilter.createdAt = {};
+      saleDateFilter.saleDate = {};
+      if (start) {
+        dateFilter.createdAt.$gte = new Date(start);
+        saleDateFilter.saleDate.$gte = new Date(start);
+      }
+      if (end) {
+        dateFilter.createdAt.$lte = new Date(end);
+        saleDateFilter.saleDate.$lte = new Date(end);
+      }
+    }
+
+    // Agent Filter
+    const agentFilter = {};
+    if (agent) {
+      agentFilter.agent = agent;
+    }
+
+    // Combined Filters
+    const dealFilter = { ...dateFilter, ...agentFilter };
+    const scheduleFilter = { ...agentFilter };
+    if (start || end) {
+      scheduleFilter.date = {};
+      if (start) scheduleFilter.date.$gte = new Date(start);
+      if (end) scheduleFilter.date.$lte = new Date(end);
+    }
+    const saleFilter = { ...saleDateFilter, ...agentFilter };
+    const clientFilter = { ...dateFilter, ...agentFilter };
+
+    // 1. Fetch Agents
+    const agents = await User.find({ role: 'agent' }).select('name email _id');
+
+    // 2. Fetch all data
+    const [deals, schedules, sales, clients] = await Promise.all([
+      Deal.find(dealFilter).populate('agent', 'name'),
+      Schedule.find(scheduleFilter).populate('agent', 'name'),
+      Sale.find(saleFilter).populate('agent', 'name'),
+      Client.find(clientFilter).populate('agent', 'name')
+    ]);
+
+    // A. Summary Stats
+    const totalRevenue = sales.reduce((sum, s) => sum + (Number(s.finalAmount) || 0), 0);
+    const totalSales = sales.length;
+
+    // Cash vs Credit Sales
+    const cashSalesAmount = sales.filter(s => s.paymentMethod === 'cash').reduce((sum, s) => sum + (Number(s.finalAmount) || 0), 0);
+    const creditSalesAmount = sales.filter(s => s.paymentMethod === 'credit').reduce((sum, s) => sum + (Number(s.finalAmount) || 0), 0);
+    const cashSalesCount = sales.filter(s => s.paymentMethod === 'cash').length;
+    const creditSalesCount = sales.filter(s => s.paymentMethod === 'credit').length;
+
+    // Deals Stats
+    const totalDeals = deals.length;
+    const dealsWon = deals.filter(d => d.stage === 'won').length;
+    const dealsLost = deals.filter(d => d.stage === 'lost').length;
+    const dealsInProgress = totalDeals - dealsWon - dealsLost;
+
+    // Meeting Stats
+    const clientsMet = schedules.filter(s => s.type === 'meeting' && s.status === 'completed').length;
+    const totalSchedules = schedules.length;
+
+    // Averages
+    const avgRevenuePerSale = totalSales > 0 ? totalRevenue / totalSales : 0;
+    const avgRevenuePerDealWon = dealsWon > 0 ? totalRevenue / dealsWon : 0; // Revenue comes from won deals (sales) usually
+
+    // B. Weekly Breakdown
+    const weeklyData = [];
+    const weekMap = {};
+
+    sales.forEach(sale => {
+      const saleDate = new Date(sale.saleDate || sale.createdAt);
+      const dayOfWeek = saleDate.getDay();
+      const diff = saleDate.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+      const weekStart = new Date(saleDate.setDate(diff));
+      const weekKey = weekStart.toISOString().split('T')[0];
+
+      if (!weekMap[weekKey]) {
+        weekMap[weekKey] = {
+          weekStart: weekKey,
+          weekDisplay: new Date(weekKey).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+          revenue: 0,
+          salesCount: 0,
+          cashSales: 0,
+          creditSales: 0,
+          dealsWon: 0,
+          clientsMet: 0,
+          items: 0
+        };
+      }
+
+      weekMap[weekKey].revenue += Number(sale.finalAmount) || 0;
+      weekMap[weekKey].salesCount += 1;
+      if (sale.paymentMethod === 'cash') weekMap[weekKey].cashSales += Number(sale.finalAmount) || 0;
+      if (sale.paymentMethod === 'credit') weekMap[weekKey].creditSales += Number(sale.finalAmount) || 0;
+      weekMap[weekKey].items += sale.items?.length || 0;
+    });
+
+    // Merge other data into Timeline (approximate by matching weeks)
+    // Note: For deals/schedules we use createdAt/date. 
+    // This is a simplified merge, ideally we'd iterate all dates. 
+    // For now we map sales weeks, but we should ensure we capture weeks with NO sales but activity.
+    // Let's build a robust week map from ALL activities.
+
+    const addToWeekMap = (dateStr, type, value = 1) => {
+      const d = new Date(dateStr);
+      const day = d.getDay();
+      const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+      const weekStart = new Date(d.setDate(diff));
+      const key = weekStart.toISOString().split('T')[0];
+
+      if (!weekMap[key]) {
+        weekMap[key] = {
+          weekStart: key,
+          weekDisplay: new Date(key).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+          revenue: 0, salesCount: 0, cashSales: 0, creditSales: 0,
+          dealsWon: 0, clientsMet: 0, items: 0
+        };
+      }
+      weekMap[key][type] = (weekMap[key][type] || 0) + value;
+    };
+
+    // Re-process Sales with robust map
+    sales.forEach(s => {
+      addToWeekMap(s.saleDate || s.createdAt, 'salesCount', 1);
+      // We manually add revenue/amounts as addToWeekMap is simple counter mainly
+      // But let's just use the robust map for counters and a separate pass for values if needed
+      // Or just re-do the loop logic cleanly:
+    });
+    // This requires a refactor of the loop above. Let's stick to the simpler sales-driven loop for now 
+    // but allow adding weeks from Deals/Schedules if not present? 
+    // User wants "Clients Met", "Deals Won".
+
+    // Let's refine the loop below to handle all:
+    const unifiedWeekMap = {};
+    const getWeekKey = (date) => {
+      const d = new Date(date);
+      const day = d.getDay();
+      const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+      const weekStart = new Date(d.setDate(diff));
+      return {
+        key: weekStart.toISOString().split('T')[0],
+        display: weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+      };
+    };
+
+    const ensureWeek = (key, display) => {
+      if (!unifiedWeekMap[key]) {
+        unifiedWeekMap[key] = {
+          weekStart: key, weekDisplay: display,
+          revenue: 0, cashSales: 0, creditSales: 0,
+          salesCount: 0, dealsWon: 0, dealsLost: 0, clientsMet: 0
+        };
+      }
+    };
+
+    sales.forEach(s => {
+      const { key, display } = getWeekKey(s.saleDate || s.createdAt);
+      ensureWeek(key, display);
+      unifiedWeekMap[key].revenue += Number(s.finalAmount) || 0;
+      unifiedWeekMap[key].salesCount += 1;
+      if (s.paymentMethod === 'cash') unifiedWeekMap[key].cashSales += Number(s.finalAmount) || 0;
+      if (s.paymentMethod === 'credit') unifiedWeekMap[key].creditSales += Number(s.finalAmount) || 0;
+    });
+
+    deals.forEach(d => {
+      const { key, display } = getWeekKey(d.createdAt);
+      ensureWeek(key, display);
+      if (d.stage === 'won') unifiedWeekMap[key].dealsWon += 1;
+      if (d.stage === 'lost') unifiedWeekMap[key].dealsLost += 1;
+    });
+
+    schedules.forEach(s => {
+      if (s.type === 'meeting' && s.status === 'completed') {
+        const { key, display } = getWeekKey(s.date);
+        ensureWeek(key, display);
+        unifiedWeekMap[key].clientsMet += 1;
+      }
+    });
+
+    Object.keys(unifiedWeekMap).sort((a, b) => b.localeCompare(a)).forEach(key => {
+      weeklyData.push(unifiedWeekMap[key]);
+    });
+
+
+    // C. Agent Performance
+    const agentStats = agents.map(a => {
+      const aId = a._id.toString();
+      const aDeals = deals.filter(d => d.agent?._id?.toString() === aId || d.agent?.toString() === aId);
+      const aSales = sales.filter(s => s.agent?._id?.toString() === aId || s.agent?.toString() === aId);
+      const aSchedules = schedules.filter(s => s.agent?._id?.toString() === aId || s.agent?.toString() === aId);
+
+      const won = aDeals.filter(d => d.stage === 'won').length;
+      const lost = aDeals.filter(d => d.stage === 'lost').length;
+      const total = aDeals.length;
+      const revenue = aSales.reduce((sum, s) => sum + (Number(s.finalAmount) || 0), 0);
+      const salesCount = aSales.length;
+      const meetings = aSchedules.filter(s => s.type === 'meeting' && s.status === 'completed').length;
+
+      return {
+        id: aId,
+        name: a.name,
+        totalDeals: total,
+        wonDeals: won,
+        lostDeals: lost,
+        revenue,
+        salesCount,
+        meetings,
+        avgRevenuePerSale: salesCount > 0 ? Math.round(revenue / salesCount) : 0,
+        winRate: total > 0 ? ((won / total) * 100).toFixed(1) : 0
+      };
+    }).sort((a, b) => b.revenue - a.revenue);
+
+    // D. Sales Funnel (Revised)
+    const salesFunnel = [
+      { name: 'Schedules', value: totalSchedules, percentage: '100%' },
+      { name: 'Clients Met', value: clientsMet, percentage: totalSchedules > 0 ? `${((clientsMet / totalSchedules) * 100).toFixed(1)}%` : '0%' },
+      { name: 'Deals Won', value: dealsWon, percentage: totalDeals > 0 ? `${((dealsWon / totalDeals) * 100).toFixed(1)}%` : '0%' }, // Contextual percentage
+      { name: 'Sales Completed', value: totalSales, percentage: dealsWon > 0 ? `${((totalSales / dealsWon) * 100).toFixed(1)}%` : '0%' } // Assuming Won Deal -> Sale
+    ];
+
+    // E. Charts Data
+    // 1. Revenue & Sales Trend
+    const trendMap = {};
+    sales.forEach(s => {
+      const date = new Date(s.saleDate || s.createdAt).toISOString().split('T')[0];
+      if (!trendMap[date]) trendMap[date] = { date, revenue: 0, sales: 0 };
+      trendMap[date].revenue += Number(s.finalAmount) || 0;
+      trendMap[date].sales += 1;
+    });
+
+    const revenueTrend = Object.values(trendMap)
+      .map(d => ({
+        date: new Date(d.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        revenue: d.revenue,
+        sales: d.sales
+      }))
+      .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    // 2. Deal Outcomes (Pie/Bar support)
+    const dealOutcomes = [
+      { name: 'Won', value: dealsWon },
+      { name: 'Lost', value: dealsLost },
+      { name: 'In Progress', value: dealsInProgress }
+    ];
+
+    res.json({
+      summary: {
+        totalRevenue,
+        totalSales,
+        cashSalesAmount,
+        creditSalesAmount,
+        cashSalesCount,
+        creditSalesCount,
+        totalDeals,
+        dealsWon,
+        dealsLost,
+        clientsMet,
+        avgRevenuePerSale: Math.round(avgRevenuePerSale),
+        avgRevenuePerDealWon: Math.round(avgRevenuePerDealWon)
+      },
+      weeklyData,
+      salesFunnel,
+      agentPerformance: agentStats,
+      charts: {
+        revenueTrend,
+        dealOutcomes,
+        revenueByAgent: agentStats.slice(0, 10).map(a => ({ name: a.name, value: a.revenue }))
+      },
+      logs: {
+        schedules: schedules.slice(0, 50)
+      }
+    });
+
+  } catch (error) {
+    console.error('Analytics Error:', error);
+    res.status(500).json({ message: 'Failed to fetch analytics', error: error.message });
+  }
+});
+
+const calculateRating = (won, total, revenue) => {
+  const rate = total > 0 ? (won / total) : 0;
+  if (rate >= 0.8 && revenue > 50000) return 5;
+  if (rate >= 0.6 && revenue > 20000) return 4;
+  if (rate >= 0.4) return 3;
+  if (rate >= 0.2) return 2;
+  return 1;
+};
 
 // Setup multer for file uploads (temporary storage)
 const upload = multer({ dest: 'uploads/' });
