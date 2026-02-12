@@ -1,12 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import {
   Users,
   Target,
   Calendar,
   TrendingUp,
-  Phone,
-  Mail,
   DollarSign,
   CheckCircle,
   CreditCard,
@@ -56,19 +54,9 @@ const AgentDashboard = () => {
   const [currentUserRating, setCurrentUserRating] = useState(0);
   const navigate = useNavigate();
 
-  useEffect(() => {
+  const loadRankings = useCallback(async () => {
     if (!user) return;
-    loadDashboardData();
-    loadRankings();
-    // refresh every 60s to reflect DB changes automatically
-    const timer = setInterval(() => {
-      loadDashboardData();
-      loadRankings();
-    }, 60000);
-    return () => clearInterval(timer);
-  }, [user, timeFilter]);
 
-  const loadRankings = async () => {
     try {
       const response = await performanceAPI.getRankings();
       const rankingsData = response.data || [];
@@ -80,9 +68,9 @@ const AgentDashboard = () => {
     } catch (error) {
       console.error('Failed to load rankings:', error);
     }
-  };
+  }, [user]);
 
-  const loadDashboardData = async () => {
+  const loadDashboardData = useCallback(async () => {
     try {
       const userId = user?._id || user?.id;
       if (!userId) return;
@@ -105,16 +93,14 @@ const AgentDashboard = () => {
       }
 
       // Fetch performance, deals stats, clients, sales, and deals in parallel
-      const [performanceResponse, dealsStatsResponse, clientsResponse, dealsResponse, salesResponse] = await Promise.all([
+      const [performanceResponse, clientsResponse, dealsResponse, salesResponse] = await Promise.all([
         performanceAPI.getAgentPerformance(userId),
-        dealsAPI.getStats(),
         clientsAPI.getAll(),
         dealsAPI.getAll(),
         salesAPI.getAll({ limit: 1000 }) // Get agent-specific sales (filtered by backend)
       ]);
 
       const perf = performanceResponse?.data || {};
-      const dealsStats = dealsStatsResponse?.data || {};
       const clients = clientsResponse?.data?.clients || clientsResponse?.clients || [];
       const deals = dealsResponse?.data?.deals || dealsResponse?.data || dealsResponse || [];
       const allSales = salesResponse?.data?.sales || [];
@@ -256,7 +242,19 @@ const AgentDashboard = () => {
       console.error('Error loading dashboard data:', error);
       toast.error('Failed to load dashboard data');
     }
-  };
+  }, [user, timeFilter]);
+
+  useEffect(() => {
+    if (!user) return;
+    loadDashboardData();
+    loadRankings();
+    // refresh every 60s to reflect DB changes automatically
+    const timer = setInterval(() => {
+      loadDashboardData();
+      loadRankings();
+    }, 60000);
+    return () => clearInterval(timer);
+  }, [user, loadDashboardData, loadRankings]);
 
   // Build monthly progress from API data if available; otherwise fall back to zeros
   const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];

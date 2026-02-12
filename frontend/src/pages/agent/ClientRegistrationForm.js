@@ -4,11 +4,6 @@ import {
   X, 
   Upload, 
   User, 
-  Mail, 
-  Phone, 
-  MapPin, 
-  Building, 
-  Calendar,
   Users,
   FileText,
   CheckCircle

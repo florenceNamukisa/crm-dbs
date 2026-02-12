@@ -29,7 +29,7 @@ import {
   Clock,
   Award
 } from 'lucide-react';
-import { clientsAPI, uploadAPI } from '../../services/api';
+import { clientsAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext'; 
 import toast from 'react-hot-toast';
 import ClientRegistrationForm from './ClientRegistrationForm';
@@ -37,7 +37,6 @@ import ClientRegistrationForm from './ClientRegistrationForm';
 const Clients = () => {
   const { user } = useAuth();
   const [clients, setClients] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -57,11 +56,8 @@ const Clients = () => {
   const [selectedClients, setSelectedClients] = useState([]);
   
 
-  useEffect(() => {
-    loadClients();
-  }, [filters, pagination.page, sortConfig]);
-
   const loadClients = async () => {
+    if (!user) return;
     try {
       const params = {
         agentId: user.role === 'agent' ? user.id : undefined,
@@ -88,6 +84,11 @@ const Clients = () => {
       setClients([]);
     }
   };
+
+  useEffect(() => {
+    if (!user) return;
+    loadClients();
+  }, [user, filters, pagination.page, sortConfig]);
 
   const handleSort = (key) => {
     setSortConfig(prev => ({
@@ -1147,90 +1148,3 @@ const Clients = () => {
 };
 
 export default Clients;
-
-// --- Helper subcomponents for interactions and attachments ---
-const AddInteractionForm = ({ clientId, onAdded }) => {
-  const [type, setType] = useState('call');
-  const [date, setDate] = useState('');
-  const [notes, setNotes] = useState('');
-  const [saving, setSaving] = useState(false);
-
-  const submit = async (e) => {
-    e.preventDefault();
-    if (!clientId) return;
-    setSaving(true);
-    try {
-      const resp = await clientsAPI.getById(clientId);
-      const client = resp.data;
-      const interactions = client.interactions || [];
-      interactions.push({ type, date: date ? new Date(date) : new Date(), notes });
-      await clientsAPI.update(clientId, { interactions, lastContact: { date: date || new Date(), type } });
-      toast.success('Interaction logged');
-      setType('call'); setDate(''); setNotes('');
-      if (onAdded) await onAdded();
-    } catch (err) {
-      toast.error('Failed to log interaction');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <form onSubmit={submit} className="mt-3 grid grid-cols-1 md:grid-cols-4 gap-2">
-      <select value={type} onChange={(e) => setType(e.target.value)} className="p-2 border rounded">
-        <option value="call">Call</option>
-        <option value="email">Email</option>
-        <option value="meeting">Meeting</option>
-        <option value="ticket">Ticket</option>
-        <option value="other">Other</option>
-      </select>
-      <input type="datetime-local" value={date} onChange={(e) => setDate(e.target.value)} className="p-2 border rounded" />
-      <input placeholder="Notes" value={notes} onChange={(e) => setNotes(e.target.value)} className="p-2 border rounded" />
-      <div className="flex items-center">
-        <button type="submit" disabled={saving} className="px-3 py-2 bg-orange-600 text-white rounded">
-          {saving ? 'Saving...' : 'Add'}
-        </button>
-      </div>
-    </form>
-  );
-};
-
-const AttachmentUploader = ({ clientId, onUploaded }) => {
-  const [file, setFile] = useState(null);
-  const [uploading, setUploading] = useState(false);
-
-  const handleUpload = async (e) => {
-    e.preventDefault();
-    if (!file || !clientId) return;
-    setUploading(true);
-    try {
-      const fd = new FormData();
-      fd.append('file', file);
-      const res = await uploadAPI.uploadFile(fd);
-      // Expecting { filename, url }
-      const fileMeta = res.data;
-      const resp = await clientsAPI.getById(clientId);
-      const client = resp.data;
-      const attachments = client.attachments || [];
-      attachments.push({ filename: fileMeta.filename || file.name, url: fileMeta.url || fileMeta.path || fileMeta, uploadedAt: new Date() });
-      await clientsAPI.update(clientId, { attachments });
-      toast.success('Attachment uploaded');
-      setFile(null);
-      if (onUploaded) await onUploaded();
-    } catch (err) {
-      console.error(err);
-      toast.error('Upload failed');
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  return (
-    <form onSubmit={handleUpload} className="flex items-center gap-2">
-      <input type="file" onChange={(e) => setFile(e.target.files[0])} />
-      <button type="submit" disabled={uploading || !file} className="px-3 py-1 bg-orange-500 text-white rounded">
-        {uploading ? 'Uploading...' : 'Upload'}
-      </button>
-    </form>
-  );
-};
