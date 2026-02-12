@@ -44,7 +44,7 @@ const Login = () => {
           navigate('/change-password', { replace: true });
         } else {
           // Navigate based on user role
-          const redirectPath = result.user.role === 'admin' ? '/admin/dashboard' : '/agent/dashboard';
+          const redirectPath = result.user.role === 'admin' ? '/admin' : '/agent';
           navigate(redirectPath, { replace: true });
         }
       } else {

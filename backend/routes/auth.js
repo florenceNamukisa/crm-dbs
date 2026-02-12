@@ -93,13 +93,53 @@ router.post('/change-password', async (req, res) => {
   try {
     const { email, currentPassword, newPassword } = req.body;
 
-    const user = await User.findOne({ email });
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ message: 'Current password and new password are required' });
+    }
+
+    if (currentPassword === newPassword) {
+      return res.status(400).json({ message: 'New password must be different from current password' });
+    }
+
+    if (newPassword.length < 8) {
+      return res.status(400).json({ message: 'Password must be at least 8 characters long' });
+    }
+
+    const passwordComplexity = /(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*])/;
+    if (!passwordComplexity.test(newPassword)) {
+      return res.status(400).json({ message: 'Password must include uppercase, lowercase, number, and special character' });
+    }
+
+    const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+    const token = req.headers.authorization?.split(' ')[1];
+    let user = null;
+
+    // Prefer authenticated user when token is present.
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret');
+        user = await User.findById(decoded.userId);
+      } catch (tokenError) {
+        // Fall back to email lookup for backward compatibility.
+      }
+    }
+
+    if (!user && normalizedEmail) {
+      user = await User.findOne({ email: normalizedEmail });
+    }
+
     if (!user) {
       return res.status(400).json({ message: 'User not found' });
     }
 
+    if (normalizedEmail && user.email !== normalizedEmail) {
+      return res.status(403).json({ message: 'You can only change your own password' });
+    }
+
+    const wasFirstLogin = user.isFirstLogin;
+
     // For first login, verify the OTP
-    if (user.isFirstLogin) {
+    if (wasFirstLogin) {
       const isOTPMatch = await bcrypt.compare(currentPassword, user.password);
       if (!isOTPMatch) {
         return res.status(400).json({ message: 'Invalid OTP' });
@@ -128,7 +168,7 @@ router.post('/change-password', async (req, res) => {
     await user.save();
 
     res.json({
-      message: user.isFirstLogin ? 'Password set successfully' : 'Password changed successfully',
+      message: wasFirstLogin ? 'Password set successfully' : 'Password changed successfully',
       requiresPasswordChange: false
     });
   } catch (error) {

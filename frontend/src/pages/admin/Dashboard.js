@@ -30,7 +30,6 @@ const AdminDashboard = () => {
   // individual chart periods
   const [salesPeriod, setSalesPeriod] = useState('monthly');
   const [agentsPeriod, setAgentsPeriod] = useState('monthly');
-  const [clientsPeriod, setClientsPeriod] = useState('monthly');
   const [dealsPeriod, setDealsPeriod] = useState('monthly');
 
   // notifications
@@ -51,8 +50,6 @@ const AdminDashboard = () => {
   const [dealsWonLostData, setDealsWonLostData] = useState([]);
   const [dealsTable, setDealsTable] = useState([]);
   const [topAgentsData, setTopAgentsData] = useState([]);
-  const [topClientsChartData, setTopClientsChartData] = useState([]);
-  const [topClientsSeries, setTopClientsSeries] = useState([]);
 
   // helper: compute start/end dates for filters
   const computeRange = (p) => {
@@ -177,43 +174,6 @@ const AdminDashboard = () => {
 
       setTopAgentsData(agentWonCounts);
 
-      // top clients series (by won deals) - aggregate won deals per client from deals list
-      const wonDeals = (dealsListForAgents || []).filter(d => (d.stage && d.stage.toLowerCase() === 'won') || (d.status && d.status.toLowerCase() === 'won'));
-      const clientMap = {};
-      wonDeals.forEach(d => {
-        const cid = d.client?._id || d.client;
-        const cname = d.client?.name || (typeof d.client === 'string' ? d.client : 'Unknown');
-        clientMap[cid] = clientMap[cid] || { name: cname, monthly: {} };
-        const date = new Date(d.closedAt || d.updatedAt || d.createdAt || Date.now());
-        const monthKey = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}`;
-        clientMap[cid].monthly[monthKey] = (clientMap[cid].monthly[monthKey] || 0) + 1;
-        clientMap[cid].total = (clientMap[cid].total || 0) + 1;
-      });
-      const clientsArr = Object.keys(clientMap).map(k => ({ id: k, name: clientMap[k].name, total: clientMap[k].total, monthly: clientMap[k].monthly }));
-      clientsArr.sort((a,b) => b.total - a.total);
-      const topClients = clientsArr.slice(0, 5);
-
-      // build series for the last 12 months
-      const months = [];
-      const now = new Date();
-      for (let i = 11; i >= 0; i--) {
-        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        months.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
-      }
-      const series = topClients.map(client => ({ id: client.id, name: client.name, data: months.map(mk => client.monthly[mk] || 0) }));
-      setTopClientsSeries(series);
-
-      // build chart data: array of { month: 'YYYY-MM', 'Client A': value, 'Client B': value }
-      const chart = months.map((mk, idx) => {
-        const obj = { month: mk };
-        series.forEach(s => {
-          const key = s.name;
-          obj[key] = s.data[idx] || 0;
-        });
-        return obj;
-      });
-      setTopClientsChartData(chart);
-
       // clients
       const clients = clientsRes?.data?.clients || [];
       setClientsCount(Array.isArray(clients) ? clients.length : 0);
@@ -236,7 +196,7 @@ const AdminDashboard = () => {
     loadData();
     loadUnreadNotifications();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [period, salesPeriod, agentsPeriod, clientsPeriod, dealsPeriod]);
+  }, [period, salesPeriod, agentsPeriod, dealsPeriod]);
 
   const loadUnreadNotifications = async () => {
     try {
@@ -360,7 +320,7 @@ const AdminDashboard = () => {
         </ResponsiveContainer>
       </div>
 
-      {/* Top Agents & Top Clients */}
+      {/* Top Agents */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="bg-white rounded-xl shadow-sm p-6">
           <div className="flex items-center justify-between mb-4">
@@ -413,32 +373,6 @@ const AdminDashboard = () => {
           )}
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold">Top Clients — Won Deals (last 12 months)</h3>
-            <select value={clientsPeriod} onChange={(e) => setClientsPeriod(e.target.value)} className="px-3 py-1 border border-gray-300 rounded text-sm">
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
-              <option value="yearly">Yearly</option>
-            </select>
-          </div>
-          {topClientsSeries.length === 0 ? (
-            <p className="text-sm text-gray-500">No data</p>
-          ) : (
-            <ResponsiveContainer width="100%" height={260}>
-              <LineChart data={topClientsChartData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
-                <YAxis />
-                <Tooltip />
-                {topClientsSeries.map((s, idx) => (
-                  <Line key={s.id || s.name} type="monotone" dataKey={s.name} stroke={COLORS[idx % COLORS.length]} strokeWidth={2} dot={false} />
-                ))}
-              </LineChart>
-            </ResponsiveContainer>
-          )}
-        </div>
       </div>
 
       {/* Reports: deals table */}

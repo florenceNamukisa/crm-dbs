@@ -148,7 +148,10 @@ router.put('/:id', async (req, res) => {
   try {
     const { name, phone, profileImage, nin, isActive, status } = req.body;
 
-    const update = { name, phone, profileImage };
+    const update = {};
+    if (typeof name !== 'undefined') update.name = name;
+    if (typeof phone !== 'undefined') update.phone = phone;
+    if (typeof profileImage !== 'undefined') update.profileImage = profileImage;
     if (typeof nin !== 'undefined') update.nin = nin;
     if (typeof isActive !== 'undefined') {
       update.isActive = isActive;

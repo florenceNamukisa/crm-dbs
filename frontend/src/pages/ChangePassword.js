@@ -39,7 +39,7 @@ const ChangePassword = () => {
       toast.success(response.data.message || 'Password updated');
       // update local user state to reflect isFirstLogin false
       updateUser({ isFirstLogin: false });
-      navigate(user?.role === 'admin' ? '/admin/dashboard' : '/agent/dashboard', { replace: true });
+      navigate(user?.role === 'admin' ? '/admin' : '/agent', { replace: true });
     } catch (error) {
       console.error('Change password error', error);
       toast.error(error.response?.data?.message || 'Failed to change password');

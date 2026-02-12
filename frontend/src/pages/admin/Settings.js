@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { motion } from "framer-motion";
 import {
   Save,
@@ -12,11 +12,11 @@ import {
   EyeOff,
 } from "lucide-react";
 import toast from "react-hot-toast";
-import { usersAPI } from "../../services/api";
+import { usersAPI, authAPI } from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
 
 const Settings = () => {
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
   const [activeTab, setActiveTab] = useState("profile");
   const [isSaving, setIsSaving] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -101,6 +101,10 @@ const Settings = () => {
       toast.error("Email is required");
       return;
     }
+    if (passwordData.newPassword && !passwordData.currentPassword) {
+      toast.error("Current password is required to set a new password");
+      return;
+    }
     if (
       passwordData.newPassword &&
       passwordData.newPassword !== passwordData.confirmPassword
@@ -108,26 +112,63 @@ const Settings = () => {
       toast.error("Passwords do not match");
       return;
     }
+    if (
+      passwordData.newPassword &&
+      !/(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*])/.test(
+        passwordData.newPassword
+      )
+    ) {
+      toast.error(
+        "Password must include uppercase, lowercase, number, and special character"
+      );
+      return;
+    }
+    if (passwordData.newPassword && passwordData.newPassword.length < 8) {
+      toast.error("Password must be at least 8 characters");
+      return;
+    }
 
     try {
       setIsSaving(true);
-      const updateData = { name: adminData.name, email: adminData.email };
-      if (passwordData.newPassword) {
-        updateData.currentPassword = passwordData.currentPassword;
-        updateData.newPassword = passwordData.newPassword;
+      let profileUpdated = false;
+      let passwordUpdated = false;
+
+      // Update profile fields that are supported by backend users route.
+      if (adminData.name !== user?.name) {
+        const userId = user?._id || user?.id;
+        if (!userId) {
+          throw new Error("Unable to identify current user");
+        }
+        const profileRes = await usersAPI.update(userId, { name: adminData.name });
+        updateUser(profileRes.data);
+        profileUpdated = true;
       }
 
-      // Uncomment when API is ready
-      // await usersAPI.update(user._id, updateData);
+      if (passwordData.newPassword) {
+        await authAPI.changePassword({
+          email: user?.email || adminData.email,
+          currentPassword: passwordData.currentPassword,
+          newPassword: passwordData.newPassword,
+        });
+        passwordUpdated = true;
+      }
 
-      toast.success("Profile updated successfully!");
+      if (profileUpdated && passwordUpdated) {
+        toast.success("Profile and password updated successfully!");
+      } else if (passwordUpdated) {
+        toast.success("Password changed successfully!");
+      } else if (profileUpdated) {
+        toast.success("Profile updated successfully!");
+      } else {
+        toast.success("No changes to save");
+      }
       setPasswordData({
         currentPassword: "",
         newPassword: "",
         confirmPassword: "",
       });
     } catch (error) {
-      toast.error(error.message || "Failed to update profile");
+      toast.error(error.response?.data?.message || error.message || "Failed to update profile");
     } finally {
       setIsSaving(false);
     }

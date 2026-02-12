@@ -96,7 +96,7 @@ const PasswordChangeForm = () => {
       );
       
       // Navigate to appropriate dashboard
-      const redirectPath = user.role === 'admin' ? '/admin/dashboard' : '/agent/dashboard';
+      const redirectPath = user.role === 'admin' ? '/admin' : '/agent';
       navigate(redirectPath, { replace: true });
       
     } catch (error) {
