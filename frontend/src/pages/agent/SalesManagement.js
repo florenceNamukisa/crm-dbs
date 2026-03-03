@@ -180,13 +180,26 @@ const SalesManagement = () => {
 
     try {
       const saleData = {
-        ...saleForm,
+        customerName: saleForm.customerName,
+        customerEmail: saleForm.customerEmail,
+        customerPhone: saleForm.customerPhone,
+        paymentMethod: saleForm.paymentMethod,
+        items: saleForm.items.map(item => ({
+          itemName: item.itemName,
+          quantity: Number(item.quantity),
+          unitPrice: Number(item.unitPrice),
+          discount: Number(item.discount) || 0
+        })),
+        notes: saleForm.notes,
+        client: saleForm.clientId || null,
         saleDate: new Date(saleForm.saleDate).toISOString()
       };
 
       if (saleForm.paymentMethod === 'credit' && saleForm.dueDate) {
         saleData.dueDate = new Date(saleForm.dueDate).toISOString();
       }
+
+      console.log('Sending sale data:', saleData);
 
       if (editingSale) {
         // When editing a credit sale with initial payment, record it as a payment
@@ -229,7 +242,9 @@ const SalesManagement = () => {
       loadSales();
     } catch (error) {
       console.error('Error saving sale:', error);
-      toast.error(error.response?.data?.message || 'Failed to save sale');
+      console.error('Error response:', error.response?.data);
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || 'Failed to save sale';
+      toast.error(errorMessage);
     }
   };
 

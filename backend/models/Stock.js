@@ -52,7 +52,7 @@ stockSchema.virtual('isLowStock').get(function() {
   return this.currentStock <= this.minimumStock;
 });
 
-// Virtual for stock status
+
 stockSchema.virtual('stockStatus').get(function() {
   if (this.currentStock === 0) return 'out_of_stock';
   if (this.currentStock <= this.minimumStock) return 'low_stock';

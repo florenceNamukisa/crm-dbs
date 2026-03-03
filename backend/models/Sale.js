@@ -25,7 +25,6 @@ const saleItemSchema = new mongoose.Schema({
   },
   totalPrice: {
     type: Number,
-    required: true,
     min: 0
   }
 }, { _id: false });
@@ -127,14 +126,23 @@ saleSchema.pre('save', function(next) {
       return next(new Error('At least one item is required'));
     }
 
+    let hasInvalidItem = false;
     this.items.forEach(item => {
       // Ensure all required fields are present and valid
       const quantity = Number(item.quantity) || 0;
       const unitPrice = Number(item.unitPrice) || 0;
       const discount = Number(item.discount) || 0;
 
-      if (quantity <= 0 || unitPrice < 0) {
-        return next(new Error('Invalid item data'));
+      if (quantity <= 0) {
+        hasInvalidItem = true;
+        console.error('Invalid quantity for item:', item);
+        return;
+      }
+      
+      if (unitPrice < 0) {
+        hasInvalidItem = true;
+        console.error('Invalid unit price for item:', item);
+        return;
       }
 
       const itemTotal = quantity * unitPrice;
@@ -146,6 +154,10 @@ saleSchema.pre('save', function(next) {
       totalAmount += itemTotal;
       discountAmount += itemDiscount;
     });
+
+    if (hasInvalidItem) {
+      return next(new Error('Invalid item data: quantity must be greater than 0 and unit price must be non-negative'));
+    }
 
     // Set the calculated totals
     this.totalAmount = totalAmount;

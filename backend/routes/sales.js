@@ -202,19 +202,37 @@ router.post('/', [
   getCurrentUser,
   body('customerName').trim().isLength({ min: 1 }).withMessage('Customer name is required'),
   body('items').isArray({ min: 1 }).withMessage('At least one item is required'),
-  body('items.*.itemName').trim().isLength({ min: 1 }).withMessage('Item name is required'),
-  body('items.*.quantity').isInt({ min: 1 }).withMessage('Quantity must be at least 1'),
-  body('items.*.unitPrice').isFloat({ min: 0 }).withMessage('Unit price must be non-negative'),
-  body('items.*.discount').optional().isFloat({ min: 0, max: 100 }).withMessage('Discount must be between 0 and 100'),
   body('paymentMethod').isIn(['cash', 'credit']).withMessage('Invalid payment method')
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.error('Validation errors:', errors.array());
       return res.status(400).json({ message: 'Validation errors', errors: errors.array() });
     }
 
     const { customerName, customerEmail, customerPhone, items, paymentMethod, client, notes, dueDate } = req.body;
+
+    console.log('Creating sale with data:', { customerName, items, paymentMethod, client });
+
+    // Validate items before creating sale
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ message: 'At least one item is required' });
+    }
+
+    // Validate each item
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (!item.itemName || !item.itemName.trim()) {
+        return res.status(400).json({ message: `Item ${i + 1}: Item name is required` });
+      }
+      if (!item.quantity || item.quantity < 1) {
+        return res.status(400).json({ message: `Item ${i + 1}: Quantity must be at least 1` });
+      }
+      if (item.unitPrice === undefined || item.unitPrice === null || item.unitPrice < 0) {
+        return res.status(400).json({ message: `Item ${i + 1}: Unit price must be non-negative` });
+      }
+    }
 
     // Create sale
     const sale = new Sale({
@@ -224,18 +242,21 @@ router.post('/', [
       items,
       paymentMethod,
       agent: req.user.userId,
-      client,
+      client: client || null,
       notes,
       dueDate: paymentMethod === 'credit' ? dueDate : null,
       saleDate: new Date()
     });
 
-
     try {
       await sale.save();
+      console.log('Sale saved successfully:', sale._id);
     } catch (validationError) {
       console.error('Sale validation error:', validationError);
-      throw validationError;
+      return res.status(400).json({ 
+        message: 'Failed to save sale', 
+        error: validationError.message 
+      });
     }
 
     // Update stock levels for each item
