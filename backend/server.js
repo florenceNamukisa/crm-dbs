@@ -93,6 +93,7 @@ app.get('/api/version', (req, res) => {
     service: 'crm-backend',
     node: process.version,
     env: process.env.NODE_ENV || 'unknown',
+    db: mongoose.connection?.readyState === 1 ? mongoose.connection.name : null,
     commit: process.env.RENDER_GIT_COMMIT || null,
     branch: process.env.RENDER_GIT_BRANCH || null,
     timestamp: new Date().toISOString()
