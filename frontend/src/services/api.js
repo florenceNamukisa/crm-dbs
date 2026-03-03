@@ -36,7 +36,24 @@ const clearCache = (pattern) => {
   }
 };
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+const normalizeApiBaseUrl = (baseUrl) => {
+  const trimmed = (baseUrl || '').toString().trim().replace(/\/+$/, '');
+  if (!trimmed) return '';
+  return trimmed.endsWith('/api') ? trimmed : `${trimmed}/api`;
+};
+
+const isLocalhost = () => {
+  if (typeof window === 'undefined') return false;
+  const hostname = window.location.hostname;
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+};
+
+const DEFAULT_LOCAL_API_URL = 'http://localhost:5000/api';
+const DEFAULT_PROD_API_URL = 'https://api.crm.xtreative.com/api';
+
+const API_URL = normalizeApiBaseUrl(
+  process.env.REACT_APP_API_URL || (isLocalhost() ? DEFAULT_LOCAL_API_URL : DEFAULT_PROD_API_URL)
+);
 const api = axios.create({
   baseURL: API_URL,
 });

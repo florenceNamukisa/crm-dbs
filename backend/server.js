@@ -80,6 +80,25 @@ app.use('/api/stock', stockRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/upload', uploadRoutes);
 
+// Lightweight health/version endpoints for deployed debugging
+app.get('/api/health', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({ status: 'ok' });
+});
+
+app.get('/api/version', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({
+    status: 'ok',
+    service: 'crm-backend',
+    node: process.version,
+    env: process.env.NODE_ENV || 'unknown',
+    commit: process.env.RENDER_GIT_COMMIT || null,
+    branch: process.env.RENDER_GIT_BRANCH || null,
+    timestamp: new Date().toISOString()
+  });
+});
+
 
 // Serve frontend static files
 const SERVE_FRONTEND = process.env.SERVE_FRONTEND === 'true';
