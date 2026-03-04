@@ -46,6 +46,9 @@ const AgentDashboard = () => {
   const [monthlySalesData, setMonthlySalesData] = useState([]);
   const [dealsWonLostData, setDealsWonLostData] = useState([]);
   const [timeFilter, setTimeFilter] = useState('monthly');
+  const [showCustomDatePicker, setShowCustomDatePicker] = useState(false);
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
 
   // Format currency in UGX without decimals
   const formatUGX = (val) => `UGX ${Number(val || 0).toLocaleString('en-UG', { maximumFractionDigits: 0 })}`;
@@ -90,6 +93,19 @@ const AgentDashboard = () => {
       } else if (timeFilter === 'monthly') {
         startDate = new Date(now.getFullYear(), now.getMonth(), 1);
         endDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      } else if (timeFilter === 'yearly') {
+        startDate = new Date(now.getFullYear(), 0, 1);
+        endDate = new Date(now.getFullYear() + 1, 0, 1);
+      } else if (timeFilter === 'custom') {
+        if (customStartDate && customEndDate) {
+          startDate = new Date(customStartDate);
+          endDate = new Date(customEndDate);
+          endDate.setHours(23, 59, 59, 999); // Include the entire end date
+        } else {
+          // Default to current month if custom dates not set
+          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+          endDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+        }
       }
 
       // Fetch performance, deals stats, clients, sales, and deals in parallel
@@ -328,22 +344,74 @@ const AgentDashboard = () => {
 
       {/* Time Period Filter */}
       <div className="bg-white p-4 rounded-lg shadow-sm border">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <label className="text-sm font-medium text-gray-700">Time Period:</label>
-            <select
-              value={timeFilter}
-              onChange={(e) => setTimeFilter(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+        <div className="flex flex-col space-y-4">
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div className="flex items-center space-x-4">
+              <label className="text-sm font-medium text-gray-700">Time Period:</label>
+              <select
+                value={timeFilter}
+                onChange={(e) => {
+                  setTimeFilter(e.target.value);
+                  if (e.target.value === 'custom') {
+                    setShowCustomDatePicker(true);
+                  } else {
+                    setShowCustomDatePicker(false);
+                  }
+                }}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+              >
+                <option value="daily">Today</option>
+                <option value="weekly">This Week</option>
+                <option value="monthly">This Month</option>
+                <option value="yearly">This Year</option>
+                <option value="custom">Custom Range</option>
+              </select>
+            </div>
+            <div className="text-sm text-gray-600">
+              Data shown for: <span className="font-medium capitalize">{timeFilter === 'custom' ? 'Custom Range' : timeFilter}</span>
+            </div>
+          </div>
+          
+          {/* Custom Date Range Picker */}
+          {showCustomDatePicker && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="flex items-center space-x-4 pt-2 border-t"
             >
-              <option value="daily">Today</option>
-              <option value="weekly">This Week</option>
-              <option value="monthly">This Month</option>
-            </select>
-          </div>
-          <div className="text-sm text-gray-600">
-            Data shown for: <span className="font-medium capitalize">{timeFilter}</span>
-          </div>
+              <div className="flex items-center space-x-2">
+                <label className="text-sm font-medium text-gray-700">From:</label>
+                <input
+                  type="date"
+                  value={customStartDate}
+                  onChange={(e) => setCustomStartDate(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                />
+              </div>
+              <div className="flex items-center space-x-2">
+                <label className="text-sm font-medium text-gray-700">To:</label>
+                <input
+                  type="date"
+                  value={customEndDate}
+                  onChange={(e) => setCustomEndDate(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                />
+              </div>
+              <button
+                onClick={() => {
+                  if (customStartDate && customEndDate) {
+                    loadDashboardData();
+                  } else {
+                    toast.error('Please select both start and end dates');
+                  }
+                }}
+                className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors"
+              >
+                Apply
+              </button>
+            </motion.div>
+          )}
         </div>
       </div>
 

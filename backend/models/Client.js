@@ -14,8 +14,8 @@ const clientSchema = new mongoose.Schema({
   },
   nin: {
     type: String,
-    required: [true, 'NIN is required'],
     unique: true,
+    sparse: true, // Allow multiple null values
     trim: true
   },
   idType: {

@@ -14,6 +14,12 @@ router.post('/login', async (req, res) => {
 
     console.log('Login attempt for:', email);
 
+    // Validate input
+    if (!email || !password) {
+      console.log('Missing email or password');
+      return res.status(400).json({ message: 'Email and password are required' });
+    }
+
     // Check if user exists
     const user = await User.findOne({ email });
     if (!user) {
@@ -33,6 +39,7 @@ router.post('/login', async (req, res) => {
     const isMatch = await bcrypt.compare(password, user.password);
     console.log('Password match result:', isMatch);
     if (!isMatch) {
+      console.log('Password mismatch for:', email);
       return res.status(400).json({ message: 'Invalid email or password' });
     }
 

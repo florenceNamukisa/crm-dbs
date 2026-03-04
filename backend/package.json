@@ -6,7 +6,8 @@
     "dev": "nodemon server.js",
     "start": "node server.js",
     "setup": "node setup.js",
-    "sync:atlas": "node scripts/sync-local-to-atlas.js"
+    "sync:atlas": "node sync-to-atlas.js",
+    "ensure:admin": "node ensure-admin.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

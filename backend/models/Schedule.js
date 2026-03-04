@@ -19,13 +19,7 @@ const scheduleSchema = new mongoose.Schema({
   },
   date: {
     type: Date,
-    required: [true, 'Date is required'],
-    validate: {
-      validator: function(date) {
-        return date > new Date();
-      },
-      message: 'Schedule date must be in the future'
-    }
+    required: [true, 'Date is required']
   },
   duration: {
     type: Number,

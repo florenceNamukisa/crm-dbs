@@ -25,7 +25,6 @@ const StatCard = ({ icon: Icon, title, value, subtitle }) => (
 const AdminDashboard = () => {
   const { user } = useAuth();
   const [period, setPeriod] = useState('monthly');
-  const [loading, setLoading] = useState(false);
 
   // individual chart periods
   const [salesPeriod, setSalesPeriod] = useState('monthly');
@@ -42,7 +41,6 @@ const AdminDashboard = () => {
   const [pendingDeals, setPendingDeals] = useState(0);
   const [clientsCount, setClientsCount] = useState(0);
   const [totalDealsClosed, setTotalDealsClosed] = useState(0);
-  const [totalClientsMet, setTotalClientsMet] = useState(0);
 
   // charts & tables
   const [monthlyData, setMonthlyData] = useState([]);
@@ -77,7 +75,6 @@ const AdminDashboard = () => {
 
   const loadData = async () => {
     try {
-      setLoading(true);
       const range = computeRange(period);
 
       // fetch in parallel with individual chart period ranges
@@ -177,7 +174,6 @@ const AdminDashboard = () => {
       // clients
       const clients = clientsRes?.data?.clients || [];
       setClientsCount(Array.isArray(clients) ? clients.length : 0);
-      setTotalClientsMet(Array.isArray(clients) ? clients.length : 0);
 
       // agents
       const users = usersRes?.data || [];
@@ -187,8 +183,6 @@ const AdminDashboard = () => {
     } catch (err) {
       console.error('Failed to load admin dashboard data', err);
       toast.error('Failed to load dashboard data');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -239,12 +233,12 @@ const AdminDashboard = () => {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <StatCard icon={DollarSign} title="Total Sales" value={`UGX ${Number(totalSales || 0).toLocaleString('en-UG')}`} subtitle={loading ? 'Refreshing...' : ''} />
+        <StatCard icon={DollarSign} title="Total Sales Revenue" value={`UGX ${Number(totalSales || 0).toLocaleString('en-UG')}`} />
         <StatCard icon={Users} title="Total Agents" value={agentsCount} />
         <StatCard icon={Target} title="Total Deals" value={dealsCount} />
         <StatCard icon={TrendingUp} title="Pending Deals" value={pendingDeals} />
-        <StatCard icon={Target} title="Deals Closed" value={totalDealsClosed} />
-        <StatCard icon={Users} title="Clients Met" value={totalClientsMet} />
+        <StatCard icon={Target} title="Deals Closed (Won)" value={totalDealsClosed} />
+        <StatCard icon={Users} title="Total Clients" value={clientsCount} />
       </div>
 
       {/* Charts */}

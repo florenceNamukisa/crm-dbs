@@ -59,13 +59,24 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Serve uploaded files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// MongoDB connection
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/crm_system', {
+// MongoDB connection with improved timeout settings
+const mongoOptions = {
   useNewUrlParser: true,
   useUnifiedTopology: true,
-})
-  .then(() => console.log('MongoDB connected successfully'))
-  .catch(err => console.error('MongoDB connection error:', err));
+  serverSelectionTimeoutMS: 30000, // 30 seconds
+  socketTimeoutMS: 45000, // 45 seconds
+};
+
+mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/crm_system', mongoOptions)
+  .then(() => {
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('✅ MongoDB connected successfully');
+      console.log('Database:', mongoose.connection.name);
+    }
+  })
+  .catch(err => {
+    console.error('❌ MongoDB connection error:', err.message);
+  });
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -222,11 +233,13 @@ const updateAgentRankings = async () => {
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, async () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`Login URL: http://localhost:${PORT}`);
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`Server running on port ${PORT}`);
+    console.log(`Login URL: http://localhost:${PORT}`);
+  }
 
-  // Test email configuration
-  if (process.env.TEST_EMAIL_ON_STARTUP === 'true') {
+  // Test email configuration in development only
+  if (process.env.TEST_EMAIL_ON_STARTUP === 'true' && process.env.NODE_ENV !== 'production') {
     await testEmailConfig();
   }
 
