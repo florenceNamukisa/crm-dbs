@@ -167,6 +167,11 @@ const ProfileModal = ({ isOpen, onClose }) => {
                     src={photoPreview || user.profileImage || user.photo}
                     alt={user?.name}
                     className="w-full h-full object-cover"
+                    onError={(e) => {
+                      // If image fails to load, show default icon
+                      e.target.style.display = 'none';
+                      e.target.parentElement.innerHTML = '<svg class="w-16 h-16 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>';
+                    }}
                   />
                 ) : (
                   <User className="w-16 h-16 text-orange-500" />
@@ -191,13 +196,16 @@ const ProfileModal = ({ isOpen, onClose }) => {
                 className="hidden"
               />
             </div>
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="text-sm text-orange-600 hover:text-orange-700 font-medium flex items-center space-x-1"
-            >
-              <Upload className="w-4 h-4" />
-              <span>Upload Photo</span>
-            </button>
+            <div className="text-center">
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="text-sm text-orange-600 hover:text-orange-700 font-medium flex items-center space-x-1"
+              >
+                <Upload className="w-4 h-4" />
+                <span>Upload Photo</span>
+              </button>
+              <p className="text-xs text-gray-500 mt-1">Note: Photos are temporary in production</p>
+            </div>
           </div>
 
           {/* User Details */}

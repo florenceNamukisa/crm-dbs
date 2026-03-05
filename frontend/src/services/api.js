@@ -264,6 +264,16 @@ export const reportsAPI = {
   getAnalytics: (params) => api.get('/reports/analytics', { params })
 };
 
+// Meetings API
+export const meetingsAPI = {
+  getAll: (params = {}) => api.get('/meetings', { params }),
+  create: (meetingData) => api.post('/meetings', meetingData),
+  update: (id, meetingData) => api.put(`/meetings/${id}`, meetingData),
+  delete: (id) => api.delete(`/meetings/${id}`),
+  getById: (id) => api.get(`/meetings/${id}`),
+  getByAgent: (agentId) => api.get(`/meetings/agent/${agentId}`),
+};
+
 // Sales API
 export const salesAPI = {
   getAll: (params = {}) => api.get('/sales', { params }),

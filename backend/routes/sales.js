@@ -177,6 +177,42 @@ router.get('/stats', getCurrentUser, async (req, res) => {
       count: data.count
     }));
 
+    // Calculate sales by salesperson (agent) and monthly breakdown by salesperson
+    const bySalespersonMap = {};
+    const monthlyBySalespersonMap = {};
+
+    sales.forEach(sale => {
+      const agentId = sale.agent?._id ? String(sale.agent._id) : String(sale.agent);
+      const agentName = sale.agent?.name || 'Unknown';
+
+      if (!bySalespersonMap[agentId]) {
+        bySalespersonMap[agentId] = { _id: agentId, name: agentName, total: 0, count: 0 };
+      }
+      bySalespersonMap[agentId].total += sale.finalAmount || 0;
+      bySalespersonMap[agentId].count += 1;
+
+      const date = new Date(sale.saleDate);
+      if (!Number.isNaN(date.getTime())) {
+        const month = date.getMonth() + 1;
+        const year = date.getFullYear();
+        const monthKey = `${year}-${String(month).padStart(2, '0')}`;
+        const key = `${agentId}:${monthKey}`;
+
+        if (!monthlyBySalespersonMap[key]) {
+          monthlyBySalespersonMap[key] = { agentId, name: agentName, month, year, total: 0, count: 0 };
+        }
+        monthlyBySalespersonMap[key].total += sale.finalAmount || 0;
+        monthlyBySalespersonMap[key].count += 1;
+      }
+    });
+
+    const bySalesperson = Object.values(bySalespersonMap).sort((a, b) => (b.total || 0) - (a.total || 0));
+    const monthlyBySalesperson = Object.values(monthlyBySalespersonMap).sort((a, b) => {
+      if (a.year !== b.year) return a.year - b.year;
+      if (a.month !== b.month) return a.month - b.month;
+      return String(a.name || '').localeCompare(String(b.name || ''));
+    });
+
     const stats = {
       totalSales: sales.length,
       totalAmount: sales.reduce((sum, sale) => sum + (sale.finalAmount || 0), 0),
@@ -187,7 +223,9 @@ router.get('/stats', getCurrentUser, async (req, res) => {
       creditAmount: sales.filter(sale => sale.paymentMethod === 'credit')
         .reduce((sum, sale) => sum + (sale.finalAmount || 0), 0),
       pendingCredits: sales.filter(sale => sale.paymentMethod === 'credit' && sale.creditStatus !== 'paid').length,
-      monthly
+      monthly,
+      bySalesperson,
+      monthlyBySalesperson
     };
 
     res.json(stats);

@@ -18,6 +18,7 @@ import { salesRoutes } from './routes/sales.js';
 import { stockRoutes } from './routes/stock.js';
 import { notificationRoutes } from './routes/notifications.js';
 import { uploadRoutes } from './routes/upload.js';
+import { meetingRoutes } from './routes/meetings.js';
 import { testEmailConfig } from './services/emailService.js';
 
 
@@ -67,7 +68,20 @@ const mongoOptions = {
   socketTimeoutMS: 45000, // 45 seconds
 };
 
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/crm_system', mongoOptions)
+// Validate MongoDB URI
+const MONGODB_URI = process.env.MONGODB_URI;
+if (!MONGODB_URI) {
+  console.error('❌ MONGODB_URI environment variable is not set!');
+  process.exit(1);
+}
+
+if (!MONGODB_URI.startsWith('mongodb://') && !MONGODB_URI.startsWith('mongodb+srv://')) {
+  console.error('❌ Invalid MongoDB URI format. Must start with mongodb:// or mongodb+srv://');
+  console.error('Current value:', MONGODB_URI);
+  process.exit(1);
+}
+
+mongoose.connect(MONGODB_URI, mongoOptions)
   .then(() => {
     if (process.env.NODE_ENV !== 'production') {
       console.log('✅ MongoDB connected successfully');
@@ -76,6 +90,7 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/crm_syste
   })
   .catch(err => {
     console.error('❌ MongoDB connection error:', err.message);
+    process.exit(1);
   });
 
 // Routes
@@ -90,6 +105,7 @@ app.use('/api/sales', salesRoutes);
 app.use('/api/stock', stockRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/meetings', meetingRoutes);
 
 // Lightweight health/version endpoints for deployed debugging
 app.get('/api/health', (req, res) => {

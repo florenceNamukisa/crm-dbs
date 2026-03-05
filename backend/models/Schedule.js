@@ -56,8 +56,8 @@ const scheduleSchema = new mongoose.Schema({
   mode: {
     type: String,
     enum: {
-      values: ['in-person', 'zoom', 'teams', 'google-meet', 'phone'],
-      message: 'Mode must be in-person, zoom, teams, google-meet, or phone'
+      values: ['in-person', 'google-meet'],
+      message: 'Mode must be in-person or google-meet'
     },
     required: [true, 'Mode is required']
   },
@@ -145,6 +145,26 @@ const scheduleSchema = new mongoose.Schema({
   }]
 }, {
   timestamps: true
+});
+
+// Auto-generate Google Meet link for google-meet mode
+scheduleSchema.pre('save', function(next) {
+  if (this.mode === 'google-meet' && !this.meetingLink) {
+    // Generate a Google Meet link (in a real implementation, you'd integrate with Google Calendar API)
+    const meetCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+    this.meetingLink = `https://meet.google.com/${meetCode}`;
+    
+    // Also set location to the Google Meet link for consistency
+    this.location = this.meetingLink;
+  }
+  
+  // Clear meeting link and set location to physical address if mode is in-person
+  if (this.mode === 'in-person') {
+    this.meetingLink = undefined;
+    // Keep location as physical address for in-person meetings
+  }
+  
+  next();
 });
 
 // Index for better query performance

@@ -255,7 +255,10 @@ const NotificationCenter = ({ isOpen, onClose }) => {
                     <div className="flex items-center space-x-2">
                       {!notification.isRead && (
                         <button
-                          onClick={() => markAsRead(notification._id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            markAsRead(notification._id);
+                          }}
                           className="text-blue-500 hover:text-blue-600"
                           title="Mark as read"
                         >
@@ -263,7 +266,10 @@ const NotificationCenter = ({ isOpen, onClose }) => {
                         </button>
                       )}
                       <button
-                        onClick={() => deleteNotification(notification._id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteNotification(notification._id);
+                        }}
                         className="text-red-500 hover:text-red-600"
                         title="Delete"
                       >

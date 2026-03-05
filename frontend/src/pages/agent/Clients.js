@@ -6,7 +6,6 @@ import {
   Filter,
   Download,
   Mail,
-  Phone,
   MapPin,
   Building,
   User,
@@ -27,7 +26,8 @@ import {
   AlertCircle,
   CheckCircle,
   Clock,
-  Award
+  Award,
+  MessageSquare
 } from 'lucide-react';
 import { clientsAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext'; 
@@ -299,7 +299,6 @@ const Clients = () => {
                       <span className="text-gray-900">{client.email}</span>
                     </div>
                     <div className="flex items-center space-x-3">
-                      <Phone className="w-4 h-4 text-gray-400" />
                       <span className="text-gray-900">{client.phone}</span>
                     </div>
                     {client.address && (
@@ -980,7 +979,6 @@ const Clients = () => {
                           <span className="text-sm text-gray-900">{client.email}</span>
                         </div>
                         <div className="flex items-center space-x-2">
-                          <Phone className="w-4 h-4 text-gray-400" />
                           <span className="text-sm text-gray-600">{client.phone}</span>
                         </div>
                       </div>
@@ -1017,16 +1015,6 @@ const Clients = () => {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center space-x-2">
-                        {client.phone && (
-                          <button
-                            onClick={() => window.open(`tel:${client.phone}`, '_self')}
-                            className="p-2 text-green-600 hover:bg-green-50 rounded-lg"
-                            aria-label={`Call ${client.name}`}
-                            title="Call"
-                          >
-                            <Phone className="w-4 h-4" />
-                          </button>
-                        )}
                         {(client.phone || client.email) && (
                           <button
                             onClick={() => {
@@ -1036,17 +1024,27 @@ const Clients = () => {
                                 window.open(`mailto:${client.email}?subject=Follow-up&body=Hello ${client.name},`, '_blank');
                               }
                             }}
-                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
-                            aria-label={`Chat with ${client.name}`}
-                            title="Chat/Message"
+                            className="p-2 text-green-600 hover:bg-green-50 rounded-lg"
+                            aria-label={`WhatsApp ${client.name}`}
+                            title="WhatsApp"
                           >
-                            <MessageCircle className="w-4 h-4" />
+                            <MessageSquare className="w-4 h-4" />
                           </button>
                         )}
-                        <button onClick={() => handleViewProfile(client._id)} className="p-2 text-gray-500 hover:text-gray-700 rounded-lg" aria-label={`View ${client.name}`}>
+                        <button 
+                          onClick={() => handleViewProfile(client._id)} 
+                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg" 
+                          aria-label={`View ${client.name}`}
+                          title="View Profile"
+                        >
                           <Eye className="w-4 h-4" />
                         </button>
-                        <button onClick={() => handleEditClient(client)} className="p-2 text-gray-500 hover:text-gray-700 rounded-lg" aria-label={`Edit ${client.name}`}>
+                        <button 
+                          onClick={() => handleEditClient(client)} 
+                          className="p-2 text-gray-500 hover:text-gray-700 rounded-lg" 
+                          aria-label={`Edit ${client.name}`}
+                          title="Edit"
+                        >
                           <Edit className="w-4 h-4" />
                         </button>
                         <button onClick={() => handleDeleteClient(client._id, client.name)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" aria-label={`Delete ${client.name}`}>

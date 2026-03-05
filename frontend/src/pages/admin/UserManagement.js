@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Search, Mail, Phone, Edit, Trash2, User, UserPlus, Shield, RefreshCw, UserX } from 'lucide-react';
+import { Search, Edit, Trash2, User, UserPlus, Shield, RefreshCw, UserX, X } from 'lucide-react';
 import { usersAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
@@ -12,6 +12,8 @@ const UserManagement = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [formLoading, setFormLoading] = useState(false);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [detailsUser, setDetailsUser] = useState(null);
 
   const [newUser, setNewUser] = useState({
     name: '',
@@ -225,96 +227,32 @@ const UserManagement = () => {
     (user.phone && user.phone.includes(searchTerm))
   );
 
-  const UserCard = ({ user, index }) => (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.1 }}
-      className="bg-white rounded-xl shadow-sm p-6 border border-gray-100 hover:shadow-md transition-shadow"
-    >
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center space-x-3">
-          <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
-            user.role === 'admin' ? 'bg-purple-100' : 'bg-orange-100'
-          }`}>
-            {user.role === 'admin' ? (
-              <Shield className="w-6 h-6 text-purple-600" />
-            ) : (
-              <User className="w-6 h-6 text-orange-600" />
-            )}
-          </div>
-          <div>
-            <h3 className="font-semibold text-gray-900">{user.name}</h3>
-            <p className="text-sm text-gray-600 capitalize">{user.role}</p>
-          </div>
-        </div>
-        <div className="flex items-center space-x-2">
-          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-            user.isActive !== false ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-          }`}>
-            {user.isActive !== false ? 'Active' : 'Inactive'}
-          </span>
-          {user.role === 'agent' && user.isFirstLogin && (
-            <button 
-              onClick={() => handleResendOTP(user._id, user.name)}
-              className="p-2 text-gray-400 hover:text-blue-500 transition-colors"
-              title="Resend OTP"
-            >
-              <RefreshCw className="w-4 h-4" />
-            </button>
-          )}
-          <button 
-            onClick={() => handleEditClick(user)}
-            className="p-2 text-gray-400 hover:text-blue-500 transition-colors"
-            title="Edit User"
-          >
-            <Edit className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => openDeactivateModal(user)}
-            className="p-2 text-gray-400 hover:text-red-500 transition-colors"
-            title={user.isActive === false ? 'Activate User' : 'Deactivate User'}
-          >
-            <UserX className="w-4 h-4" />
-          </button>
-          {user.role !== 'admin' && (
-            <button 
-              onClick={() => handleDeleteUser(user._id, user.name)}
-              className="p-2 text-gray-400 hover:text-red-500 transition-colors"
-              title="Delete User"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-      </div>
+  const getAccountStatus = (targetUser) => {
+    if (targetUser?.isActive === false) {
+      return { label: 'Inactive', className: 'bg-red-100 text-red-800' };
+    }
+    if (targetUser?.role === 'agent' && targetUser?.isFirstLogin) {
+      return { label: 'Pending', className: 'bg-yellow-100 text-yellow-800' };
+    }
+    return { label: 'Active', className: 'bg-green-100 text-green-800' };
+  };
 
-      <div className="space-y-2">
-        <div className="flex items-center space-x-2 text-sm text-gray-600">
-          <Mail className="w-4 h-4" />
-          <span className="truncate">{user.email}</span>
-        </div>
-        {user.phone && (
-          <div className="flex items-center space-x-2 text-sm text-gray-600">
-            <Phone className="w-4 h-4" />
-            <span>{user.phone}</span>
-          </div>
-        )}
-        {user.role === 'agent' && user.isFirstLogin && (
-          <div className="flex items-center space-x-2 text-sm text-yellow-600 bg-yellow-50 px-3 py-1 rounded-lg">
-            <span className="w-2 h-2 bg-yellow-500 rounded-full"></span>
-            <span>Awaiting first login</span>
-          </div>
-        )}
-        <div className="flex items-center justify-between text-xs text-gray-500">
-          <span>Joined: {new Date(user.createdAt).toLocaleDateString()}</span>
-          {user.performanceScore > 0 && (
-            <span>Score: {user.performanceScore}</span>
-          )}
-        </div>
-      </div>
-    </motion.div>
-  );
+  const openDetails = (targetUser) => {
+    setDetailsUser(targetUser);
+    setShowDetailsModal(true);
+  };
+
+  const closeDetails = () => {
+    setShowDetailsModal(false);
+    setDetailsUser(null);
+  };
+
+  const formatDateTime = (value) => {
+    if (!value) return 'N/A';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return 'N/A';
+    return date.toLocaleString();
+  };
 
   if (loading) {
     return (
@@ -401,34 +339,261 @@ const UserManagement = () => {
         </div>
       </div>
 
-      {/* Users Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredUsers.length > 0 ? (
-          filteredUsers.map((user, index) => (
-            <UserCard key={user._id} user={user} index={index} />
-          ))
-        ) : (
-          <div className="col-span-full text-center py-12">
-            <User className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              {searchTerm ? 'No users found' : 'No users yet'}
-            </h3>
-            <p className="text-gray-600 mb-4">
-              {searchTerm 
-                ? 'Try adjusting your search terms'
-                : 'Get started by registering your first agent'
-              }
-            </p>
-            {!searchTerm && user?.role === 'admin' && (
+      {/* User Details Modal */}
+      {showDetailsModal && detailsUser && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+          onClick={closeDetails}
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-xl shadow-lg max-w-3xl w-full p-6 max-h-[85vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">User Details</h3>
+                <p className="mt-1 text-sm text-gray-600">{detailsUser.name} - {detailsUser.email}</p>
+              </div>
               <button
-                onClick={() => setShowAddModal(true)}
-                className="bg-orange-500 text-white px-6 py-2 rounded-lg hover:bg-orange-600 transition-colors"
+                type="button"
+                onClick={closeDetails}
+                className="p-2 text-gray-500 hover:text-gray-700 transition-colors"
+                title="Close"
               >
-                Register First Agent
+                <X className="w-5 h-5" />
               </button>
-            )}
-          </div>
-        )}
+            </div>
+
+            <div className="mt-5 overflow-x-auto">
+              <table className="w-full text-sm">
+                <tbody className="divide-y divide-gray-200">
+                  <tr>
+                    <td className="py-3 pr-6 text-gray-500 whitespace-nowrap">Role</td>
+                    <td className="py-3 text-gray-900 capitalize">{detailsUser.role || 'N/A'}</td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 pr-6 text-gray-500 whitespace-nowrap">Account Status</td>
+                    <td className="py-3 text-gray-900">
+                      {(() => {
+                        const accountStatus = getAccountStatus(detailsUser);
+                        return (
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${accountStatus.className}`}>
+                            {accountStatus.label}
+                          </span>
+                        );
+                      })()}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 pr-6 text-gray-500 whitespace-nowrap">Login Status</td>
+                    <td className="py-3 text-gray-900 capitalize">{detailsUser.status || 'offline'}</td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 pr-6 text-gray-500 whitespace-nowrap">Phone</td>
+                    <td className="py-3 text-gray-900">{detailsUser.phone || 'N/A'}</td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 pr-6 text-gray-500 whitespace-nowrap">NIN</td>
+                    <td className="py-3 text-gray-900">{detailsUser.nin || 'N/A'}</td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 pr-6 text-gray-500 whitespace-nowrap">First Login</td>
+                    <td className="py-3 text-gray-900">{detailsUser.isFirstLogin ? 'Yes' : 'No'}</td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 pr-6 text-gray-500 whitespace-nowrap">Joined</td>
+                    <td className="py-3 text-gray-900">{formatDateTime(detailsUser.createdAt)}</td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 pr-6 text-gray-500 whitespace-nowrap">Last Updated</td>
+                    <td className="py-3 text-gray-900">{formatDateTime(detailsUser.updatedAt)}</td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 pr-6 text-gray-500 whitespace-nowrap">Performance Score</td>
+                    <td className="py-3 text-gray-900 tabular-nums">{(detailsUser.performanceScore ?? 0).toLocaleString()}</td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 pr-6 text-gray-500 whitespace-nowrap">Total Deals</td>
+                    <td className="py-3 text-gray-900 tabular-nums">{(detailsUser.totalDeals ?? 0).toLocaleString()}</td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 pr-6 text-gray-500 whitespace-nowrap">Successful Deals</td>
+                    <td className="py-3 text-gray-900 tabular-nums">{(detailsUser.successfulDeals ?? 0).toLocaleString()}</td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 pr-6 text-gray-500 whitespace-nowrap">Failed Deals</td>
+                    <td className="py-3 text-gray-900 tabular-nums">{(detailsUser.failedDeals ?? 0).toLocaleString()}</td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 pr-6 text-gray-500 whitespace-nowrap">Total Sales</td>
+                    <td className="py-3 text-gray-900 tabular-nums">{(detailsUser.totalSales ?? 0).toLocaleString()}</td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 pr-6 text-gray-500 whitespace-nowrap">Total Sales Amount</td>
+                    <td className="py-3 text-gray-900 tabular-nums">{(detailsUser.totalSalesAmount ?? 0).toLocaleString()}</td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 pr-6 text-gray-500 whitespace-nowrap">Monthly Sales</td>
+                    <td className="py-3 text-gray-900 tabular-nums">{(detailsUser.monthlySales ?? 0).toLocaleString()}</td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 pr-6 text-gray-500 whitespace-nowrap">Monthly Sales Amount</td>
+                    <td className="py-3 text-gray-900 tabular-nums">{(detailsUser.monthlySalesAmount ?? 0).toLocaleString()}</td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 pr-6 text-gray-500 whitespace-nowrap">Agent Rank</td>
+                    <td className="py-3 text-gray-900 tabular-nums">{(detailsUser.agentRank ?? 0).toLocaleString()}</td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 pr-6 text-gray-500 whitespace-nowrap">Last Rank Update</td>
+                    <td className="py-3 text-gray-900">{formatDateTime(detailsUser.lastRankUpdate)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Users Table */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Name</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Email</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Phone</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Role</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Status</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {filteredUsers.length > 0 ? (
+                filteredUsers.map((user) => (
+                  <tr
+                    key={user._id}
+                    className="hover:bg-gray-50 transition-colors cursor-pointer"
+                    onClick={() => openDetails(user)}
+                    title="Click to view details"
+                  >
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center space-x-3">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                          user.role === 'admin' ? 'bg-purple-100' : 'bg-orange-100'
+                        }`}>
+                          {user.role === 'admin' ? (
+                            <Shield className="w-5 h-5 text-purple-600" />
+                          ) : (
+                            <User className="w-5 h-5 text-orange-600" />
+                          )}
+                        </div>
+                        <span className="font-medium text-gray-900">{user.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="text-sm text-gray-600">{user.email}</span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="text-sm text-gray-600">{user.phone || 'N/A'}</span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        user.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-orange-100 text-orange-800'
+                      }`}>
+                        {user.role === 'admin' ? 'Admin' : 'Agent'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {(() => {
+                        const accountStatus = getAccountStatus(user);
+                        return (
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${accountStatus.className}`}>
+                            {accountStatus.label}
+                          </span>
+                        );
+                      })()}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center space-x-2">
+                        {user.role === 'agent' && user.isFirstLogin && (
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleResendOTP(user._id, user.name);
+                            }}
+                            className="p-1.5 text-gray-400 hover:text-blue-500 transition-colors"
+                            title="Resend OTP"
+                          >
+                            <RefreshCw className="w-4 h-4" />
+                          </button>
+                        )}
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditClick(user);
+                          }}
+                          className="p-1.5 text-gray-400 hover:text-blue-500 transition-colors"
+                          title="Edit User"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openDeactivateModal(user);
+                          }}
+                          className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"
+                          title={user.isActive === false ? 'Activate User' : 'Deactivate User'}
+                        >
+                          <UserX className="w-4 h-4" />
+                        </button>
+                        {user.role !== 'admin' && (
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteUser(user._id, user.name);
+                            }}
+                            className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"
+                            title="Delete User"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="6" className="px-6 py-12 text-center">
+                    <User className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                      {searchTerm ? 'No users found' : 'No users yet'}
+                    </h3>
+                    <p className="text-gray-600 mb-4">
+                      {searchTerm 
+                        ? 'Try adjusting your search terms'
+                        : 'Get started by registering your first agent'
+                      }
+                    </p>
+                    {!searchTerm && user?.role === 'admin' && (
+                      <button
+                        onClick={() => setShowAddModal(true)}
+                        className="bg-orange-500 text-white px-6 py-2 rounded-lg hover:bg-orange-600 transition-colors"
+                      >
+                        Register First Agent
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Add User Modal */}

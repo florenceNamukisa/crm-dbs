@@ -101,8 +101,18 @@ router.get('/:id', getCurrentUser, async (req, res) => {
     }
 
     // Check if user has permission to view this client
-    if (req.user.role === 'agent' && client.agent.toString() !== req.user.userId) {
-      return res.status(403).json({ message: 'Access denied' });
+    if (req.user.role === 'agent') {
+      const clientId = client.agent ? client.agent.toString() : null;
+      const userId = req.user.userId;
+      console.log('Permission check:', { clientId, userId, role: req.user.role, clientAgent: client.agent });
+      
+      if (!clientId) {
+        console.log('Client has no agent assigned, allowing access');
+        // Allow access if client has no agent assigned
+      } else if (clientId !== userId) {
+        console.log('Access denied for client:', clientId, 'user:', userId);
+        return res.status(403).json({ message: 'Access denied' });
+      }
     }
 
     res.json(client);

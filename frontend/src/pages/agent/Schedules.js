@@ -449,14 +449,14 @@ const ScheduleForm = ({ onClose, onSubmit, schedule, isEdit = false, clients = [
   const handleSubmit = (e) => {
     e.preventDefault();
 
-    // Auto-generate a meeting link/location for virtual modes if empty
+    // Auto-generate a Google Meet link if mode is Google Meet and location is empty
     let adjustedFormData = { ...formData };
     if (
       !adjustedFormData.location.trim() &&
       adjustedFormData.type === 'meeting' &&
-      ['zoom', 'google-meet', 'teams'].includes(adjustedFormData.mode)
+      adjustedFormData.mode === 'google-meet'
     ) {
-      adjustedFormData.location = generateDefaultLink(adjustedFormData.mode);
+      adjustedFormData.location = generateDefaultLink('google-meet');
     }
     
     // Validate required fields
@@ -472,8 +472,9 @@ const ScheduleForm = ({ onClose, onSubmit, schedule, isEdit = false, clients = [
       toast.error('Please select a date and time');
       return;
     }
-    if (!adjustedFormData.location.trim()) {
-      toast.error('Please enter a location or meeting link');
+    // Only require location for In Person meetings (Google Meet will be auto-generated)
+    if (adjustedFormData.mode === 'in-person' && !adjustedFormData.location.trim()) {
+      toast.error('Please enter a location for in-person meetings');
       return;
     }
     
@@ -511,10 +512,7 @@ const ScheduleForm = ({ onClose, onSubmit, schedule, isEdit = false, clients = [
   const getPlaceholder = (mode) => {
     switch (mode) {
       case 'in-person': return 'Enter physical address';
-      case 'zoom': return 'Enter Zoom meeting link';
-      case 'teams': return 'Enter Teams meeting link';
-      case 'google-meet': return 'Enter Google Meet link';
-      case 'phone': return 'Enter phone number';
+      case 'google-meet': return 'Google Meet link will be auto-generated';
       default: return 'Enter location or link';
     }
   };
@@ -638,9 +636,13 @@ const ScheduleForm = ({ onClose, onSubmit, schedule, isEdit = false, clients = [
                   const newMode = e.target.value;
                   setFormData(prev => {
                     const updated = { ...prev, mode: newMode };
-                    // Auto-fill location/link when switching to virtual modes if empty
-                    if (!prev.location && ['zoom', 'google-meet', 'teams'].includes(newMode)) {
+                    // Auto-fill Google Meet link when switching to Google Meet if empty
+                    if (!prev.location && newMode === 'google-meet') {
                       updated.location = generateDefaultLink(newMode);
+                    }
+                    // Clear location if switching to in-person
+                    if (newMode === 'in-person') {
+                      updated.location = '';
                     }
                     return updated;
                   });
@@ -648,27 +650,39 @@ const ScheduleForm = ({ onClose, onSubmit, schedule, isEdit = false, clients = [
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-colors"
               >
                 <option value="in-person">In Person</option>
-                <option value="zoom">Zoom</option>
-                <option value="teams">Microsoft Teams</option>
                 <option value="google-meet">Google Meet</option>
-                <option value="phone">Phone Call</option>
               </select>
             </div>
           </div>
 
+          {formData.mode === 'in-person' && (
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Location / Link *
+              Location *
             </label>
             <input
               type="text"
-              required
+              required={formData.mode === 'in-person'}
               value={formData.location}
               onChange={(e) => setFormData(prev => ({ ...prev, location: e.target.value }))}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-colors"
-              placeholder={getPlaceholder(formData.mode)}
+              placeholder="Enter physical address"
             />
           </div>
+        )}
+
+        {formData.mode === 'google-meet' && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Google Meet Link
+            </label>
+            <div className="p-3 bg-gray-50 border border-gray-300 rounded-lg">
+              <p className="text-sm text-gray-600">
+                {formData.location ? formData.location : 'Google Meet link will be automatically generated'}
+              </p>
+            </div>
+          </div>
+        )}
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">

@@ -251,7 +251,7 @@ router.get('/analytics', async (req, res) => {
     });
 
     const revenueTrend = Object.values(trendMap)
-      .map(d => ({
+      .map(d =>({
         date: new Date(d.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
         revenue: d.revenue,
         sales: d.sales
@@ -263,6 +263,52 @@ router.get('/analytics', async (req, res) => {
       { name: 'Won', value: dealsWon },
       { name: 'Lost', value: dealsLost },
       { name: 'In Progress', value: dealsInProgress }
+    ];
+
+    // 3. Deals vs Goal (monthly comparison)
+    const monthlyDealsMap = {};
+    deals.forEach(d => {
+      const month = new Date(d.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+      if (!monthlyDealsMap[month]) monthlyDealsMap[month] = { month, closed: 0, goal: 10 }; // Default goal: 10 deals/month
+      if (d.stage === 'won') monthlyDealsMap[month].closed += 1;
+    });
+
+    const dealsVsGoal = Object.values(monthlyDealsMap).slice(-6); // Last 6 months
+
+    // 4. Revenue Comparison (monthly)
+    const monthlyRevenueMap = {};
+    sales.forEach(s => {
+      const month = new Date(s.saleDate || s.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+      if (!monthlyRevenueMap[month]) monthlyRevenueMap[month] = { month, thisMonth: 0, lastMonth: 0 };
+      monthlyRevenueMap[month].thisMonth += Number(s.finalAmount) || 0;
+    });
+
+    // Calculate last month for comparison
+    const lastMonthStart = new Date();
+    lastMonthStart.setMonth(lastMonthStart.getMonth() - 1);
+    const lastMonthEnd = new Date();
+    lastMonthEnd.setDate(0); // Last day of previous month
+
+    sales.filter(s => {
+      const saleDate = new Date(s.saleDate || s.createdAt);
+      return saleDate >= lastMonthStart && saleDate <= lastMonthEnd;
+    }).forEach(s => {
+      const month = new Date(s.saleDate || s.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+      if (monthlyRevenueMap[month]) {
+        monthlyRevenueMap[month].lastMonth += Number(s.finalAmount) || 0;
+      }
+    });
+
+    const revenueComparison = Object.values(monthlyRevenueMap).slice(-6); // Last 6 months
+
+    // 5. Sales Funnel Data
+    const salesFunnelData = [
+      { name: 'Leads', value: deals.filter(d => d.stage === 'lead').length },
+      { name: 'Qualified', value: deals.filter(d => d.stage === 'qualification').length },
+      { name: 'Proposal', value: deals.filter(d => d.stage === 'proposal').length },
+      { name: 'Negotiation', value: deals.filter(d => d.stage === 'negotiation').length },
+      { name: 'Won', value: deals.filter(d => d.stage === 'won').length },
+      { name: 'Lost', value: deals.filter(d => d.stage === 'lost').length }
     ];
 
     res.json({
@@ -286,7 +332,10 @@ router.get('/analytics', async (req, res) => {
       charts: {
         revenueTrend,
         dealOutcomes,
-        revenueByAgent: agentStats.slice(0, 10).map(a => ({ name: a.name, value: a.revenue }))
+        revenueByAgent: agentStats.slice(0, 10).map(a => ({ name: a.name, value: a.revenue })),
+        dealsVsGoal,
+        revenueComparison,
+        salesFunnel: salesFunnelData
       },
       logs: {
         schedules: schedules.slice(0, 50)
