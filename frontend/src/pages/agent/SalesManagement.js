@@ -10,23 +10,18 @@ import {
   Search,
   X,
   Edit,
-  Trash2,
-  Eye,
   CreditCard,
-  Calendar
 } from 'lucide-react';
 
 const SalesManagement = () => {
   const { user } = useAuth();
   const [sales, setSales] = useState([]);
   const [clients, setClients] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('cash'); // 'cash' or 'credit'
   const [showSaleModal, setShowSaleModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [editingSale, setEditingSale] = useState(null);
   const [selectedSaleForPayment, setSelectedSaleForPayment] = useState(null);
-  const [loadingClients, setLoadingClients] = useState(false);
   const [clientSearchTerm, setClientSearchTerm] = useState('');
   const [showClientDropdown, setShowClientDropdown] = useState(false);
   const [filteredClients, setFilteredClients] = useState([]);

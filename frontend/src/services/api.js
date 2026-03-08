@@ -1,71 +1,19 @@
 import axios from 'axios';
 
-// Simple in-memory cache for API responses
-const cache = new Map();
-const CACHE_DURATION = 30000; // 30 seconds cache
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
-const getCacheKey = (url, params) => {
-  const paramStr = params ? JSON.stringify(params) : '';
-  return `${url}:${paramStr}`;
-};
-
-const getFromCache = (key) => {
-  const cached = cache.get(key);
-  if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-    return cached.data;
-  }
-  cache.delete(key);
-  return null;
-};
-
-const setCache = (key, data) => {
-  cache.set(key, { data, timestamp: Date.now() });
-};
-
-const clearCache = (pattern) => {
-  if (pattern) {
-    // Clear cache entries matching pattern
-    for (const key of cache.keys()) {
-      if (key.includes(pattern)) {
-        cache.delete(key);
-      }
-    }
-  } else {
-    // Clear all cache
-    cache.clear();
-  }
-};
-
-const normalizeApiBaseUrl = (baseUrl) => {
-  const trimmed = (baseUrl || '').toString().trim().replace(/\/+$/, '');
-  if (!trimmed) return '';
-  return trimmed.endsWith('/api') ? trimmed : `${trimmed}/api`;
-};
-
-const isLocalhost = () => {
-  if (typeof window === 'undefined') return false;
-  const hostname = window.location.hostname;
-  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
-};
-
-const DEFAULT_LOCAL_API_URL = 'http://localhost:5000/api';
-const DEFAULT_PROD_API_URL = 'https://api.crm.xtreative.com/api';
-
-const API_URL = normalizeApiBaseUrl(
-  process.env.REACT_APP_API_URL || (isLocalhost() ? DEFAULT_LOCAL_API_URL : DEFAULT_PROD_API_URL)
-);
 const api = axios.create({
   baseURL: API_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
 });
 
-// Add token to requests
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
-    } else if (config.url !== '/auth/login' && config.url !== '/auth/me') {
-      console.warn('Making API request without authentication token:', config.url);
     }
     return config;
   },
@@ -74,260 +22,146 @@ api.interceptors.request.use(
   }
 );
 
-// Handle token expiration and network errors with improved resilience
-api.interceptors.response.use(
-  (response) => {
-    // Cache GET request responses
-    if (response.config.method === 'get' && response.config._cacheKey) {
-      setCache(response.config._cacheKey, response.data);
-    }
-    return response;
-  },
-  (error) => {
-    const isAuthError = error.response?.status === 401 || error.response?.status === 403;
-    const isNetworkError = error.code === 'ERR_NETWORK' || error.code === 'NETWORK_ERROR' || !error.response;
-    const isServerError = error.response?.status >= 500;
-    const isAuthEndpoint = error.config?.url?.includes('/auth/');
-
-    if (isAuthError) {
-      // For auth endpoints, always handle as auth error
-      if (isAuthEndpoint) {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        window.location.href = '/login';
-      } else {
-        // For other endpoints, check if user might still be logged in
-        // Only logout if it's clearly an authentication issue
-        const storedToken = localStorage.getItem('token');
-        if (!storedToken) {
-          // No token stored, definitely need to login
-          window.location.href = '/login';
-        } else {
-          // Token exists, might be a temporary issue - don't logout immediately
-          console.warn('Authentication error but token exists, not logging out');
-        }
-      }
-    } else if (isNetworkError || isServerError) {
-      // Network or server errors - don't logout, just log
-      console.warn('Network/Server error:', error.message);
-    }
-
-    return Promise.reject(error);
-  }
-);
-
-// Add automatic retry for failed requests
-api.interceptors.response.use(
-  (response) => response,
-  async (error) => {
-    const config = error.config;
-
-    // Don't retry auth requests or if already retried
-    if (config?.url?.includes('/auth/') || config?._retry) {
-      return Promise.reject(error);
-    }
-
-    // Retry network errors once
-    if (error.code === 'ERR_NETWORK' && !config._retry) {
-      config._retry = true;
-      console.log('Retrying failed request:', config.url);
-
-      // Wait 1 second before retry
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      return api(config);
-    }
-
-    return Promise.reject(error);
-  }
-);
-
 // Auth API
 export const authAPI = {
-  login: (email, password) => api.post('/auth/login', { email, password }),
+  login: (credentials) => api.post('/auth/login', credentials),
+  register: (userData) => api.post('/auth/register', userData),
+  logout: () => api.post('/auth/logout'),
+  verifyToken: () => api.get('/auth/verify'),
   changePassword: (data) => api.post('/auth/change-password', data),
-  getMe: () => api.get('/auth/me'),
-  logout: async () => {
-    try {
-      await api.post('/auth/logout');
-    } catch (e) {
-      // ignore
-    }
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    return Promise.resolve();
-  },
   forgotPassword: (email) => api.post('/auth/forgot-password', { email }),
-  verifyOTP: (data) => api.post('/auth/verify-otp', data),
-  resetPassword: (data) => api.post('/auth/reset-password', data),
+  resetPassword: (token, password) => api.post('/auth/reset-password', { token, password }),
 };
 
 // Users API
 export const usersAPI = {
-  getAll: async () => {
-    // Check cache first for fast loading
-    const cacheKey = getCacheKey('/users');
-    const cachedData = getFromCache(cacheKey);
-    if (cachedData) {
-      // Return cached data immediately, but still fetch in background for freshness
-      setTimeout(() => {
-        api.get('/users').then(response => {
-          setCache(cacheKey, response.data);
-        }).catch(() => {
-          // Ignore background fetch errors
-        });
-      }, 0);
-      return Promise.resolve({ data: cachedData, _fromCache: true });
-    }
-
-    // No cache, fetch from API
-    const response = await api.get('/users');
-    setCache(cacheKey, response.data);
-    return response;
-  },
-  registerAgent: async (userData) => {
-    clearCache('/users'); // Clear cache when user is added
-    return api.post('/users', userData);
-  },
-  update: async (id, userData) => {
-    clearCache('/users'); // Clear cache when user is updated
-    return api.put(`/users/${id}`, userData);
-  },
-  delete: async (id) => {
-    clearCache('/users'); // Clear cache when user is deleted
-    return api.delete(`/users/${id}`);
-  },
-  resendOTP: (id) => api.post(`/users/${id}/resend-otp`),
+  getAll: (params) => api.get('/users', { params }),
   getById: (id) => api.get(`/users/${id}`),
-};
-
-// Clients API
-export const clientsAPI = {
-  getAll: (params = {}) => api.get('/clients', { params }),
-  create: (clientData) => api.post('/clients', clientData),
-  update: (id, clientData) => api.put(`/clients/${id}`, clientData),
-  delete: (id) => api.delete(`/clients/${id}`),
-  getById: (id) => api.get(`/clients/${id}`),
-  exportCSV: () => api.get('/clients/export/csv', { responseType: 'blob' }),
-};
-
-// Deals API
-export const dealsAPI = {
-  getAll: (params = {}) => api.get('/deals', { params }),
-  create: (dealData) => api.post('/deals', dealData),
-  update: (id, dealData) => api.put(`/deals/${id}`, dealData),
-  delete: (id) => api.delete(`/deals/${id}`),
-  getById: (id) => api.get(`/deals/${id}`),
-  updateStatus: (id, status) => api.patch(`/deals/${id}/status`, { status }),
-  getStats: (params = {}) => api.get('/deals/stats', { params }),
-};
-
-
-// Performance API
-export const performanceAPI = {
-  getAgentPerformance: (agentId) => api.get(`/performance/agent/${agentId}`),
-  getAllPerformance: () => api.get('/performance/overall'),
-  getTeamPerformance: () => api.get('/performance/team'),
-  getPerformanceStats: () => api.get('/performance/stats'),
-  getRankings: () => api.get('/performance/rankings'),
-};
-
-// Schedules API
-export const schedulesAPI = {
-  getAll: (params = {}) => api.get('/schedules', { params }),
-  create: (scheduleData) => api.post('/schedules', scheduleData),
-  update: (id, scheduleData) => api.put(`/schedules/${id}`, scheduleData),
-  delete: (id) => api.delete(`/schedules/${id}`),
-  getById: (id) => api.get(`/schedules/${id}`),
-  getUpcoming: () => api.get('/schedules/upcoming'),
-};
-
-// Email API
-export const emailAPI = {
-  testEmail: () => api.get('/users/test-email'),
-  sendWelcomeEmail: (emailData) => api.post('/email/welcome', emailData),
+  create: (data) => api.post('/users', data),
+  update: (id, data) => api.put(`/users/${id}`, data),
+  delete: (id) => api.delete(`/users/${id}`),
+  getProfile: () => api.get('/users/profile/me'),
+  updateProfile: (data) => api.put('/users/profile', data),
 };
 
 // Dashboard API
 export const dashboardAPI = {
   getStats: () => api.get('/dashboard/stats'),
-  getRecentActivity: () => api.get('/dashboard/activity'),
-  getChartsData: () => api.get('/dashboard/charts'),
+  getRecentActivities: () => api.get('/dashboard/activities'),
 };
 
-// Reports API
-export const reportsAPI = {
-  generateReport: (reportData) => api.post('/reports/generate', reportData),
-  getReportTemplates: () => api.get('/reports/templates'),
-  downloadReport: (reportId) => api.get(`/reports/download/${reportId}`, { responseType: 'blob' }),
-  share: (payload) => api.post('/reports/share', payload),
-  importFile: (formData) => api.post('/reports/import', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
-  getAnalytics: (params) => api.get('/reports/analytics', { params })
+// Clients API
+export const clientsAPI = {
+  getAll: (params) => api.get('/clients', { params }),
+  getById: (id) => api.get(`/clients/${id}`),
+  create: (data) => api.post('/clients', data),
+  update: (id, data) => api.put(`/clients/${id}`, data),
+  delete: (id) => api.delete(`/clients/${id}`),
 };
 
-// Meetings API
-export const meetingsAPI = {
-  getAll: (params = {}) => api.get('/meetings', { params }),
-  create: (meetingData) => api.post('/meetings', meetingData),
-  update: (id, meetingData) => api.put(`/meetings/${id}`, meetingData),
-  delete: (id) => api.delete(`/meetings/${id}`),
-  getById: (id) => api.get(`/meetings/${id}`),
-  getByAgent: (agentId) => api.get(`/meetings/agent/${agentId}`),
+// Deals API
+export const dealsAPI = {
+  getAll: (params) => api.get('/deals', { params }),
+  getById: (id) => api.get(`/deals/${id}`),
+  create: (data) => api.post('/deals', data),
+  update: (id, data) => api.put(`/deals/${id}`, data),
+  delete: (id) => api.delete(`/deals/${id}`),
 };
 
 // Sales API
 export const salesAPI = {
-  getAll: (params = {}) => api.get('/sales', { params }),
-  getSummary: (period = 'daily', agent = null) => {
-    const params = new URLSearchParams({ period });
-    if (agent) params.append('agent', agent);
-    return api.get(`/sales/summary?${params.toString()}`);
-  },
-  getStats: (params = {}) => api.get('/sales/stats', { params }),
-  create: (saleData) => api.post('/sales', saleData),
+  getAll: (params) => api.get('/sales', { params }),
   getById: (id) => api.get(`/sales/${id}`),
-  update: (id, saleData) => api.put(`/sales/${id}`, saleData),
-  recordPayment: (id, paymentData) => api.post(`/sales/${id}/payment`, paymentData),
-  getRecent: (limit = 5) => api.get(`/sales/recent/list?limit=${limit}`)
+  create: (data) => api.post('/sales', data),
+  update: (id, data) => api.put(`/sales/${id}`, data),
+  delete: (id) => api.delete(`/sales/${id}`),
+  getStats: () => api.get('/sales/stats'),
 };
 
-// Stock API
-export const stockAPI = {
-  getAll: (params = {}) => api.get('/stock', { params }),
-  getAlerts: () => api.get('/stock/alerts'),
-  create: (stockData) => api.post('/stock', stockData),
-  update: (id, stockData) => api.put(`/stock/${id}`, stockData),
-  delete: (id) => api.delete(`/stock/${id}`),
-  updateStock: (id, quantity, operation) => api.patch(`/stock/${id}/stock`, { quantity, operation }),
-  getStats: () => api.get('/stock/stats/overview')
-};
-
-// File Upload API
-export const uploadAPI = {
-  uploadFile: (formData) => {
-    // Don't set Content-Type header - let axios set it automatically with boundary
-    // Setting it manually can cause issues with multipart/form-data
-    return api.post('/upload', formData, {
-      timeout: 30000, // 30 second timeout for file uploads
-    });
-  },
-  deleteFile: (fileId) => api.delete(`/upload/${fileId}`),
+// Schedules API
+export const schedulesAPI = {
+  getAll: (params) => api.get('/schedules', { params }),
+  getById: (id) => api.get(`/schedules/${id}`),
+  create: (data) => api.post('/schedules', data),
+  update: (id, data) => api.put(`/schedules/${id}`, data),
+  delete: (id) => api.delete(`/schedules/${id}`),
 };
 
 // Notifications API
 export const notificationsAPI = {
-  getAll: (params = {}) => api.get('/notifications', { params }),
-  getUnreadCount: () => api.get('/notifications/unread-count'),
+  getAll: (params) => api.get('/notifications', { params }),
   markAsRead: (id) => api.put(`/notifications/${id}/read`),
-  markAllAsRead: () => api.put('/notifications/mark-all-read'),
+  markAllAsRead: () => api.put('/notifications/read-all'),
   delete: (id) => api.delete(`/notifications/${id}`),
-  getStats: () => api.get('/notifications/stats/summary')
+};
+
+// Performance API
+export const performanceAPI = {
+  getAgentPerformance: (agentId, params) => api.get(`/performance/agent/${agentId}`, { params }),
+  getTeamPerformance: (params) => api.get('/performance/team', { params }),
+  getLeaderboard: (params) => api.get('/performance/leaderboard', { params }),
+};
+
+// Reports API
+export const reportsAPI = {
+  generateReport: (type, params) => api.get(`/reports/${type}`, { params }),
+  exportReport: (type, format, params) => api.get(`/reports/${type}/export/${format}`, { 
+    params,
+    responseType: 'blob' 
+  }),
+};
+
+// Email API
+export const emailAPI = {
+  send: (data) => api.post('/email/send', data),
+  getTemplates: () => api.get('/email/templates'),
+  createTemplate: (data) => api.post('/email/templates', data),
+  updateTemplate: (id, data) => api.put(`/email/templates/${id}`, data),
+  deleteTemplate: (id) => api.delete(`/email/templates/${id}`),
+};
+
+// Meetings API
+export const meetingsAPI = {
+  getAll: (params) => api.get('/meetings', { params }),
+  getById: (id) => api.get(`/meetings/${id}`),
+  create: (data) => api.post('/meetings', data),
+  update: (id, data) => api.put(`/meetings/${id}`, data),
+  delete: (id) => api.delete(`/meetings/${id}`),
+};
+
+// Stock API
+export const stockAPI = {
+  getAll: (params) => api.get('/stock', { params }),
+  getById: (id) => api.get(`/stock/${id}`),
+  create: (data) => api.post('/stock', data),
+  update: (id, data) => api.put(`/stock/${id}`, data),
+  delete: (id) => api.delete(`/stock/${id}`),
+  getLowStock: () => api.get('/stock/low-stock'),
 };
 
 // OTP API
 export const otpAPI = {
-  sendOTP: (data) => api.post('/otp/send', data),
-  verifyOTP: (data) => api.post('/otp/verify', data)
+  generate: (data) => api.post('/otp/generate', data),
+  verify: (data) => api.post('/otp/verify', data),
 };
 
-// Export the main api instance for custom requests
+// Upload API
+export const uploadAPI = {
+  uploadFile: (file, onProgress) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post('/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress: (progressEvent) => {
+        if (onProgress) {
+          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          onProgress(percentCompleted);
+        }
+      },
+    });
+  },
+  deleteFile: (filename) => api.delete(`/upload/${filename}`),
+};
+
+// Default export
 export default api;

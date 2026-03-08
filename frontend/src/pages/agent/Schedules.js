@@ -3,7 +3,6 @@ import { motion } from 'framer-motion';
 import { 
   Calendar, 
   Plus, 
-  Filter, 
   Search, 
   Download, 
   Edit, 
@@ -12,7 +11,6 @@ import {
   Clock, 
   MapPin, 
   Video, 
-  Users, 
   X,
   ChevronLeft,
   ChevronRight,
@@ -802,10 +800,9 @@ const Schedules = () => {
   });
 
   // Load schedules and clients on mount
-  useEffect(() => {
-    loadData();
-  }, [user]);
-
+useEffect(() => {
+  loadData();
+}, [loadData]); 
   const loadData = async () => {
     try {
       setLoading(true);

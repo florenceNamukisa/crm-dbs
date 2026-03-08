@@ -6,7 +6,6 @@ import toast from 'react-hot-toast';
 import {
   Plus,
   ShoppingCart,
-  DollarSign,
   Search,
   X,
   CheckCircle,
@@ -14,7 +13,6 @@ import {
 } from 'lucide-react';
 
 const Sales = () => {
-  const { user } = useAuth();
   const [sales, setSales] = useState([]);
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
