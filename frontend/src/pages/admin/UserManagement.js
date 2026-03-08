@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { Search, Edit, Trash2, User, UserPlus, Shield, RefreshCw, UserX, X } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  Search, Edit, Trash2, User, UserPlus, Shield, RefreshCw, 
+  UserX, X, Mail, Phone, MapPin, Calendar, Award, TrendingUp,
+  Filter, Download, MoreVertical, CheckCircle, XCircle,
+  Clock, AlertCircle, ChevronDown, Eye, EyeOff, Users
+} from 'lucide-react';
 import { usersAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
@@ -14,6 +19,11 @@ const UserManagement = () => {
   const [formLoading, setFormLoading] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [detailsUser, setDetailsUser] = useState(null);
+  const [selectedRole, setSelectedRole] = useState('all');
+  const [selectedStatus, setSelectedStatus] = useState('all');
+  const [showFilters, setShowFilters] = useState(false);
+  const [sortBy, setSortBy] = useState('name');
+  const [sortOrder, setSortOrder] = useState('asc');
 
   const [newUser, setNewUser] = useState({
     name: '',
@@ -53,30 +63,9 @@ const UserManagement = () => {
       }
       
       setUsers(usersData);
-      
-      // Only show error if we truly got no data
-      if (usersData.length === 0 && !response.data) {
-        toast.error('No users found');
-      }
     } catch (error) {
       console.error('Failed to load users:', error);
-      
-      // Check if error actually contains data (sometimes API returns data in error)
-      if (error.data && Array.isArray(error.data)) {
-        setUsers(error.data);
-        return;
-      }
-      
-      // Check error response structure
-      if (error.response?.data) {
-        if (Array.isArray(error.response.data)) {
-          setUsers(error.response.data);
-          return;
-        }
-        toast.error(error.response.data.message || 'Failed to load users');
-      } else {
-        toast.error('Failed to load users. Please check your connection.');
-      }
+      toast.error('Failed to load users. Please check your connection.');
       setUsers([]);
     } finally {
       setLoading(false);
@@ -101,7 +90,7 @@ const UserManagement = () => {
     }
 
     if (newUser.nin && newUser.nin.trim().length < 6) {
-      errors.nin = 'NIN looks too short';
+      errors.nin = 'NIN must be at least 6 characters';
     }
 
     setFormErrors(errors);
@@ -120,7 +109,6 @@ const UserManagement = () => {
     try {
       const response = await usersAPI.registerAgent(newUser);
 
-      // Show a nicer modal with result and OTP if available
       setSuccessInfo({
         emailSent: response.data.emailSent,
         otp: response.data.otp || null,
@@ -132,7 +120,7 @@ const UserManagement = () => {
       setShowAddModal(false);
       setNewUser({ name: '', email: '', phone: '', role: 'agent', nin: '' });
       setFormErrors({});
-      loadUsers(); // Refresh the user list
+      loadUsers();
     } catch (error) {
       console.error('Registration error:', error);
       const errorMessage = error.response?.data?.message || 'Failed to register agent';
@@ -147,10 +135,10 @@ const UserManagement = () => {
       const response = await usersAPI.resendOTP(userId);
       toast.success(
         <div>
-          <p>OTP resent to {userName}! 📧</p>
+          <p className="font-medium">OTP resent to {userName}!</p>
           {response.data.otp && (
-            <p className="text-sm mt-1">
-              <strong>New OTP: {response.data.otp}</strong> (Share this with the agent)
+            <p className="text-sm mt-1 bg-gray-100 p-2 rounded font-mono">
+              OTP: {response.data.otp}
             </p>
           )}
         </div>,
@@ -166,7 +154,7 @@ const UserManagement = () => {
       try {
         await usersAPI.delete(userId);
         toast.success(`User ${userName} deleted successfully`);
-        loadUsers(); // Refresh the list
+        loadUsers();
       } catch (error) {
         toast.error(error.response?.data?.message || 'Failed to delete user');
       }
@@ -221,20 +209,63 @@ const UserManagement = () => {
     }
   };
 
-  const filteredUsers = users.filter(user =>
-    user.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (user.phone && user.phone.includes(searchTerm))
-  );
+  // Filter and sort users
+  const filteredUsers = users
+    .filter(user => {
+      // Search filter
+      const matchesSearch = 
+        user.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (user.phone && user.phone.includes(searchTerm));
+      
+      // Role filter
+      const matchesRole = selectedRole === 'all' || user.role === selectedRole;
+      
+      // Status filter
+      const matchesStatus = selectedStatus === 'all' || 
+        (selectedStatus === 'active' && user.isActive !== false) ||
+        (selectedStatus === 'inactive' && user.isActive === false) ||
+        (selectedStatus === 'pending' && user.isFirstLogin);
+
+      return matchesSearch && matchesRole && matchesStatus;
+    })
+    .sort((a, b) => {
+      let comparison = 0;
+      if (sortBy === 'name') {
+        comparison = (a.name || '').localeCompare(b.name || '');
+      } else if (sortBy === 'email') {
+        comparison = (a.email || '').localeCompare(b.email || '');
+      } else if (sortBy === 'role') {
+        comparison = (a.role || '').localeCompare(b.role || '');
+      } else if (sortBy === 'date') {
+        comparison = new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
+      }
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
 
   const getAccountStatus = (targetUser) => {
     if (targetUser?.isActive === false) {
-      return { label: 'Inactive', className: 'bg-red-100 text-red-800' };
+      return { 
+        label: 'Inactive', 
+        className: 'bg-red-100 text-red-700 border-red-200',
+        icon: XCircle,
+        color: 'text-red-500'
+      };
     }
     if (targetUser?.role === 'agent' && targetUser?.isFirstLogin) {
-      return { label: 'Pending', className: 'bg-yellow-100 text-yellow-800' };
+      return { 
+        label: 'Pending', 
+        className: 'bg-yellow-100 text-yellow-700 border-yellow-200',
+        icon: Clock,
+        color: 'text-yellow-500'
+      };
     }
-    return { label: 'Active', className: 'bg-green-100 text-green-800' };
+    return { 
+      label: 'Active', 
+      className: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+      icon: CheckCircle,
+      color: 'text-emerald-500'
+    };
   };
 
   const openDetails = (targetUser) => {
@@ -251,542 +282,1010 @@ const UserManagement = () => {
     if (!value) return 'N/A';
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return 'N/A';
-    return date.toLocaleString();
+    return date.toLocaleString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const formatCurrency = (value) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    }).format(value || 0);
+  };
+
+  const stats = {
+    total: users.length,
+    admins: users.filter(u => u.role === 'admin').length,
+    agents: users.filter(u => u.role === 'agent').length,
+    pending: users.filter(u => u.isFirstLogin).length,
+    active: users.filter(u => u.isActive !== false).length,
+    inactive: users.filter(u => u.isActive === false).length
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
         <div className="text-center">
-          <div className="w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading users...</p>
+          <div className="relative">
+            <div className="w-16 h-16 border-4 border-orange-200 rounded-full"></div>
+            <div className="w-16 h-16 border-4 border-orange-500 border-t-transparent rounded-full animate-spin absolute top-0 left-0"></div>
+          </div>
+          <p className="mt-4 text-lg text-gray-600 font-medium">Loading users...</p>
+          <p className="text-sm text-gray-500">Please wait while we fetch the data</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">User Management</h1>
-          <p className="text-gray-600 mt-1">Manage your team members and their access</p>
-        </div>
-        <div className="flex items-center space-x-3">
-          <button
-            onClick={loadUsers}
-            disabled={loading}
-            className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-gray-200 transition-colors disabled:opacity-50"
-            title="Refresh users list"
-          >
-            <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-            <span>Refresh</span>
-          </button>
-          {user?.role === 'admin' && (
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="bg-orange-500 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-orange-600 transition-colors"
-            >
-              <UserPlus className="w-5 h-5" />
-              <span>Add Agent</span>
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Search Bar */}
-      <div className="bg-white rounded-xl shadow-sm p-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-            <input
-              type="text"
-              placeholder="Search users by name, email, or phone..."
-              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-          <div className="text-sm text-gray-600">
-            {filteredUsers.length} of {users.length} users
-          </div>
-        </div>
-      </div>
-
-      {/* Stats Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-lg p-4 text-center">
-          <div className="text-2xl font-bold text-gray-900">{users.length}</div>
-          <div className="text-sm text-gray-600">Total Users</div>
-        </div>
-        <div className="bg-white rounded-lg p-4 text-center">
-          <div className="text-2xl font-bold text-gray-900">
-            {users.filter(u => u.role === 'admin').length}
-          </div>
-          <div className="text-sm text-gray-600">Admins</div>
-        </div>
-        <div className="bg-white rounded-lg p-4 text-center">
-          <div className="text-2xl font-bold text-gray-900">
-            {users.filter(u => u.role === 'agent').length}
-          </div>
-          <div className="text-sm text-gray-600">Agents</div>
-        </div>
-        <div className="bg-white rounded-lg p-4 text-center">
-          <div className="text-2xl font-bold text-gray-900">
-            {users.filter(u => u.isFirstLogin).length}
-          </div>
-          <div className="text-sm text-gray-600">Pending Activation</div>
-        </div>
-      </div>
-
-      {/* User Details Modal */}
-      {showDetailsModal && detailsUser && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
-          onClick={closeDetails}
-        >
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="bg-white rounded-xl shadow-lg max-w-3xl w-full p-6 max-h-[85vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">User Details</h3>
-                <p className="mt-1 text-sm text-gray-600">{detailsUser.name} - {detailsUser.email}</p>
-              </div>
-              <button
-                type="button"
-                onClick={closeDetails}
-                className="p-2 text-gray-500 hover:text-gray-700 transition-colors"
-                title="Close"
-              >
-                <X className="w-5 h-5" />
-              </button>
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Header Section */}
+        <div className="mb-8">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">User Management</h1>
+              <p className="text-gray-600 mt-1">Manage your team members and their access permissions</p>
             </div>
+            <div className="flex items-center space-x-3">
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={loadUsers}
+                disabled={loading}
+                className="bg-white text-gray-700 px-4 py-2.5 rounded-xl flex items-center space-x-2 hover:bg-gray-50 transition-all shadow-sm border border-gray-200 disabled:opacity-50"
+              >
+                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                <span>Refresh</span>
+              </motion.button>
+              
+              {user?.role === 'admin' && (
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => setShowAddModal(true)}
+                  className="bg-gradient-to-r from-orange-500 to-orange-600 text-white px-6 py-2.5 rounded-xl flex items-center space-x-2 hover:from-orange-600 hover:to-orange-700 transition-all shadow-lg shadow-orange-500/25"
+                >
+                  <UserPlus className="w-5 h-5" />
+                  <span>Add New Agent</span>
+                </motion.button>
+              )}
+            </div>
+          </div>
+        </div>
 
-            <div className="mt-5 overflow-x-auto">
-              <table className="w-full text-sm">
-                <tbody className="divide-y divide-gray-200">
-                  <tr>
-                    <td className="py-3 pr-6 text-gray-500 whitespace-nowrap">Role</td>
-                    <td className="py-3 text-gray-900 capitalize">{detailsUser.role || 'N/A'}</td>
-                  </tr>
-                  <tr>
-                    <td className="py-3 pr-6 text-gray-500 whitespace-nowrap">Account Status</td>
-                    <td className="py-3 text-gray-900">
-                      {(() => {
-                        const accountStatus = getAccountStatus(detailsUser);
-                        return (
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${accountStatus.className}`}>
-                            {accountStatus.label}
-                          </span>
-                        );
-                      })()}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="py-3 pr-6 text-gray-500 whitespace-nowrap">Login Status</td>
-                    <td className="py-3 text-gray-900 capitalize">{detailsUser.status || 'offline'}</td>
-                  </tr>
-                  <tr>
-                    <td className="py-3 pr-6 text-gray-500 whitespace-nowrap">Phone</td>
-                    <td className="py-3 text-gray-900">{detailsUser.phone || 'N/A'}</td>
-                  </tr>
-                  <tr>
-                    <td className="py-3 pr-6 text-gray-500 whitespace-nowrap">NIN</td>
-                    <td className="py-3 text-gray-900">{detailsUser.nin || 'N/A'}</td>
-                  </tr>
-                  <tr>
-                    <td className="py-3 pr-6 text-gray-500 whitespace-nowrap">First Login</td>
-                    <td className="py-3 text-gray-900">{detailsUser.isFirstLogin ? 'Yes' : 'No'}</td>
-                  </tr>
-                  <tr>
-                    <td className="py-3 pr-6 text-gray-500 whitespace-nowrap">Joined</td>
-                    <td className="py-3 text-gray-900">{formatDateTime(detailsUser.createdAt)}</td>
-                  </tr>
-                  <tr>
-                    <td className="py-3 pr-6 text-gray-500 whitespace-nowrap">Last Updated</td>
-                    <td className="py-3 text-gray-900">{formatDateTime(detailsUser.updatedAt)}</td>
-                  </tr>
-                  <tr>
-                    <td className="py-3 pr-6 text-gray-500 whitespace-nowrap">Performance Score</td>
-                    <td className="py-3 text-gray-900 tabular-nums">{(detailsUser.performanceScore ?? 0).toLocaleString()}</td>
-                  </tr>
-                  <tr>
-                    <td className="py-3 pr-6 text-gray-500 whitespace-nowrap">Total Deals</td>
-                    <td className="py-3 text-gray-900 tabular-nums">{(detailsUser.totalDeals ?? 0).toLocaleString()}</td>
-                  </tr>
-                  <tr>
-                    <td className="py-3 pr-6 text-gray-500 whitespace-nowrap">Successful Deals</td>
-                    <td className="py-3 text-gray-900 tabular-nums">{(detailsUser.successfulDeals ?? 0).toLocaleString()}</td>
-                  </tr>
-                  <tr>
-                    <td className="py-3 pr-6 text-gray-500 whitespace-nowrap">Failed Deals</td>
-                    <td className="py-3 text-gray-900 tabular-nums">{(detailsUser.failedDeals ?? 0).toLocaleString()}</td>
-                  </tr>
-                  <tr>
-                    <td className="py-3 pr-6 text-gray-500 whitespace-nowrap">Total Sales</td>
-                    <td className="py-3 text-gray-900 tabular-nums">{(detailsUser.totalSales ?? 0).toLocaleString()}</td>
-                  </tr>
-                  <tr>
-                    <td className="py-3 pr-6 text-gray-500 whitespace-nowrap">Total Sales Amount</td>
-                    <td className="py-3 text-gray-900 tabular-nums">{(detailsUser.totalSalesAmount ?? 0).toLocaleString()}</td>
-                  </tr>
-                  <tr>
-                    <td className="py-3 pr-6 text-gray-500 whitespace-nowrap">Monthly Sales</td>
-                    <td className="py-3 text-gray-900 tabular-nums">{(detailsUser.monthlySales ?? 0).toLocaleString()}</td>
-                  </tr>
-                  <tr>
-                    <td className="py-3 pr-6 text-gray-500 whitespace-nowrap">Monthly Sales Amount</td>
-                    <td className="py-3 text-gray-900 tabular-nums">{(detailsUser.monthlySalesAmount ?? 0).toLocaleString()}</td>
-                  </tr>
-                  <tr>
-                    <td className="py-3 pr-6 text-gray-500 whitespace-nowrap">Agent Rank</td>
-                    <td className="py-3 text-gray-900 tabular-nums">{(detailsUser.agentRank ?? 0).toLocaleString()}</td>
-                  </tr>
-                  <tr>
-                    <td className="py-3 pr-6 text-gray-500 whitespace-nowrap">Last Rank Update</td>
-                    <td className="py-3 text-gray-900">{formatDateTime(detailsUser.lastRankUpdate)}</td>
-                  </tr>
-                </tbody>
-              </table>
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="bg-white rounded-xl shadow-sm p-6 border border-gray-100"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500 mb-1">Total Users</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
+              </div>
+              <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
+                <Users className="w-6 h-6 text-orange-600" />
+              </div>
+            </div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="bg-white rounded-xl shadow-sm p-6 border border-gray-100"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500 mb-1">Active</p>
+                <p className="text-2xl font-bold text-emerald-600">{stats.active}</p>
+              </div>
+              <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
+                <CheckCircle className="w-6 h-6 text-emerald-600" />
+              </div>
+            </div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="bg-white rounded-xl shadow-sm p-6 border border-gray-100"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500 mb-1">Inactive</p>
+                <p className="text-2xl font-bold text-red-600">{stats.inactive}</p>
+              </div>
+              <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
+                <XCircle className="w-6 h-6 text-red-600" />
+              </div>
+            </div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+            className="bg-white rounded-xl shadow-sm p-6 border border-gray-100"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500 mb-1">Admins</p>
+                <p className="text-2xl font-bold text-purple-600">{stats.admins}</p>
+              </div>
+              <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
+                <Shield className="w-6 h-6 text-purple-600" />
+              </div>
+            </div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5 }}
+            className="bg-white rounded-xl shadow-sm p-6 border border-gray-100"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500 mb-1">Pending</p>
+                <p className="text-2xl font-bold text-yellow-600">{stats.pending}</p>
+              </div>
+              <div className="w-12 h-12 bg-yellow-100 rounded-xl flex items-center justify-center">
+                <Clock className="w-6 h-6 text-yellow-600" />
+              </div>
             </div>
           </motion.div>
         </div>
-      )}
 
-      {/* Users Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Name</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Email</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Phone</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Role</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {filteredUsers.length > 0 ? (
-                filteredUsers.map((user) => (
-                  <tr
-                    key={user._id}
-                    className="hover:bg-gray-50 transition-colors cursor-pointer"
-                    onClick={() => openDetails(user)}
-                    title="Click to view details"
-                  >
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center space-x-3">
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                          user.role === 'admin' ? 'bg-purple-100' : 'bg-orange-100'
-                        }`}>
-                          {user.role === 'admin' ? (
-                            <Shield className="w-5 h-5 text-purple-600" />
-                          ) : (
-                            <User className="w-5 h-5 text-orange-600" />
-                          )}
-                        </div>
-                        <span className="font-medium text-gray-900">{user.name}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="text-sm text-gray-600">{user.email}</span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="text-sm text-gray-600">{user.phone || 'N/A'}</span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        user.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-orange-100 text-orange-800'
-                      }`}>
-                        {user.role === 'admin' ? 'Admin' : 'Agent'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {(() => {
-                        const accountStatus = getAccountStatus(user);
-                        return (
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${accountStatus.className}`}>
-                            {accountStatus.label}
-                          </span>
-                        );
-                      })()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center space-x-2">
-                        {user.role === 'agent' && user.isFirstLogin && (
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleResendOTP(user._id, user.name);
-                            }}
-                            className="p-1.5 text-gray-400 hover:text-blue-500 transition-colors"
-                            title="Resend OTP"
-                          >
-                            <RefreshCw className="w-4 h-4" />
-                          </button>
-                        )}
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleEditClick(user);
-                          }}
-                          className="p-1.5 text-gray-400 hover:text-blue-500 transition-colors"
-                          title="Edit User"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openDeactivateModal(user);
-                          }}
-                          className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"
-                          title={user.isActive === false ? 'Activate User' : 'Deactivate User'}
-                        >
-                          <UserX className="w-4 h-4" />
-                        </button>
-                        {user.role !== 'admin' && (
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteUser(user._id, user.name);
-                            }}
-                            className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"
-                            title="Delete User"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan="6" className="px-6 py-12 text-center">
-                    <User className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                      {searchTerm ? 'No users found' : 'No users yet'}
-                    </h3>
-                    <p className="text-gray-600 mb-4">
-                      {searchTerm 
-                        ? 'Try adjusting your search terms'
-                        : 'Get started by registering your first agent'
-                      }
-                    </p>
-                    {!searchTerm && user?.role === 'admin' && (
-                      <button
-                        onClick={() => setShowAddModal(true)}
-                        className="bg-orange-500 text-white px-6 py-2 rounded-lg hover:bg-orange-600 transition-colors"
-                      >
-                        Register First Agent
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+        {/* Search and Filters */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
+          <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+            <div className="flex-1 relative">
+              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <input
+                type="text"
+                placeholder="Search by name, email, or phone..."
+                className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            
+            <div className="flex items-center space-x-3">
+              <button
+                onClick={() => setShowFilters(!showFilters)}
+                className={`px-4 py-3 rounded-xl flex items-center space-x-2 transition-all ${
+                  showFilters 
+                    ? 'bg-orange-50 text-orange-600 border-orange-200' 
+                    : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+                } border`}
+              >
+                <Filter className="w-4 h-4" />
+                <span>Filters</span>
+                <ChevronDown className={`w-4 h-4 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
+              </button>
+              
+              <button className="px-4 py-3 bg-gray-50 text-gray-600 rounded-xl flex items-center space-x-2 hover:bg-gray-100 transition-all border border-gray-200">
+                <Download className="w-4 h-4" />
+                <span>Export</span>
+              </button>
+            </div>
+          </div>
+
+          <AnimatePresence>
+            {showFilters && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="overflow-hidden"
+              >
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-6 mt-4 border-t border-gray-100">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Role</label>
+                    <select
+                      value={selectedRole}
+                      onChange={(e) => setSelectedRole(e.target.value)}
+                      className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    >
+                      <option value="all">All Roles</option>
+                      <option value="admin">Admin</option>
+                      <option value="agent">Agent</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                    <select
+                      value={selectedStatus}
+                      onChange={(e) => setSelectedStatus(e.target.value)}
+                      className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    >
+                      <option value="all">All Status</option>
+                      <option value="active">Active</option>
+                      <option value="inactive">Inactive</option>
+                      <option value="pending">Pending</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Sort By</label>
+                    <select
+                      value={sortBy}
+                      onChange={(e) => setSortBy(e.target.value)}
+                      className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    >
+                      <option value="name">Name</option>
+                      <option value="email">Email</option>
+                      <option value="role">Role</option>
+                      <option value="date">Join Date</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Order</label>
+                    <select
+                      value={sortOrder}
+                      onChange={(e) => setSortOrder(e.target.value)}
+                      className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    >
+                      <option value="asc">Ascending</option>
+                      <option value="desc">Descending</option>
+                    </select>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
+
+        {/* Users Grid/Table */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+          {filteredUsers.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-100">
+                  <tr>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">User</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Contact</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Role & Status</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Performance</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Joined</th>
+                    <th className="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {filteredUsers.map((userItem, index) => {
+                    const StatusIcon = getAccountStatus(userItem).icon;
+                    const statusColor = getAccountStatus(userItem).color;
+                    
+                    return (
+                      <motion.tr
+                        key={userItem._id}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: index * 0.05 }}
+                        onClick={() => openDetails(userItem)}
+                        className="hover:bg-gray-50 transition-colors cursor-pointer group"
+                      >
+                        <td className="px-6 py-4">
+                          <div className="flex items-center space-x-3">
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                              userItem.role === 'admin' ? 'bg-purple-100' : 'bg-orange-100'
+                            }`}>
+                              {userItem.role === 'admin' ? (
+                                <Shield className="w-5 h-5 text-purple-600" />
+                              ) : (
+                                <User className="w-5 h-5 text-orange-600" />
+                              )}
+                            </div>
+                            <div>
+                              <p className="font-medium text-gray-900">{userItem.name}</p>
+                              <p className="text-sm text-gray-500">ID: {userItem._id.slice(-6)}</p>
+                            </div>
+                          </div>
+                        </td>
+                        
+                        <td className="px-6 py-4">
+                          <div className="space-y-1">
+                            <p className="text-sm text-gray-600 flex items-center">
+                              <Mail className="w-4 h-4 mr-2 text-gray-400" />
+                              {userItem.email}
+                            </p>
+                            {userItem.phone && (
+                              <p className="text-sm text-gray-600 flex items-center">
+                                <Phone className="w-4 h-4 mr-2 text-gray-400" />
+                                {userItem.phone}
+                              </p>
+                            )}
+                          </div>
+                        </td>
+                        
+                        <td className="px-6 py-4">
+                          <div className="space-y-2">
+                            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
+                              userItem.role === 'admin' 
+                                ? 'bg-purple-100 text-purple-700' 
+                                : 'bg-orange-100 text-orange-700'
+                            }`}>
+                              {userItem.role === 'admin' ? 'Administrator' : 'Sales Agent'}
+                            </span>
+                            <div className="flex items-center space-x-1">
+                              <StatusIcon className={`w-4 h-4 ${statusColor}`} />
+                              <span className={`text-xs font-medium ${statusColor}`}>
+                                {getAccountStatus(userItem).label}
+                              </span>
+                            </div>
+                          </div>
+                        </td>
+                        
+                        <td className="px-6 py-4">
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs text-gray-500">Sales</span>
+                              <span className="text-sm font-medium text-gray-900">
+                                {formatCurrency(userItem.totalSalesAmount)}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs text-gray-500">Deals</span>
+                              <span className="text-sm font-medium text-gray-900">
+                                {userItem.totalDeals || 0}
+                              </span>
+                            </div>
+                            {userItem.performanceScore && (
+                              <div className="flex items-center space-x-1">
+                                <Award className="w-3 h-3 text-yellow-500" />
+                                <span className="text-xs font-medium text-gray-700">
+                                  Score: {userItem.performanceScore}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                        
+                        <td className="px-6 py-4">
+                          <div className="text-sm text-gray-600">
+                            <p>{formatDateTime(userItem.createdAt)}</p>
+                          </div>
+                        </td>
+                        
+                        <td className="px-6 py-4">
+                          <div className="flex items-center justify-end space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {userItem.role === 'agent' && userItem.isFirstLogin && (
+                              <motion.button
+                                whileHover={{ scale: 1.1 }}
+                                whileTap={{ scale: 0.9 }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleResendOTP(userItem._id, userItem.name);
+                                }}
+                                className="p-2 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-all"
+                                title="Resend OTP"
+                              >
+                                <RefreshCw className="w-4 h-4" />
+                              </motion.button>
+                            )}
+                            
+                            <motion.button
+                              whileHover={{ scale: 1.1 }}
+                              whileTap={{ scale: 0.9 }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEditClick(userItem);
+                              }}
+                              className="p-2 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-all"
+                              title="Edit User"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </motion.button>
+                            
+                            <motion.button
+                              whileHover={{ scale: 1.1 }}
+                              whileTap={{ scale: 0.9 }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openDeactivateModal(userItem);
+                              }}
+                              className={`p-2 rounded-lg transition-all ${
+                                userItem.isActive === false
+                                  ? 'text-emerald-400 hover:text-emerald-500 hover:bg-emerald-50'
+                                  : 'text-gray-400 hover:text-red-500 hover:bg-red-50'
+                              }`}
+                              title={userItem.isActive === false ? 'Activate User' : 'Deactivate User'}
+                            >
+                              <UserX className="w-4 h-4" />
+                            </motion.button>
+                            
+                            {userItem.role !== 'admin' && (
+                              <motion.button
+                                whileHover={{ scale: 1.1 }}
+                                whileTap={{ scale: 0.9 }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteUser(userItem._id, userItem.name);
+                                }}
+                                className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                                title="Delete User"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </motion.button>
+                            )}
+                          </div>
+                        </td>
+                      </motion.tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="text-center py-16">
+              <div className="w-20 h-20 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <Users className="w-10 h-10 text-gray-400" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                {searchTerm ? 'No users found' : 'No users yet'}
+              </h3>
+              <p className="text-gray-600 mb-6 max-w-md mx-auto">
+                {searchTerm 
+                  ? 'Try adjusting your search or filters to find what you\'re looking for.'
+                  : 'Get started by registering your first agent to manage your team.'
+                }
+              </p>
+              {!searchTerm && user?.role === 'admin' && (
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => setShowAddModal(true)}
+                  className="bg-gradient-to-r from-orange-500 to-orange-600 text-white px-6 py-3 rounded-xl inline-flex items-center space-x-2 hover:from-orange-600 hover:to-orange-700 shadow-lg shadow-orange-500/25"
+                >
+                  <UserPlus className="w-5 h-5" />
+                  <span>Register First Agent</span>
+                </motion.button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Pagination */}
+        {filteredUsers.length > 0 && (
+          <div className="mt-6 flex items-center justify-between">
+            <p className="text-sm text-gray-600">
+              Showing <span className="font-medium">{filteredUsers.length}</span> of{' '}
+              <span className="font-medium">{users.length}</span> users
+            </p>
+            <div className="flex items-center space-x-2">
+              <button className="px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-all">
+                Previous
+              </button>
+              <button className="px-4 py-2 bg-orange-500 text-white rounded-lg text-sm hover:bg-orange-600 transition-all">
+                1
+              </button>
+              <button className="px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-all">
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Add User Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="bg-white rounded-xl shadow-lg max-w-md w-full p-6"
+      {/* User Details Modal - Enhanced */}
+      <AnimatePresence>
+        {showDetailsModal && detailsUser && (
+          <div
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+            onClick={closeDetails}
           >
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Register New Agent</h3>
-            <form onSubmit={handleAddUser} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Full Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 ${
-                    formErrors.name ? 'border-red-300' : 'border-gray-300'
-                  }`}
-                  placeholder="Enter agent's full name"
-                  value={newUser.name}
-                  onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
-                />
-                {formErrors.name && (
-                  <p className="text-red-500 text-sm mt-1">{formErrors.name}</p>
-                )}
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Email Address *
-                </label>
-                <input
-                  type="email"
-                  required
-                  className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 ${
-                    formErrors.email ? 'border-red-300' : 'border-gray-300'
-                  }`}
-                  placeholder="agent@company.com"
-                  value={newUser.email}
-                  onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-                />
-                {formErrors.email && (
-                  <p className="text-red-500 text-sm mt-1">{formErrors.email}</p>
-                )}
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Phone Number
-                </label>
-                <input
-                  type="tel"
-                  className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 ${
-                    formErrors.phone ? 'border-red-300' : 'border-gray-300'
-                  }`}
-                  placeholder="+1 (555) 123-4567"
-                  value={newUser.phone}
-                  onChange={(e) => setNewUser({ ...newUser, phone: e.target.value })}
-                />
-                {formErrors.phone && (
-                  <p className="text-red-500 text-sm mt-1">{formErrors.phone}</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">National ID (NIN)</label>
-                <input
-                  type="text"
-                  className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 ${
-                    formErrors.nin ? 'border-red-300' : 'border-gray-300'
-                  }`}
-                  placeholder="Enter national ID number"
-                  value={newUser.nin}
-                  onChange={(e) => setNewUser({ ...newUser, nin: e.target.value })}
-                />
-                {formErrors.nin && (
-                  <p className="text-red-500 text-sm mt-1">{formErrors.nin}</p>
-                )}
-              </div>
-
-              <div className="flex space-x-3 pt-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="bg-white rounded-2xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className="px-6 py-5 bg-gradient-to-r from-orange-500 to-orange-600 flex items-start justify-between">
+                <div className="flex items-center space-x-4">
+                  <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-sm">
+                    {detailsUser.role === 'admin' ? (
+                      <Shield className="w-8 h-8 text-white" />
+                    ) : (
+                      <User className="w-8 h-8 text-white" />
+                    )}
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-white">{detailsUser.name}</h3>
+                    <p className="text-orange-100">{detailsUser.email}</p>
+                  </div>
+                </div>
                 <button
-                  type="button"
-                  onClick={() => {
-                    setShowAddModal(false);
-                    setFormErrors({});
-                  }}
-                  className="flex-1 py-3 px-4 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
-                  disabled={formLoading}
+                  onClick={closeDetails}
+                  className="p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Modal Content */}
+              <div className="p-6 overflow-y-auto max-h-[calc(90vh-100px)]">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  {/* Left Column - Basic Info */}
+                  <div className="lg:col-span-1 space-y-6">
+                    <div className="bg-gray-50 rounded-xl p-5">
+                      <h4 className="font-semibold text-gray-900 mb-4 flex items-center">
+                        <User className="w-4 h-4 mr-2 text-orange-500" />
+                        Personal Information
+                      </h4>
+                      <div className="space-y-3">
+                        <div>
+                          <p className="text-xs text-gray-500 mb-1">Phone</p>
+                          <p className="text-sm text-gray-900">{detailsUser.phone || 'Not provided'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 mb-1">NIN</p>
+                          <p className="text-sm text-gray-900">{detailsUser.nin || 'Not provided'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 mb-1">Role</p>
+                          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
+                            detailsUser.role === 'admin' 
+                              ? 'bg-purple-100 text-purple-700' 
+                              : 'bg-orange-100 text-orange-700'
+                          }`}>
+                            {detailsUser.role === 'admin' ? 'Administrator' : 'Sales Agent'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-gray-50 rounded-xl p-5">
+                      <h4 className="font-semibold text-gray-900 mb-4 flex items-center">
+                        <Calendar className="w-4 h-4 mr-2 text-orange-500" />
+                        Account Timeline
+                      </h4>
+                      <div className="space-y-3">
+                        <div>
+                          <p className="text-xs text-gray-500 mb-1">Joined</p>
+                          <p className="text-sm text-gray-900">{formatDateTime(detailsUser.createdAt)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 mb-1">Last Updated</p>
+                          <p className="text-sm text-gray-900">{formatDateTime(detailsUser.updatedAt)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 mb-1">First Login</p>
+                          <p className="text-sm text-gray-900">{detailsUser.isFirstLogin ? 'Yes' : 'No'}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right Column - Performance Metrics */}
+                  <div className="lg:col-span-2 space-y-6">
+                    <div className="bg-gradient-to-br from-orange-50 to-orange-100/50 rounded-xl p-5">
+                      <h4 className="font-semibold text-gray-900 mb-4 flex items-center">
+                        <TrendingUp className="w-4 h-4 mr-2 text-orange-500" />
+                        Performance Overview
+                      </h4>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="bg-white rounded-lg p-4 text-center">
+                          <p className="text-2xl font-bold text-orange-600">{detailsUser.performanceScore || 0}</p>
+                          <p className="text-xs text-gray-500 mt-1">Performance Score</p>
+                        </div>
+                        <div className="bg-white rounded-lg p-4 text-center">
+                          <p className="text-2xl font-bold text-orange-600">{detailsUser.agentRank || 0}</p>
+                          <p className="text-xs text-gray-500 mt-1">Agent Rank</p>
+                        </div>
+                        <div className="bg-white rounded-lg p-4 text-center">
+                          <p className="text-2xl font-bold text-orange-600">{detailsUser.totalDeals || 0}</p>
+                          <p className="text-xs text-gray-500 mt-1">Total Deals</p>
+                        </div>
+                        <div className="bg-white rounded-lg p-4 text-center">
+                          <p className="text-2xl font-bold text-orange-600">{detailsUser.successfulDeals || 0}</p>
+                          <p className="text-xs text-gray-500 mt-1">Successful</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="bg-gray-50 rounded-xl p-5">
+                        <h4 className="font-semibold text-gray-900 mb-4">Sales Statistics</h4>
+                        <div className="space-y-3">
+                          <div className="flex justify-between items-center py-2 border-b border-gray-200">
+                            <span className="text-sm text-gray-600">Total Sales Amount</span>
+                            <span className="text-sm font-semibold text-gray-900">
+                              {formatCurrency(detailsUser.totalSalesAmount)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center py-2 border-b border-gray-200">
+                            <span className="text-sm text-gray-600">Monthly Sales</span>
+                            <span className="text-sm font-semibold text-gray-900">
+                              {detailsUser.monthlySales || 0}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center py-2 border-b border-gray-200">
+                            <span className="text-sm text-gray-600">Monthly Sales Amount</span>
+                            <span className="text-sm font-semibold text-gray-900">
+                              {formatCurrency(detailsUser.monthlySalesAmount)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="bg-gray-50 rounded-xl p-5">
+                        <h4 className="font-semibold text-gray-900 mb-4">Deal Statistics</h4>
+                        <div className="space-y-3">
+                          <div className="flex justify-between items-center py-2 border-b border-gray-200">
+                            <span className="text-sm text-gray-600">Successful Deals</span>
+                            <span className="text-sm font-semibold text-emerald-600">
+                              {detailsUser.successfulDeals || 0}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center py-2 border-b border-gray-200">
+                            <span className="text-sm text-gray-600">Failed Deals</span>
+                            <span className="text-sm font-semibold text-red-600">
+                              {detailsUser.failedDeals || 0}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center py-2">
+                            <span className="text-sm text-gray-600">Success Rate</span>
+                            <span className="text-sm font-semibold text-gray-900">
+                              {detailsUser.totalDeals 
+                                ? Math.round((detailsUser.successfulDeals || 0) / detailsUser.totalDeals * 100)
+                                : 0}%
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Add User Modal - Enhanced */}
+      <AnimatePresence>
+        {showAddModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden"
+            >
+              <div className="px-6 py-4 bg-gradient-to-r from-orange-500 to-orange-600">
+                <h3 className="text-lg font-semibold text-white">Register New Agent</h3>
+                <p className="text-orange-100 text-sm mt-1">Add a new team member to the system</p>
+              </div>
+              
+              <form onSubmit={handleAddUser} className="p-6 space-y-5">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Full Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all ${
+                      formErrors.name ? 'border-red-300 bg-red-50' : 'border-gray-200'
+                    }`}
+                    placeholder="Enter agent's full name"
+                    value={newUser.name}
+                    onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
+                  />
+                  {formErrors.name && (
+                    <p className="text-red-500 text-sm mt-1 flex items-center">
+                      <AlertCircle className="w-4 h-4 mr-1" />
+                      {formErrors.name}
+                    </p>
+                  )}
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Email Address <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all ${
+                      formErrors.email ? 'border-red-300 bg-red-50' : 'border-gray-200'
+                    }`}
+                    placeholder="agent@company.com"
+                    value={newUser.email}
+                    onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+                  />
+                  {formErrors.email && (
+                    <p className="text-red-500 text-sm mt-1 flex items-center">
+                      <AlertCircle className="w-4 h-4 mr-1" />
+                      {formErrors.email}
+                    </p>
+                  )}
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Phone Number
+                  </label>
+                  <input
+                    type="tel"
+                    className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all ${
+                      formErrors.phone ? 'border-red-300 bg-red-50' : 'border-gray-200'
+                    }`}
+                    placeholder="+1 (555) 123-4567"
+                    value={newUser.phone}
+                    onChange={(e) => setNewUser({ ...newUser, phone: e.target.value })}
+                  />
+                  {formErrors.phone && (
+                    <p className="text-red-500 text-sm mt-1 flex items-center">
+                      <AlertCircle className="w-4 h-4 mr-1" />
+                      {formErrors.phone}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    National ID (NIN)
+                  </label>
+                  <input
+                    type="text"
+                    className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all ${
+                      formErrors.nin ? 'border-red-300 bg-red-50' : 'border-gray-200'
+                    }`}
+                    placeholder="Enter national ID number"
+                    value={newUser.nin}
+                    onChange={(e) => setNewUser({ ...newUser, nin: e.target.value })}
+                  />
+                  {formErrors.nin && (
+                    <p className="text-red-500 text-sm mt-1 flex items-center">
+                      <AlertCircle className="w-4 h-4 mr-1" />
+                      {formErrors.nin}
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex space-x-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAddModal(false);
+                      setFormErrors({});
+                    }}
+                    className="flex-1 py-3 px-4 border border-gray-200 rounded-xl text-gray-700 hover:bg-gray-50 transition-all"
+                    disabled={formLoading}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 py-3 px-4 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl hover:from-orange-600 hover:to-orange-700 transition-all disabled:opacity-50 shadow-lg shadow-orange-500/25"
+                    disabled={formLoading}
+                  >
+                    {formLoading ? (
+                      <div className="flex items-center justify-center space-x-2">
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        <span>Registering...</span>
+                      </div>
+                    ) : (
+                      'Register Agent'
+                    )}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Success Modal */}
+      <AnimatePresence>
+        {showSuccessModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6"
+            >
+              <div className="w-16 h-16 bg-emerald-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <CheckCircle className="w-8 h-8 text-emerald-600" />
+              </div>
+              
+              <h3 className="text-lg font-semibold text-gray-900 text-center">Agent Registered Successfully</h3>
+              <p className="mt-2 text-sm text-gray-600 text-center">
+                {successInfo.name} ({successInfo.email}) has been added to the system.
+              </p>
+              
+              {successInfo.emailSent ? (
+                <div className="mt-4 p-4 bg-emerald-50 rounded-xl">
+                  <p className="text-sm text-emerald-700 flex items-center">
+                    <Mail className="w-4 h-4 mr-2" />
+                    A welcome email with OTP has been sent to the agent.
+                  </p>
+                </div>
+              ) : (
+                <div className="mt-4 p-4 bg-yellow-50 rounded-xl">
+                  <p className="text-sm text-yellow-700 mb-2">Email delivery failed. Please share this OTP manually:</p>
+                  {successInfo.otp && (
+                    <div className="bg-white p-3 rounded-lg text-center">
+                      <code className="text-lg font-mono font-bold text-gray-900">{successInfo.otp}</code>
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              <div className="mt-6">
+                <button
+                  onClick={() => setShowSuccessModal(false)}
+                  className="w-full py-3 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl hover:from-orange-600 hover:to-orange-700 transition-all shadow-lg shadow-orange-500/25"
+                >
+                  Done
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Edit User Modal - Enhanced */}
+      <AnimatePresence>
+        {showEditModal && editUser && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden"
+            >
+              <div className="px-6 py-4 bg-gradient-to-r from-blue-500 to-blue-600">
+                <h3 className="text-lg font-semibold text-white">Edit User</h3>
+                <p className="text-blue-100 text-sm mt-1">Update user information</p>
+              </div>
+              
+              <form onSubmit={handleUpdateUser} className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Full Name</label>
+                  <input
+                    value={editUser.name}
+                    onChange={(e) => setEditUser({ ...editUser, name: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
+                  <input
+                    value={editUser.phone || ''}
+                    onChange={(e) => setEditUser({ ...editUser, phone: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">NIN</label>
+                  <input
+                    value={editUser.nin || ''}
+                    onChange={(e) => setEditUser({ ...editUser, nin: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                  />
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <label className="flex items-center space-x-2 p-3 border border-gray-200 rounded-xl hover:bg-gray-50 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={editUser.isActive !== false}
+                      onChange={(e) => setEditUser({ ...editUser, isActive: e.target.checked })}
+                      className="w-4 h-4 text-blue-500 rounded focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-gray-700">Active</span>
+                  </label>
+                  
+                  <div>
+                    <select
+                      value={editUser.status || 'offline'}
+                      onChange={(e) => setEditUser({ ...editUser, status: e.target.value })}
+                      className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value="offline">Offline</option>
+                      <option value="online">Online</option>
+                    </select>
+                  </div>
+                </div>
+                
+                <div className="flex space-x-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => { setShowEditModal(false); setEditUser(null); }}
+                    className="flex-1 py-3 px-4 border border-gray-200 rounded-xl text-gray-700 hover:bg-gray-50 transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 py-3 px-4 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 transition-all shadow-lg shadow-blue-500/25"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Deactivate/Activate Confirmation Modal */}
+      <AnimatePresence>
+        {showDeactivateModal && deactivateTarget && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6"
+            >
+              <div className={`w-16 h-16 ${deactivateTarget.isActive === false ? 'bg-emerald-100' : 'bg-red-100'} rounded-2xl flex items-center justify-center mx-auto mb-4`}>
+                {deactivateTarget.isActive === false ? (
+                  <CheckCircle className="w-8 h-8 text-emerald-600" />
+                ) : (
+                  <UserX className="w-8 h-8 text-red-600" />
+                )}
+              </div>
+              
+              <h3 className="text-lg font-semibold text-gray-900 text-center">
+                {deactivateTarget.isActive === false ? 'Activate User' : 'Deactivate User'}
+              </h3>
+              
+              <p className="mt-2 text-sm text-gray-600 text-center">
+                Are you sure you want to {deactivateTarget.isActive === false ? 'activate' : 'deactivate'} <strong>{deactivateTarget.name}</strong>?
+              </p>
+              
+              <p className="mt-3 text-sm text-gray-500 text-center">
+                {deactivateTarget.isActive === false 
+                  ? 'Activating will allow this agent to access the system again.'
+                  : 'Deactivating will immediately prevent this agent from logging in.'}
+              </p>
+              
+              <div className="mt-6 flex space-x-3">
+                <button
+                  onClick={() => { setShowDeactivateModal(false); setDeactivateTarget(null); }}
+                  className="flex-1 py-3 px-4 border border-gray-200 rounded-xl text-gray-700 hover:bg-gray-50 transition-all"
                 >
                   Cancel
                 </button>
                 <button
-                  type="submit"
-                  className="flex-1 py-3 px-4 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={formLoading}
+                  onClick={handleToggleActive}
+                  className={`flex-1 py-3 px-4 rounded-xl text-white transition-all shadow-lg ${
+                    deactivateTarget.isActive === false 
+                      ? 'bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 shadow-emerald-500/25' 
+                      : 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 shadow-red-500/25'
+                  }`}
                 >
-                  {formLoading ? (
-                    <div className="flex items-center justify-center space-x-2">
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      <span>Registering...</span>
-                    </div>
-                  ) : (
-                    'Register Agent'
-                  )}
+                  {deactivateTarget.isActive === false ? 'Activate' : 'Deactivate'}
                 </button>
               </div>
-            </form>
-          </motion.div>
-        </div>
-      )}
-
-      {/* Success Modal after registration */}
-      {showSuccessModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-xl shadow-lg max-w-md w-full p-6">
-            <h3 className="text-lg font-semibold text-gray-900">Agent Registered</h3>
-            <p className="mt-2 text-sm text-gray-600">{successInfo.name} ({successInfo.email}) has been created.</p>
-            {successInfo.emailSent ? (
-              <p className="mt-3 text-sm text-green-600">A welcome email with OTP was sent to the agent.</p>
-            ) : (
-              <div className="mt-3 text-sm text-yellow-700">
-                <p>User created but email failed to send.</p>
-                {successInfo.otp && <p className="mt-2 font-mono bg-gray-100 p-2 rounded">OTP: {successInfo.otp}</p>}
-                <p className="mt-2 text-xs text-gray-500">Please share the OTP with the agent manually.</p>
-              </div>
-            )}
-            <div className="mt-6 text-right">
-              <button onClick={() => setShowSuccessModal(false)} className="px-4 py-2 bg-orange-500 text-white rounded-lg">Close</button>
-            </div>
-          </motion.div>
-        </div>
-      )}
-
-      {/* Edit User Modal */}
-      {showEditModal && editUser && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-xl shadow-lg max-w-md w-full p-6">
-            <h3 className="text-lg font-semibold text-gray-900">Edit User</h3>
-            <form onSubmit={handleUpdateUser} className="space-y-4 mt-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Full Name</label>
-                <input value={editUser.name} onChange={(e) => setEditUser({ ...editUser, name: e.target.value })} className="w-full p-3 border rounded-lg" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
-                <input value={editUser.phone || ''} onChange={(e) => setEditUser({ ...editUser, phone: e.target.value })} className="w-full p-3 border rounded-lg" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">NIN</label>
-                <input value={editUser.nin || ''} onChange={(e) => setEditUser({ ...editUser, nin: e.target.value })} className="w-full p-3 border rounded-lg" />
-              </div>
-              <div className="flex items-center space-x-3">
-                <label className="flex items-center space-x-2 text-sm">
-                  <input type="checkbox" checked={editUser.isActive !== false} onChange={(e) => setEditUser({ ...editUser, isActive: e.target.checked })} />
-                  <span>Active</span>
-                </label>
-                <label className="flex items-center space-x-2 text-sm">
-                  <select value={editUser.status || 'offline'} onChange={(e) => setEditUser({ ...editUser, status: e.target.value })} className="p-2 border rounded">
-                    <option value="offline">Offline</option>
-                    <option value="online">Online</option>
-                  </select>
-                </label>
-              </div>
-              <div className="flex justify-end space-x-3 pt-4">
-                <button type="button" onClick={() => { setShowEditModal(false); setEditUser(null); }} className="py-2 px-4 border rounded">Cancel</button>
-                <button type="submit" className="py-2 px-4 bg-orange-500 text-white rounded">Save</button>
-              </div>
-            </form>
-          </motion.div>
-        </div>
-      )}
-
-      {/* Deactivate / Activate Confirmation Modal */}
-      {showDeactivateModal && deactivateTarget && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-xl shadow-lg max-w-md w-full p-6">
-            <h3 className="text-lg font-semibold text-gray-900">{deactivateTarget.isActive === false ? 'Activate User' : 'Deactivate User'}</h3>
-            <p className="mt-2 text-sm text-gray-600">Are you sure you want to {deactivateTarget.isActive === false ? 'activate' : 'deactivate'} <strong>{deactivateTarget.name}</strong>?</p>
-            <p className="mt-3 text-sm text-gray-500">{deactivateTarget.isActive === false ? 'Activating will allow this agent to access the system again.' : 'Deactivating will immediately prevent this agent from logging in.'}</p>
-            <div className="mt-6 flex justify-end space-x-3">
-              <button onClick={() => { setShowDeactivateModal(false); setDeactivateTarget(null); }} className="px-4 py-2 border rounded">Cancel</button>
-              <button onClick={handleToggleActive} className={`px-4 py-2 rounded text-white ${deactivateTarget.isActive === false ? 'bg-green-600' : 'bg-red-600'}`}>
-                {deactivateTarget.isActive === false ? 'Activate' : 'Deactivate'}
-              </button>
-            </div>
-          </motion.div>
-        </div>
-      )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
