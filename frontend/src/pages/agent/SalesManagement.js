@@ -25,6 +25,7 @@ const SalesManagement = () => {
   const [clientSearchTerm, setClientSearchTerm] = useState('');
   const [showClientDropdown, setShowClientDropdown] = useState(false);
   const [filteredClients, setFilteredClients] = useState([]);
+  const [loadingClients, setLoadingClients] = useState(false);
   const [selectedSaleForDetails, setSelectedSaleForDetails] = useState(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
 
@@ -72,14 +73,18 @@ const SalesManagement = () => {
   // Load clients from database
   const loadClients = async () => {
     try {
+      setLoadingClients(true);
       const response = await clientsAPI.getAll({ limit: 200 });
       const fetchedClients = response.data?.clients || response.data || [];
       setClients(fetchedClients);
       setFilteredClients(fetchedClients);
     } catch (error) {
       console.error('Error loading clients:', error);
+      toast.error('Failed to load clients');
       setClients([]);
       setFilteredClients([]);
+    } finally {
+      setLoadingClients(false);
     }
   };
 

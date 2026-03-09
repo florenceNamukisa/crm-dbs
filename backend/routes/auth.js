@@ -12,34 +12,25 @@ router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    console.log('Login attempt for:', email);
-
     // Validate input
     if (!email || !password) {
-      console.log('Missing email or password');
       return res.status(400).json({ message: 'Email and password are required' });
     }
 
     // Check if user exists
     const user = await User.findOne({ email });
     if (!user) {
-      console.log('User not found:', email);
       return res.status(400).json({ message: 'Invalid email or password' });
     }
 
-    console.log('User found:', { email: user.email, role: user.role, isActive: user.isActive, isFirstLogin: user.isFirstLogin });
-
     // Prevent deactivated users from logging in
     if (user.isActive === false) {
-      console.log('User is deactivated:', email);
       return res.status(403).json({ message: 'Account has been deactivated. Please contact your administrator.' });
     }
 
     // Check password/OTP
     const isMatch = await bcrypt.compare(password, user.password);
-    console.log('Password match result:', isMatch);
     if (!isMatch) {
-      console.log('Password mismatch for:', email);
       return res.status(400).json({ message: 'Invalid email or password' });
     }
 
@@ -62,7 +53,7 @@ router.post('/login', async (req, res) => {
       user.status = 'online';
       await user.save();
     } catch (err) {
-      console.warn('Could not update user status:', err.message);
+      // Silent fail - status update is not critical
     }
 
     // Return user data without password

@@ -99,13 +99,6 @@ router.post('/', getCurrentUser, (req, res, next) => {
     const host = req.get('host');
     const baseUrl = host ? `${proto}://${host}` : '';
 
-    console.log('File uploaded successfully:', {
-      filename: req.file.filename,
-      size: req.file.size,
-      mimetype: req.file.mimetype,
-      uploadedBy: req.user?.id || req.user?.userId
-    });
-
     return res.status(201).json({
       filename: req.file.filename,
       path: publicPath,

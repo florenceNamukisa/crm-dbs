@@ -251,8 +251,6 @@ router.post('/', [
 
     const { customerName, customerEmail, customerPhone, items, paymentMethod, client, notes, dueDate } = req.body;
 
-    console.log('Creating sale with data:', { customerName, items, paymentMethod, client });
-
     // Validate items before creating sale
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ message: 'At least one item is required' });
@@ -288,7 +286,6 @@ router.post('/', [
 
     try {
       await sale.save();
-      console.log('Sale saved successfully:', sale._id);
     } catch (validationError) {
       console.error('Sale validation error:', validationError);
       return res.status(400).json({ 

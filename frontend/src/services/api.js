@@ -90,6 +90,7 @@ export const schedulesAPI = {
 // Notifications API
 export const notificationsAPI = {
   getAll: (params) => api.get('/notifications', { params }),
+  getUnreadCount: () => api.get('/notifications/unread-count'),
   markAsRead: (id) => api.put(`/notifications/${id}/read`),
   markAllAsRead: () => api.put('/notifications/read-all'),
   delete: (id) => api.delete(`/notifications/${id}`),
@@ -105,6 +106,7 @@ export const performanceAPI = {
 // Reports API
 export const reportsAPI = {
   generateReport: (type, params) => api.get(`/reports/${type}`, { params }),
+  getAnalytics: (params) => api.get('/reports/analytics', { params }),
   exportReport: (type, format, params) => api.get(`/reports/${type}/export/${format}`, { 
     params,
     responseType: 'blob' 

@@ -164,8 +164,6 @@ saleSchema.pre('save', function(next) {
     this.discountAmount = discountAmount;
     this.finalAmount = totalAmount - discountAmount;
 
-    console.log('Calculated totals:', { totalAmount, discountAmount, finalAmount: this.finalAmount });
-
     next();
   } catch (error) {
     console.error('Error in sale pre-save hook:', error);
