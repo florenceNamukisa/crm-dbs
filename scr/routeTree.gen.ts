@@ -8,37 +8,39 @@
 // You should NOT make any changes in this file as it will be overwritten.
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
-import { Route as rootRouteImport } from './routes/__root'
-import { Route as WhatsappRouteImport } from './routes/whatsapp'
-import { Route as TenantAdminRouteImport } from './routes/tenant-admin'
-import { Route as TasksRouteImport } from './routes/tasks'
-import { Route as SuperAdminRouteImport } from './routes/super-admin'
-import { Route as SmsRouteImport } from './routes/sms'
-import { Route as SettingsRouteImport } from './routes/settings'
-import { Route as ReportsRouteImport } from './routes/reports'
-import { Route as QuotesRouteImport } from './routes/quotes'
-import { Route as ProposalsRouteImport } from './routes/proposals'
-import { Route as ProductsRouteImport } from './routes/products'
-import { Route as NotesRouteImport } from './routes/notes'
-import { Route as MeetingsRouteImport } from './routes/meetings'
-import { Route as LoginRouteImport } from './routes/login'
-import { Route as LeadsRouteImport } from './routes/leads'
-import { Route as InvoicesRouteImport } from './routes/invoices'
-import { Route as InboxRouteImport } from './routes/inbox'
-import { Route as FollowupsRouteImport } from './routes/followups'
-import { Route as EmailRouteImport } from './routes/email'
-import { Route as DocumentsRouteImport } from './routes/documents'
-import { Route as DealsRouteImport } from './routes/deals'
-import { Route as ContactsRouteImport } from './routes/contacts'
-import { Route as ClientsRouteImport } from './routes/clients'
-import { Route as CallsRouteImport } from './routes/calls'
-import { Route as CallLogsRouteImport } from './routes/call-logs'
-import { Route as CalendarRouteImport } from './routes/calendar'
-import { Route as AiAssistantRouteImport } from './routes/ai-assistant'
-import { Route as IndexRouteImport } from './routes/index'
-import { Route as ReportsPipelineRouteImport } from './routes/reports.pipeline'
-import { Route as ReportsPerformanceRouteImport } from './routes/reports.performance'
-import { Route as ReportsActivityRouteImport } from './routes/reports.activity'
+import { Route as rootRouteImport } from './../fronted/routes/__root'
+import { Route as WhatsappRouteImport } from './../fronted/routes/whatsapp'
+import { Route as TenantAdminRouteImport } from './../fronted/routes/tenant-admin'
+import { Route as TasksRouteImport } from './../fronted/routes/tasks'
+import { Route as SuperAdminRouteImport } from './../fronted/routes/super-admin'
+import { Route as SmsRouteImport } from './../fronted/routes/sms'
+import { Route as SettingsRouteImport } from './../fronted/routes/settings'
+import { Route as ResetPasswordRouteImport } from './../fronted/routes/reset-password'
+import { Route as ReportsRouteImport } from './../fronted/routes/reports'
+import { Route as QuotesRouteImport } from './../fronted/routes/quotes'
+import { Route as ProposalsRouteImport } from './../fronted/routes/proposals'
+import { Route as ProductsRouteImport } from './../fronted/routes/products'
+import { Route as NotesRouteImport } from './../fronted/routes/notes'
+import { Route as MeetingsRouteImport } from './../fronted/routes/meetings'
+import { Route as LoginRouteImport } from './../fronted/routes/login'
+import { Route as LeadsRouteImport } from './../fronted/routes/leads'
+import { Route as InvoicesRouteImport } from './../fronted/routes/invoices'
+import { Route as InboxRouteImport } from './../fronted/routes/inbox'
+import { Route as ForgotPasswordRouteImport } from './../fronted/routes/forgot-password'
+import { Route as FollowupsRouteImport } from './../fronted/routes/followups'
+import { Route as EmailRouteImport } from './../fronted/routes/email'
+import { Route as DocumentsRouteImport } from './../fronted/routes/documents'
+import { Route as DealsRouteImport } from './../fronted/routes/deals'
+import { Route as ContactsRouteImport } from './../fronted/routes/contacts'
+import { Route as ClientsRouteImport } from './../fronted/routes/clients'
+import { Route as CallsRouteImport } from './../fronted/routes/calls'
+import { Route as CallLogsRouteImport } from './../fronted/routes/call-logs'
+import { Route as CalendarRouteImport } from './../fronted/routes/calendar'
+import { Route as AiAssistantRouteImport } from './../fronted/routes/ai-assistant'
+import { Route as IndexRouteImport } from './../fronted/routes/index'
+import { Route as ReportsPipelineRouteImport } from './../fronted/routes/reports.pipeline'
+import { Route as ReportsPerformanceRouteImport } from './../fronted/routes/reports.performance'
+import { Route as ReportsActivityRouteImport } from './../fronted/routes/reports.activity'
 
 const WhatsappRoute = WhatsappRouteImport.update({
   id: '/whatsapp',
@@ -68,6 +70,11 @@ const SmsRoute = SmsRouteImport.update({
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ReportsRoute = ReportsRouteImport.update({
@@ -118,6 +125,11 @@ const InvoicesRoute = InvoicesRouteImport.update({
 const InboxRoute = InboxRouteImport.update({
   id: '/inbox',
   path: '/inbox',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
+  id: '/forgot-password',
+  path: '/forgot-password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FollowupsRoute = FollowupsRouteImport.update({
@@ -203,6 +215,7 @@ export interface FileRoutesByFullPath {
   '/documents': typeof DocumentsRoute
   '/email': typeof EmailRoute
   '/followups': typeof FollowupsRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/inbox': typeof InboxRoute
   '/invoices': typeof InvoicesRoute
   '/leads': typeof LeadsRoute
@@ -213,6 +226,7 @@ export interface FileRoutesByFullPath {
   '/proposals': typeof ProposalsRoute
   '/quotes': typeof QuotesRoute
   '/reports': typeof ReportsRouteWithChildren
+  '/reset-password': typeof ResetPasswordRoute
   '/settings': typeof SettingsRoute
   '/sms': typeof SmsRoute
   '/super-admin': typeof SuperAdminRoute
@@ -235,6 +249,7 @@ export interface FileRoutesByTo {
   '/documents': typeof DocumentsRoute
   '/email': typeof EmailRoute
   '/followups': typeof FollowupsRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/inbox': typeof InboxRoute
   '/invoices': typeof InvoicesRoute
   '/leads': typeof LeadsRoute
@@ -245,6 +260,7 @@ export interface FileRoutesByTo {
   '/proposals': typeof ProposalsRoute
   '/quotes': typeof QuotesRoute
   '/reports': typeof ReportsRouteWithChildren
+  '/reset-password': typeof ResetPasswordRoute
   '/settings': typeof SettingsRoute
   '/sms': typeof SmsRoute
   '/super-admin': typeof SuperAdminRoute
@@ -268,6 +284,7 @@ export interface FileRoutesById {
   '/documents': typeof DocumentsRoute
   '/email': typeof EmailRoute
   '/followups': typeof FollowupsRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/inbox': typeof InboxRoute
   '/invoices': typeof InvoicesRoute
   '/leads': typeof LeadsRoute
@@ -278,6 +295,7 @@ export interface FileRoutesById {
   '/proposals': typeof ProposalsRoute
   '/quotes': typeof QuotesRoute
   '/reports': typeof ReportsRouteWithChildren
+  '/reset-password': typeof ResetPasswordRoute
   '/settings': typeof SettingsRoute
   '/sms': typeof SmsRoute
   '/super-admin': typeof SuperAdminRoute
@@ -302,6 +320,7 @@ export interface FileRouteTypes {
     | '/documents'
     | '/email'
     | '/followups'
+    | '/forgot-password'
     | '/inbox'
     | '/invoices'
     | '/leads'
@@ -312,6 +331,7 @@ export interface FileRouteTypes {
     | '/proposals'
     | '/quotes'
     | '/reports'
+    | '/reset-password'
     | '/settings'
     | '/sms'
     | '/super-admin'
@@ -334,6 +354,7 @@ export interface FileRouteTypes {
     | '/documents'
     | '/email'
     | '/followups'
+    | '/forgot-password'
     | '/inbox'
     | '/invoices'
     | '/leads'
@@ -344,6 +365,7 @@ export interface FileRouteTypes {
     | '/proposals'
     | '/quotes'
     | '/reports'
+    | '/reset-password'
     | '/settings'
     | '/sms'
     | '/super-admin'
@@ -366,6 +388,7 @@ export interface FileRouteTypes {
     | '/documents'
     | '/email'
     | '/followups'
+    | '/forgot-password'
     | '/inbox'
     | '/invoices'
     | '/leads'
@@ -376,6 +399,7 @@ export interface FileRouteTypes {
     | '/proposals'
     | '/quotes'
     | '/reports'
+    | '/reset-password'
     | '/settings'
     | '/sms'
     | '/super-admin'
@@ -399,6 +423,7 @@ export interface RootRouteChildren {
   DocumentsRoute: typeof DocumentsRoute
   EmailRoute: typeof EmailRoute
   FollowupsRoute: typeof FollowupsRoute
+  ForgotPasswordRoute: typeof ForgotPasswordRoute
   InboxRoute: typeof InboxRoute
   InvoicesRoute: typeof InvoicesRoute
   LeadsRoute: typeof LeadsRoute
@@ -409,6 +434,7 @@ export interface RootRouteChildren {
   ProposalsRoute: typeof ProposalsRoute
   QuotesRoute: typeof QuotesRoute
   ReportsRoute: typeof ReportsRouteWithChildren
+  ResetPasswordRoute: typeof ResetPasswordRoute
   SettingsRoute: typeof SettingsRoute
   SmsRoute: typeof SmsRoute
   SuperAdminRoute: typeof SuperAdminRoute
@@ -459,6 +485,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/reports': {
@@ -529,6 +562,13 @@ declare module '@tanstack/react-router' {
       path: '/inbox'
       fullPath: '/inbox'
       preLoaderRoute: typeof InboxRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/forgot-password': {
+      id: '/forgot-password'
+      path: '/forgot-password'
+      fullPath: '/forgot-password'
+      preLoaderRoute: typeof ForgotPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/followups': {
@@ -659,6 +699,7 @@ const rootRouteChildren: RootRouteChildren = {
   DocumentsRoute: DocumentsRoute,
   EmailRoute: EmailRoute,
   FollowupsRoute: FollowupsRoute,
+  ForgotPasswordRoute: ForgotPasswordRoute,
   InboxRoute: InboxRoute,
   InvoicesRoute: InvoicesRoute,
   LeadsRoute: LeadsRoute,
@@ -669,6 +710,7 @@ const rootRouteChildren: RootRouteChildren = {
   ProposalsRoute: ProposalsRoute,
   QuotesRoute: QuotesRoute,
   ReportsRoute: ReportsRouteWithChildren,
+  ResetPasswordRoute: ResetPasswordRoute,
   SettingsRoute: SettingsRoute,
   SmsRoute: SmsRoute,
   SuperAdminRoute: SuperAdminRoute,

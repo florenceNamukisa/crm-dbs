@@ -22,10 +22,10 @@
     /* Path aliases */
     "baseUrl": ".",
     "paths": {
-      "@/*": ["scr/*"]
+      "@/*": ["fronted/*"]
     }
   },
-  "include": ["scr/**/*.ts", "scr/**/*.tsx", "scr/**/*.d.ts"],
-  "exclude": ["scr/**/*.css"],
+  "include": ["fronted/**/*.ts", "fronted/**/*.tsx", "fronted/**/*.d.ts"],
+  "exclude": ["fronted/**/*.css"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

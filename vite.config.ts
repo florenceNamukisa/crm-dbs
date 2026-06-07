@@ -7,8 +7,8 @@ import { fileURLToPath, URL } from "node:url";
 export default defineConfig({
   plugins: [
     TanStackRouterVite({
-      routesDirectory: "scr/routes",
-      generatedRouteTree: "scr/routeTree.gen.ts",
+      routesDirectory: "fronted/routes",
+      generatedRouteTree: "fronted/routeTree.gen.ts",
     }),
     tailwindcss(),
     react(),
@@ -20,7 +20,12 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      "@": fileURLToPath(new URL("./scr", import.meta.url)),
+      "@": fileURLToPath(new URL("\.\/fronted", import.meta.url)),
+    },
+  },
+  server: {
+    fs: {
+      deny: [".env", ".env.*"],
     },
   },
 });
