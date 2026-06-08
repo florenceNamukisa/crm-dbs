@@ -49,6 +49,8 @@ const defaultOrigins = [
   'http://localhost:5173',
   'http://localhost:5174',
   'https://crm-tool-ebon.vercel.app',
+  'https://crm-system-brown-kappa.vercel.app',
+  'https://crm-system.vercel.app',
   'https://crm.xtreative.com',
   'https://www.crm.xtreative.com'
 ];

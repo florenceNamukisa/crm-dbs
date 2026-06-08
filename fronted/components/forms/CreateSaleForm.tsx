@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { apiFetch } from "@/lib/auth";
 import { useClients } from "@/lib/api/clients";
 
 interface CreateSaleFormProps {
@@ -40,12 +41,11 @@ export function CreateSaleForm({ onClose, onSuccess }: CreateSaleFormProps) {
       // Create a Deal (the same record type the admin dashboard counts as
       // "Number of Sales" / "Value of Sales"). Posting to /deals keeps the
       // Sales Agent dashboard cards/graphs in sync with the admin.
-      await fetch(`${import.meta.env.VITE_API_URL || (window.location.port !== "5000" ? "http://localhost:5000/api" : `${window.location.origin}/api`)}/deals`, {
+      // Uses the standardized apiFetch so the same env-var/auth fallback
+      // logic the rest of the app uses is applied (works in dev and on
+      // Vercel deployment with the same `VITE_API_URL`).
+      await apiFetch("/deals", {
         method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: `Bearer ${localStorage.getItem("crm.auth.token") || ""}`,
-        },
         body: JSON.stringify({
           title: vals.title,
           value: parseFloat(vals.value) || 0,
@@ -53,11 +53,6 @@ export function CreateSaleForm({ onClose, onSuccess }: CreateSaleFormProps) {
           stage: vals.stage || "lead",
           dealType: vals.dealType === "existing" ? "existing" : "new",
         }),
-      }).then(async (r) => {
-        if (!r.ok) {
-          const err = await r.json().catch(() => ({ message: "Request failed" }));
-          throw new Error(err.message || "Failed to create deal");
-        }
       });
 
       // Refresh every dashboard/component that counts deals
