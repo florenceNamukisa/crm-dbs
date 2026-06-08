@@ -35,7 +35,6 @@ export default function LeadsDashboard() {
   const series = Object.entries(weekMap).slice(-7).map(([d, v]) => ({ d, v }));
 
   const [search, setSearch] = useState("");
-  const [importError, setImportError] = useState<string | null>(null);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [view, setView] = useState<"list" | "kanban">("list");
 
@@ -86,11 +85,12 @@ export default function LeadsDashboard() {
         setEmailBody("");
         setShowEmailModal(true);
         break;
-      case "whatsapp":
-        const phone = lead.phone ? lead.phone.replace(/[^0-9]/g, "") : "";
-        if (phone) window.open(`https://wa.me/${phone.startsWith("0") ? phone : "0" + phone}`);
-        else toast.error("No phone number");
-        break;
+case "whatsapp": {
+         const phone = lead.phone ? lead.phone.replace(/[^0-9]/g, "") : "";
+         if (phone) window.open(`https://wa.me/${phone.startsWith("0") ? phone : "0" + phone}`);
+         else toast.error("No phone number");
+         break;
+       }
       case "notes":
         setSelectedLead(lead);
         setNotes("");

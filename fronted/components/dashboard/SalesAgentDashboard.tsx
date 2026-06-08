@@ -63,7 +63,7 @@ function fmtCurrency(v: number) {
 export default function SalesAgentDashboard() {
   const queryClient = useQueryClient();
   const { setOpenForm } = useFormDialog();
-  const { data: dashData, isLoading: dashLoading } = useQuery({
+  const { data: dashData } = useQuery({
     queryKey: ["sales-dashboard"],
     queryFn: () => apiFetch<DashboardResponse>("/dashboards/sales"),
     staleTime: 0,

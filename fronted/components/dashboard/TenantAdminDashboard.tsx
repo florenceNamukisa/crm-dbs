@@ -429,17 +429,8 @@ function DashboardView({ users, clients, deals, onSelectUser }: { users: User[];
     return days;
   }, [deals]);
 
-  // ── Chart data: Pipeline by stage ──
-  const _stageData = useMemo(() => {
-    const stages = ['new', 'contacted', 'qualified', 'proposal', 'negotiation', 'won', 'lost'];
-    return stages.map((s) => ({
-      name: s.charAt(0).toUpperCase() + s.slice(1),
-      value: deals.filter((d: any) => (d.stage || d.leadStatus || '').toLowerCase() === s).length,
-    }));
-  }, [deals]);
-
-  // ── Chart data: Users by department ──
-  const deptData = useMemo(() => {
+// ── Chart data: Users by department ──
+   const deptData = useMemo(() => {
     const map = new Map<string, number>();
     users.forEach((u: any) => {
       const dept = u.department || 'Unassigned';
@@ -1050,43 +1041,69 @@ function ClientDetailModal({ client: cl, users, deals, schedules, open, onClose 
             )}
           </Panel>
 
-          {/* Interactions */}
-          <Panel title={`Interactions (${clientInteractions.length})`}>
-            {clientInteractions.length === 0 ? (
-              <div className="text-sm text-muted-foreground py-4 text-center">No interactions recorded</div>
-            ) : (
-              <div className="overflow-auto max-h-48">
-                <table className="w-full text-sm">
-                  <thead className="text-xs text-muted-foreground">
-                    <tr className="text-left">
-                      {['Type', 'Date', 'Notes', 'By'].map((h) => <th key={h} className="pb-1 pr-2 font-normal">{h}</th>)}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {clientInteractions.map((inter: any, i: number) => (
-                      <tr key={i} className="border-t border-border/30">
-                        <td className="py-1.5 pr-2">
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${
-                            inter.type === 'call' ? 'bg-blue-500/15 text-blue-400' :
-                            inter.type === 'email' ? 'bg-purple-500/15 text-purple-400' :
-                            inter.type === 'meeting' ? 'bg-emerald-500/15 text-emerald-400' :
-                            'bg-zinc-500/15 text-zinc-400'
-                          }`}>{inter.type || 'other'}</span>
-                        </td>
-                        <td className="pr-2 text-muted-foreground text-xs">{inter.date ? new Date(inter.date).toLocaleDateString() : '—'}</td>
-                        <td className="pr-2 text-muted-foreground max-w-[200px] truncate">{inter.notes || '—'}</td>
-                        <td className="pr-2 text-muted-foreground">{inter.createdBy ? getUserName(inter.createdBy) : '—'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </Panel>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
+{/* Interactions */}
+           <Panel title={`Interactions (${clientInteractions.length})`}>
+             {clientInteractions.length === 0 ? (
+               <div className="text-sm text-muted-foreground py-4 text-center">No interactions recorded</div>
+             ) : (
+               <div className="overflow-auto max-h-48">
+                 <table className="w-full text-sm">
+                   <thead className="text-xs text-muted-foreground">
+                     <tr className="text-left">
+                       {['Type', 'Date', 'Notes', 'By'].map((h) => <th key={h} className="pb-1 pr-2 font-normal">{h}</th>)}
+                     </tr>
+                   </thead>
+                   <tbody>
+                     {clientInteractions.map((inter: any, i: number) => (
+                       <tr key={i} className="border-t border-border/30">
+                         <td className="py-1.5 pr-2">
+                           <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                             inter.type === 'call' ? 'bg-blue-500/15 text-blue-400' :
+                             inter.type === 'email' ? 'bg-purple-500/15 text-purple-400' :
+                             inter.type === 'meeting' ? 'bg-emerald-500/15 text-emerald-400' :
+                             'bg-zinc-500/15 text-zinc-400'
+                           }`}>{inter.type || 'other'}</span>
+                         </td>
+                         <td className="pr-2 text-muted-foreground text-xs">{inter.date ? new Date(inter.date).toLocaleDateString() : '—'}</td>
+                         <td className="pr-2 text-muted-foreground max-w-[200px] truncate">{inter.notes || '—'}</td>
+                         <td className="pr-2 text-muted-foreground">{inter.createdBy ? getUserName(inter.createdBy) : '—'}</td>
+                       </tr>
+                     ))}
+                   </tbody>
+                 </table>
+               </div>
+             )}
+           </Panel>
+
+           {/* Meetings */}
+           <Panel title={`Meetings (${clientMeetings.length})`}>
+             {clientMeetings.length === 0 ? (
+               <div className="text-sm text-muted-foreground py-4 text-center">No meetings recorded</div>
+             ) : (
+               <div className="overflow-auto max-h-48">
+                 <table className="w-full text-sm">
+                   <thead className="text-xs text-muted-foreground">
+                     <tr className="text-left">
+                       {['Title', 'Date', 'Status'].map((h) => <th key={h} className="pb-1 pr-2 font-normal">{h}</th>)}
+                     </tr>
+                   </thead>
+                   <tbody>
+                     {clientMeetings.map((m: any) => (
+                       <tr key={m._id} className="border-t border-border/30">
+                         <td className="py-1.5 pr-2 font-medium">{m.title || '—'}</td>
+                         <td className="pr-2 text-muted-foreground text-xs">{m.scheduledTime ? new Date(m.scheduledTime).toLocaleDateString() : '—'}</td>
+                         <td className="pr-2"><span className={`text-[10px] px-1.5 py-0.5 rounded ${m.status === 'completed' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-blue-500/15 text-blue-400'}`}>{m.status || 'scheduled'}</span></td>
+                       </tr>
+                     ))}
+                   </tbody>
+                 </table>
+               </div>
+             )}
+           </Panel>
+         </div>
+       </DialogContent>
+     </Dialog>
+   );
 }
 
 // ─── Clients View ──────────────────────────────────────
@@ -1473,10 +1490,6 @@ export default function TenantAdminDashboard() {
   const [activeSection, setActiveSection] = useState('Dashboard');
   const [addUserOpen, setAddUserOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any>(null);
-  const [selectedClient, setSelectedClient] = useState<any>(null);
-  const [actionRowClient, setActionRowClient] = useState<string | null>(null);
-  const [showMeetingForm, setShowMeetingForm] = useState(false);
-  const [meetingForm, setMeetingForm] = useState({ title: "", location: "In Person", date: "", time: "" });
 
   const user = getStoredUser();
   const initials = (user?.name || 'Admin')

@@ -74,7 +74,7 @@ export default function SetPasswordPage() {
           await navigate({ to: target });
           return;
         }
-      } catch {}
+      } catch { /* OTP/email fetch failed, redirect to login */ }
       await navigate({ to: "/login" });
     } catch (error) {
       toast.error("Could not set password", { description: error instanceof Error ? error.message : "Please try again." });

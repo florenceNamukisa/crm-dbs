@@ -48,8 +48,8 @@ export default function LoginPage() {
       const isFirst = Boolean((raw.user as any)?.isFirstLogin);
       if (isFirst) {
         // Stash both email and OTP in localStorage so the set-password page can pre-fill them.
-        try { localStorage.setItem("crm.auth.pendingEmail", user.email); } catch {}
-        if (raw.user.otp) { try { localStorage.setItem("crm.auth.pendingOTP", raw.user.otp); } catch {} }
+try { localStorage.setItem("crm.auth.pendingEmail", user.email); } catch { /* localStorage unavailable */ }
+         if (raw.user.otp) { try { localStorage.setItem("crm.auth.pendingOTP", raw.user.otp); } catch { /* localStorage unavailable */ } }
         toast.message("First time signing in", { description: "Please set a password to continue." });
         await navigate({ to: "/set-password" });
         return;

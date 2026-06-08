@@ -187,13 +187,14 @@ function SalesPage() {
     updateSaleMutation.mutate({ id: saleId, data: { stage: newStage, probability: getProbability(newStage) } });
   }
 
-  function handleAction(actionType: string, sale: any) {
+function handleAction(actionType: string, sale: any) {
     switch (actionType) {
-      case "change_status":
+      case "change_status": {
         const stages = STAGES;
         const next = stages[(stages.indexOf(sale.stage) + 1) % stages.length];
         handleStageChange(sale._id, next);
         break;
+      }
       case "call":
         toast.info("Call feature coming soon!");
         break;
@@ -202,11 +203,12 @@ function SalesPage() {
         setEmailBody("");
         setShowEmailModal(true);
         break;
-      case "whatsapp":
+      case "whatsapp": {
         const phone = sale.client?.phone || sale.customerPhone;
         if (phone) window.open(`https://wa.me/${phone.replace(/[^0-9]/g, "")}`);
         else toast.error("No phone number");
         break;
+      }
       case "notes":
         setSelectedSale(sale);
         setNotes("");
@@ -218,7 +220,7 @@ function SalesPage() {
         setTaskDueDate("");
         setShowTaskModal(true);
         break;
-      case "event":
+      case "event": {
         setSelectedSale(sale);
         setEventTitle("");
         setEventDate("");
@@ -226,6 +228,7 @@ function SalesPage() {
         setEventType("meeting");
         setShowEventModal(true);
         break;
+      }
       case "forward":
         setSelectedSale(sale);
         setForwardAgent("");
