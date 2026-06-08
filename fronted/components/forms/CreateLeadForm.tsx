@@ -31,7 +31,8 @@ export function CreateLeadForm({ onClose, onSuccess }: CreateLeadFormProps) {
         }),
       });
       leadForm.reset();
-      queryClient.invalidateQueries({ queryKey: ["sales-dashboard"] as unknown as readonly unknown[] });
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+      queryClient.invalidateQueries({ queryKey: ["sales-dashboard"] });
       onSuccess?.();
       onClose();
     } catch (err: any) {

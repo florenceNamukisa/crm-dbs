@@ -27,6 +27,11 @@ export type EntityConfig = {
   subtitleKey?: string;
   kanban?: { statusKey: string; stages: string[] };
   detailExtras?: { label: string; value: string }[];
+  onSearch?: (v: string) => void;
+  onImport?: () => void;
+  onExport?: (format: "csv" | "xlsx" | "pdf") => void;
+  hideFilter?: boolean;
+  hideColumns?: boolean;
 };
 
 type EntityValue = string | number | null | undefined;
@@ -38,6 +43,15 @@ export function DataSection({ config, title }: { config: Omit<EntityConfig, "kpi
   const [openNew, setOpenNew] = useState(false);
   const [selected, setSelected] = useState<EntityRow | null>(null);
   const [form, setForm] = useState<EntityRow>({});
+  const [search, setSearch] = useState("");
+
+  const filteredItems = useMemo(() => {
+    if (!config.onSearch || !search.trim()) return items;
+    const q = search.toLowerCase();
+    return items.filter((r) =>
+      Object.values(r).some((v) => String(v ?? "").toLowerCase().includes(q))
+    );
+  }, [items, search, config]);
 
   const resetForm = () => {
     const base: EntityRow = {};
@@ -62,29 +76,145 @@ export function DataSection({ config, title }: { config: Omit<EntityConfig, "kpi
     toast.success(`${config.entity} created`, { description: `${form[required.key]} added successfully.` });
   };
 
+  const doImport = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".csv,.xlsx,.xls,.json";
+    input.onchange = async (e: any) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        let imported: EntityRow[] = [];
+        if (file.name.endsWith(".json")) {
+          imported = JSON.parse(text);
+        } else {
+          const lines = text.split("\n").filter((l: string) => l.trim());
+          const headers = lines[0].split(",").map((h: string) => h.trim().replace(/"/g, ""));
+          lines.slice(1).forEach((line: string) => {
+            const vals = line.split(",").map((v: string) => v.trim().replace(/"/g, ""));
+            const row: EntityRow = {};
+            headers.forEach((h: string, i: number) => (row[h] = vals[i] || ""));
+            imported.push(row);
+          });
+        }
+        setItems((prev) => [...imported, ...prev]);
+        toast.success(`Imported ${imported.length} ${config.entityPlural.toLowerCase()}`);
+      } catch (err: any) {
+        toast.error("Import failed", { description: err.message });
+      }
+    };
+    input.click();
+  };
+
+  const doExport = (format: "csv" | "xlsx" | "pdf") => {
+    const dataToExport = filteredItems.length > 0 ? filteredItems : items;
+    if (dataToExport.length === 0) {
+      toast.error("No data to export");
+      return;
+    }
+    if (format === "csv") {
+      const headers = config.columns.map((c) => c.label).join(",");
+      const rows = dataToExport.map((r) => config.columns.map((c) => `"${String(r[c.key] ?? "")}"`).join(","));
+      const csv = [headers, ...rows].join("\n");
+      const blob = new Blob([csv], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = `${config.entityPlural.toLowerCase()}_export.csv`;
+      a.click(); URL.revokeObjectURL(url);
+    } else if (format === "xlsx") {
+      const ws = (window as any).XLSX;
+      if (!ws) {
+        toast.error("XLSX export requires xlsx library");
+        return;
+      }
+      const sheet = ws.utils.json_to_sheet(dataToExport.map((r) => {
+        const row: Record<string, string> = {};
+        config.columns.forEach((c) => (row[c.label] = String(r[c.key] ?? "")));
+        return row;
+      }));
+      const wb = ws.utils.book_new();
+      ws.utils.book_append_sheet(wb, sheet, config.entityPlural);
+      ws.writeFile(wb, `${config.entityPlural.toLowerCase()}_export.xlsx`);
+    } else if (format === "pdf") {
+      const printWindow = window.open("", "_blank");
+      if (!printWindow) {
+        toast.error("Popup blocked");
+        return;
+      }
+      const headers = config.columns.map((c) => c.label);
+      const rows = dataToExport.map((r) => config.columns.map((c) => String(r[c.key] ?? "")));
+      printWindow.document.write(`
+        <html>
+          <head><title>${config.entityPlural} Export</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 20px; }
+            table { border-collapse: collapse; width: 100%; }
+            th, td { border: 1px solid #ccc; padding: 6px 10px; font-size: 12px; text-align: left; }
+            th { background: #ff8c00; color: #fff; }
+            tr:nth-child(even) { background: #f9f9f9; }
+          </style>
+        </head>
+        <body>
+          <h2>${config.entityPlural} Report</h2>
+          <p>Generated: ${new Date().toLocaleString()}</p>
+          <table>
+            <thead><tr>${headers.map((h) => `<th>${h}</th>`).join("")}</tr></thead>
+            <tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join("")}</tr>`).join("")}</tbody>
+          </table>
+        </body>
+      </html>
+      `);
+      printWindow.document.close();
+      setTimeout(() => printWindow.print(), 300);
+    }
+    toast.success(`Exported as ${format.toUpperCase()}`);
+  };
+
+  const handleExportClick = () => {
+    if (config.onExport) {
+      config.onExport("csv");
+    } else {
+      doExport("csv");
+    }
+  };
+
+  const handleExportMenu = (format: "csv" | "xlsx" | "pdf") => {
+    if (config.onExport) {
+      config.onExport(format);
+    } else {
+      doExport(format);
+    }
+  };
+
   const grouped = useMemo(() => {
     if (!config.kanban) return {} as Record<string, EntityRow[]>;
     const g: Record<string, EntityRow[]> = {};
     config.kanban.stages.forEach((s) => (g[s] = []));
-    items.forEach((r) => {
+    filteredItems.forEach((r) => {
       const s = String(r[config.kanban!.statusKey] || config.kanban!.stages[0]);
       if (!g[s]) g[s] = [];
       g[s].push(r);
     });
     return g;
-  }, [items, config]);
+  }, [filteredItems, config]);
 
   return (
     <>
       <SectionCard title={title || `${config.entityPlural} ${view === "list" ? "List" : "Board"}`}>
-        <TableToolbar
-          entity={config.entityPlural}
-          onNew={openCreate}
-          onImport={action(`${config.entityPlural} imported`)}
-          onExport={action(`${config.entityPlural} exported`)}
-          view={view}
-          onView={config.kanban ? setView : undefined}
-        />
+          <TableToolbar
+            entity={config.entityPlural}
+            onNew={openCreate}
+            onImport={config.onImport || doImport}
+            onExport={handleExportClick}
+            onExportMenu={config.onExport ? handleExportMenu : undefined}
+            search={search}
+            onSearch={config.onSearch || ((v: string) => setSearch(v))}
+            view={view}
+            onView={config.kanban ? setView : undefined}
+            hideFilter={config.hideFilter === true}
+            hideColumns={config.hideColumns === true}
+          />
 
         {view === "list" ? (
           <div className="overflow-auto">
@@ -98,7 +228,7 @@ export function DataSection({ config, title }: { config: Omit<EntityConfig, "kpi
                 </tr>
               </thead>
               <tbody>
-                {items.map((r, idx) => (
+                {filteredItems.map((r, idx) => (
                   <tr key={idx} onClick={() => setSelected(r)} className="border-t border-border/50 hover:bg-accent/30 cursor-pointer">
                     {config.columns.map((c, ci) => (
                       <td key={c.key} className={"py-2 pr-3 " + (ci === 0 ? "font-medium" : "text-muted-foreground")}>

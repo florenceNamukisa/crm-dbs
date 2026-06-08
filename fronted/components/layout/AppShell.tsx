@@ -1,6 +1,6 @@
 ﻿import { Link, useRouterState } from "@tanstack/react-router";
 import {
-  LayoutDashboard, Users, Briefcase, Building2, Contact2,
+  LayoutDashboard, Users, Briefcase, Building2,
   CheckSquare, Calendar, Repeat,
   StickyNote, Bot,
   Search, Plus, Calendar as CalIcon,
@@ -23,7 +23,6 @@ const NAV: NavGroup[] = [
     { label: "Leads", to: "/leads", icon: Users },
     { label: "Sales", to: "/sales", icon: Briefcase },
     { label: "Clients", to: "/clients", icon: Building2 },
-    { label: "Contacts", to: "/contacts", icon: Contact2 },
   ]},
   { title: "Activities", items: [
     { label: "Tasks", to: "/tasks", icon: CheckSquare },

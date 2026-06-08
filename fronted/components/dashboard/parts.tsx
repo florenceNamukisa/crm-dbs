@@ -1,4 +1,5 @@
-import { ArrowUp, ArrowDown, Filter, Columns3, Plus, Download, Upload, ChevronLeft, ChevronRight, Search, MoreHorizontal, LayoutGrid, List } from "lucide-react";
+import { useState } from "react";
+import { ArrowUp, ArrowDown, Filter, Columns3, Plus, Download, Upload, ChevronLeft, ChevronRight, Search, MoreHorizontal, LayoutGrid, List, Phone, Mail, MessageSquare, Edit, Calendar, CheckSquare, Forward } from "lucide-react";
 import { toast } from "sonner";
 import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
@@ -45,18 +46,56 @@ export function SectionCard({ title, right, children, className = "" }: { title:
   );
 }
 
-export function TableToolbar({ entity, onNew, onImport, onExport, selectLabel = "All", view, onView }: { entity: string; onNew: () => void; onImport: () => void; onExport: () => void; selectLabel?: string; view?: "list" | "kanban"; onView?: (v: "list" | "kanban") => void }) {
+export function TableToolbar({
+  entity,
+  onNew,
+  onImport,
+  onExport,
+  onExportMenu,
+  search,
+  onSearch,
+  view,
+  onView,
+  hideFilter = false,
+  hideColumns = false,
+}: {
+  entity: string;
+  onNew: () => void;
+  onImport: () => void;
+  onExport: () => void;
+  onExportMenu?: (format: "csv" | "xlsx" | "pdf") => void;
+  search?: string;
+  onSearch?: (v: string) => void;
+  view?: "list" | "kanban";
+  onView?: (v: "list" | "kanban") => void;
+  hideFilter?: boolean;
+  hideColumns?: boolean;
+}) {
+  const [showExportMenu, setShowExportMenu] = useState(false);
+
   return (
-    <div className="flex items-center gap-2 mb-3">
-      <select className="bg-card border border-border rounded-md px-2 py-1.5 text-xs">
-        <option>{selectLabel} {entity}</option>
-      </select>
-      <button onClick={action("Filter applied")} className="flex items-center gap-1 px-2.5 py-1.5 text-xs border border-border rounded-md hover:bg-accent">
-        <Filter className="h-3.5 w-3.5" /> Filter
-      </button>
-      <button onClick={action("Columns updated")} className="flex items-center gap-1 px-2.5 py-1.5 text-xs border border-border rounded-md hover:bg-accent">
-        <Columns3 className="h-3.5 w-3.5" /> Columns
-      </button>
+    <div className="flex flex-wrap items-center gap-2 mb-3">
+      {search !== undefined && onSearch && (
+        <div className="relative flex-1 min-w-[200px] max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <input
+            value={search}
+            onChange={(e) => onSearch(e.target.value)}
+            placeholder={`Search ${entity}...`}
+            className="w-full h-9 pl-9 pr-3 rounded-md bg-card border border-border text-sm outline-none focus:ring-2 focus:ring-primary/40"
+          />
+        </div>
+      )}
+      {!hideFilter && (
+        <button onClick={action("Filter applied")} className="flex items-center gap-1 px-2.5 py-1.5 text-xs border border-border rounded-md hover:bg-accent">
+          <Filter className="h-3.5 w-3.5" /> Filter
+        </button>
+      )}
+      {!hideColumns && (
+        <button onClick={action("Columns updated")} className="flex items-center gap-1 px-2.5 py-1.5 text-xs border border-border rounded-md hover:bg-accent">
+          <Columns3 className="h-3.5 w-3.5" /> Columns
+        </button>
+      )}
       {onView && (
         <div className="flex items-center border border-border rounded-md overflow-hidden">
           <button onClick={() => onView("list")} className={"px-2 py-1.5 text-xs flex items-center gap-1 " + (view === "list" ? "gradient-orange text-white" : "hover:bg-accent")}>
@@ -71,9 +110,39 @@ export function TableToolbar({ entity, onNew, onImport, onExport, selectLabel = 
         <button onClick={onImport} className="flex items-center gap-1 px-2.5 py-1.5 text-xs border border-border rounded-md hover:bg-accent">
           <Upload className="h-3.5 w-3.5" /> Import
         </button>
-        <button onClick={onExport} className="flex items-center gap-1 px-2.5 py-1.5 text-xs border border-border rounded-md hover:bg-accent">
-          <Download className="h-3.5 w-3.5" /> Export
-        </button>
+        <div className="relative">
+          <button
+            onClick={() => setShowExportMenu(!showExportMenu)}
+            className="flex items-center gap-1 px-2.5 py-1.5 text-xs border border-border rounded-md hover:bg-accent"
+          >
+            <Download className="h-3.5 w-3.5" /> Export
+          </button>
+          {showExportMenu && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setShowExportMenu(false)} />
+              <div className="absolute right-0 top-full mt-1 bg-card border border-border rounded-lg shadow-xl z-50 min-w-[140px] py-1">
+<button
+                   onClick={() => { if (onExportMenu) { onExportMenu("csv"); } else { onExport(); } setShowExportMenu(false); }}
+                   className="w-full text-left px-4 py-2 text-xs hover:bg-accent"
+                 >
+                   Export as CSV
+                 </button>
+                 <button
+                   onClick={() => { if (onExportMenu) { onExportMenu("xlsx"); } else { onExport(); } setShowExportMenu(false); }}
+                   className="w-full text-left px-4 py-2 text-xs hover:bg-accent"
+                 >
+                   Export as Excel
+                 </button>
+                 <button
+                   onClick={() => { if (onExportMenu) { onExportMenu("pdf"); } else { onExport(); } setShowExportMenu(false); }}
+                  className="w-full text-left px-4 py-2 text-xs hover:bg-accent"
+                >
+                  Export as PDF
+                </button>
+              </div>
+            </>
+          )}
+        </div>
         <button onClick={onNew} className="flex items-center gap-1.5 px-3 py-1.5 text-xs gradient-orange text-white rounded-md font-medium shadow">
           <Plus className="h-3.5 w-3.5" /> New {entity.replace(/s$/, "")}
         </button>
@@ -99,20 +168,59 @@ export function Pagination({ total, perPage = 5, totalPages }: { total: number; 
   );
 }
 
-export function SearchBar({ placeholder }: { placeholder: string }) {
+export function SearchBar({ placeholder, value, onChange }: { placeholder: string; value?: string; onChange?: (v: string) => void }) {
   return (
     <div className="relative w-full max-w-md">
       <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-      <input placeholder={placeholder} className="w-full h-9 pl-9 pr-3 rounded-md bg-card border border-border text-sm outline-none focus:ring-2 focus:ring-primary/40" />
+      <input
+        value={value || ""}
+        onChange={(e) => onChange?.(e.target.value)}
+        placeholder={placeholder}
+        className="w-full h-9 pl-9 pr-3 rounded-md bg-card border border-border text-sm outline-none focus:ring-2 focus:ring-primary/40"
+      />
     </div>
   );
 }
 
-export function RowActions() {
+export function RowActions({ onAction }: { onAction?: (action: string) => void }) {
+  const actions = [
+    { key: "change_status", label: "Status", icon: Edit, color: "text-orange-400" },
+    { key: "call", label: "Call", icon: Phone, color: "text-green-400" },
+    { key: "email", label: "Email", icon: Mail, color: "text-blue-400" },
+    { key: "whatsapp", label: "WhatsApp", icon: MessageSquare, color: "text-emerald-400" },
+    { key: "notes", label: "Notes", icon: Edit, color: "text-yellow-400" },
+    { key: "task", label: "Task", icon: CheckSquare, color: "text-purple-400" },
+    { key: "event", label: "Event", icon: Calendar, color: "text-red-400" },
+    { key: "forward", label: "Forward", icon: Forward, color: "text-cyan-400" },
+  ];
+  const [open, setOpen] = useState(false);
   return (
-    <button onClick={action("Row menu")} className="h-7 w-7 grid place-items-center rounded hover:bg-accent">
-      <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
-    </button>
+    <div className="relative">
+      <button onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
+        className="h-7 w-7 grid place-items-center rounded hover:bg-accent">
+        <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setOpen(false); }} />
+          <div className="absolute right-0 top-full mt-1 z-50 bg-card border border-border rounded-lg shadow-xl p-1.5 flex gap-1 flex-nowrap" onClick={(e) => e.stopPropagation()}>
+            {actions.map((a) => {
+              const Icon = a.icon;
+              return (
+                <button
+                  key={a.key}
+                  onClick={(e) => { e.stopPropagation(); onAction?.(a.key); setOpen(false); }}
+                  className={`h-8 w-8 rounded-md grid place-items-center hover:bg-accent ${a.color}`}
+                  title={a.label}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -130,6 +238,16 @@ export function StatusPill({ value }: { value: string }) {
     Proposal: "bg-orange-500/15 text-orange-400 border-orange-500/30",
     Negotiation: "bg-amber-500/15 text-amber-400 border-amber-500/30",
     Contracted: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
+    "In Progress": "bg-blue-500/15 text-blue-400 border-blue-500/30",
+    Completed: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
+    "New Task": "bg-purple-500/15 text-purple-400 border-purple-500/30",
+    "Almost Due": "bg-amber-500/15 text-amber-400 border-amber-500/30",
+    Due: "bg-red-500/15 text-red-400 border-red-500/30",
+    pending: "bg-zinc-500/15 text-zinc-400 border-zinc-500/30",
+    in_progress: "bg-blue-500/15 text-blue-400 border-blue-500/30",
+    completed: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
+    waiting: "bg-purple-500/15 text-purple-400 border-purple-500/30",
+    deferred: "bg-zinc-500/15 text-zinc-400 border-zinc-500/30",
   };
   return <span className={"text-[10px] px-2 py-0.5 rounded border " + (map[value] || "border-border text-muted-foreground")}>{value}</span>;
 }

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Briefcase, GripVertical, Star, Plus } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useUpdateDeal } from "@/lib/api/deals";
@@ -36,18 +36,18 @@ function EmptyState({ icon: Icon, label, hint }: { icon: LucideIcon; label: stri
 }
 
 export function KanbanBoard({
-  rows, type, onCreate,
-}: { rows: Row[]; type: 'leads' | 'deals'; onCreate?: (stage: string) => void }) {
+  rows, type, onCreate, statusKey,
+}: { rows: Row[]; type: 'leads' | 'deals'; onCreate?: (stage: string) => void; statusKey?: string }) {
   const stages = type === 'leads' ? LEAD_STAGES : DEAL_STAGES;
-  const stageKey = type === 'leads' ? 'status' : 'stage';
+  const effectiveStatusKey = statusKey || (type === 'leads' ? 'leadStatus' : 'stage');
   const updateDeal = useUpdateDeal();
   const updateClient = useUpdateClient();
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [hoverStage, setHoverStage] = useState<string | null>(null);
+  const dragCounter = useRef<Record<string, number>>({});
 
   function handleDragStart(e: React.DragEvent, id: string) {
     setDraggingId(id);
-    e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', id);
   }
 
@@ -57,26 +57,37 @@ export function KanbanBoard({
     if (hoverStage !== stage) setHoverStage(stage);
   }
 
-  function handleDragLeave() {
-    setHoverStage(null);
+  function handleDragEnter(e: React.DragEvent, stage: string) {
+    e.preventDefault();
+    dragCounter.current[stage] = (dragCounter.current[stage] || 0) + 1;
+    if (hoverStage !== stage) setHoverStage(stage);
+  }
+
+  function handleDragLeave(e: React.DragEvent, stage: string) {
+    dragCounter.current[stage] = (dragCounter.current[stage] || 0) - 1;
+    if ((dragCounter.current[stage] || 0) <= 0) {
+      dragCounter.current[stage] = 0;
+      if (hoverStage === stage) setHoverStage(null);
+    }
   }
 
   async function handleDrop(e: React.DragEvent, targetStage: string) {
     e.preventDefault();
+    dragCounter.current[targetStage] = 0;
     setHoverStage(null);
     const id = e.dataTransfer.getData('text/plain') || draggingId;
     if (!id) return;
     setDraggingId(null);
 
     const current = rows.find((r) => r._id === id);
-    const currentStage = (current?.[stageKey] || '').toString();
+    const currentStage = (current?.[effectiveStatusKey] || '').toString();
     if (currentStage.toLowerCase() === targetStage.toLowerCase()) return;
 
     try {
       if (type === 'deals') {
         await updateDeal.mutateAsync({ id, data: { stage: targetStage } });
       } else {
-        await updateClient.mutateAsync({ id, data: { status: targetStage } });
+        await updateClient.mutateAsync({ id, data: { [effectiveStatusKey]: targetStage } });
       }
       toast.success(`Moved to ${targetStage}`, { description: current?.firstName ? `${current.firstName} ${current.lastName || ''}`.trim() : current?.name || current?.title || '—' });
     } catch (err: any) {
@@ -87,6 +98,7 @@ export function KanbanBoard({
   function handleDragEnd() {
     setDraggingId(null);
     setHoverStage(null);
+    Object.keys(dragCounter.current).forEach((k) => (dragCounter.current[k] = 0));
   }
 
   const Icon = type === 'leads' ? Star : Briefcase;
@@ -100,21 +112,19 @@ export function KanbanBoard({
       ) : (
         <div className="grid gap-3 lg:grid-cols-4">
           {stages.map((stage) => {
-            const items = rows.filter((r) => (r[stageKey] || '').toString().toLowerCase() === stage.toLowerCase());
-            const isHover = hoverStage === stage;
+            const items = rows.filter((r) => (r[effectiveStatusKey] || '').toString().toLowerCase() === stage.toLowerCase());
             return (
               <div
                 key={stage}
                 onDragOver={(e) => handleDragOver(e, stage)}
-                onDragLeave={handleDragLeave}
+                onDragEnter={(e) => handleDragEnter(e, stage)}
+                onDragLeave={(e) => handleDragLeave(e, stage)}
                 onDrop={(e) => handleDrop(e, stage)}
-                className={`rounded-lg border p-3 transition-colors min-h-[200px] ${
-                  isHover ? 'border-orange-500 bg-orange-500/5' : 'border-border bg-card/30'
-                }`}
+                className={`rounded-lg border p-3 transition-colors min-h-[200px] ${hoverStage === stage ? 'border-orange-500 bg-orange-500/5' : 'border-border bg-card/30'}`}
               >
                 <div className="mb-3 flex items-center justify-between text-sm font-semibold">
                   <span className="flex items-center gap-2">
-                    <span className={`h-2 w-2 rounded-full ${isHover ? 'bg-orange-500' : 'bg-muted-foreground'}`} />
+                    <span className={`h-2 w-2 rounded-full ${hoverStage === stage ? 'bg-orange-500' : 'bg-muted-foreground'}`} />
                     {stage}
                   </span>
                   <span className="flex items-center gap-2">
@@ -143,7 +153,7 @@ export function KanbanBoard({
                       onDragStart={(e) => handleDragStart(e, r._id)}
                       onDragEnd={handleDragEnd}
                       className={`group cursor-grab rounded border bg-background/40 p-3 text-sm transition-all hover:border-orange-500/40 hover:shadow-md active:cursor-grabbing ${
-                        draggingId === r._id ? 'opacity-40' : 'border-border'
+                        draggingId === r._id ? 'border-orange-500/40 shadow-md' : 'border-border'
                       }`}
                     >
                       <div className="flex items-start justify-between gap-2">

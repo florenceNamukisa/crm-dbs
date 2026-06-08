@@ -36,8 +36,9 @@ export function CreateTaskForm({ onClose, onSuccess }: CreateTaskFormProps) {
         }),
       });
       taskForm.reset();
-      queryClient.invalidateQueries({ queryKey: ["clients"] as unknown as readonly unknown[] });
-      queryClient.invalidateQueries({ queryKey: ["sales-dashboard"] as unknown as readonly unknown[] });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+      queryClient.invalidateQueries({ queryKey: ["sales-dashboard"] });
       onSuccess?.();
       onClose();
     } catch (err: any) {

@@ -34,8 +34,8 @@ export function CreateContactForm({ onClose, onSuccess }: CreateContactFormProps
         }),
       });
       contactForm.reset();
-      queryClient.invalidateQueries({ queryKey: ["clients"] as unknown as readonly unknown[] });
-      queryClient.invalidateQueries({ queryKey: ["sales-dashboard"] as unknown as readonly unknown[] });
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+      queryClient.invalidateQueries({ queryKey: ["sales-dashboard"] });
       onSuccess?.();
       onClose();
     } catch (err: any) {

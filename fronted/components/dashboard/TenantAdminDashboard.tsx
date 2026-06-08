@@ -1,23 +1,29 @@
 import { useState, useMemo } from "react";
-import {
-  Activity, Briefcase, Building2, Calendar, CircleDollarSign, Clock,
-  FileBarChart, Gauge, LogOut, Menu, Plus, Search,
-  Star, Users,
-} from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import type { LucideIcon } from "lucide-react";
 import {
-  Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart,
+  Area, AreaChart, CartesianGrid, Cell, Pie, PieChart,
   ResponsiveContainer, Tooltip, XAxis, YAxis, Line, LineChart, Legend,
 } from "recharts";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { useClients } from "@/lib/api/clients";
 import { useDeals } from "@/lib/api/deals";
 import { useUsers, useCreateUser } from "@/lib/api/users";
 import { useSchedules } from "@/lib/api/schedules";
+import { useMeetings } from "@/lib/api/meetings";
+import { useTasks } from "@/lib/api/tasks";
 import { KanbanBoard } from "@/components/dashboard/KanbanBoard";
 import { clearSession, getStoredUser } from "@/lib/auth";
+import type { User, Client, Deal } from "@/lib/types";
+import {
+  Gauge, Users, Star, Building2, Briefcase, Clock, FileBarChart, CalendarDays,
+  Menu, LogOut, Plus, Search, MoreHorizontal, Activity, CircleDollarSign,
+} from "lucide-react";
 
 const ORANGE = "#ff8c00";
 const ORANGE_DEEP = "#ff6a00";
@@ -55,7 +61,7 @@ const navSections = [
     { label: "Sales Pipeline", icon: Briefcase },
   ] },
   { title: "Activities", items: [
-    { label: "Calendar", icon: Calendar },
+    { label: "Calendar", icon: CalendarDays },
     { label: "Tasks", icon: Clock },
   ] },
   { title: "Reports", items: [
@@ -166,15 +172,15 @@ function AddUserModal({ open, onClose }: { open: boolean; onClose: () => void })
     else if (isSales) backendRole = 'sales_agent';
 
 try {
-       const result: any = await createUser.mutateAsync({
-         name: form.name,
-         email: form.email,
-         phone: form.phone,
-         role: backendRole,
-         employeeId: form.employeeId,
-         department: form.department,
-         region: form.region,
-       });
+        const result = await createUser.mutateAsync({
+          name: form.name,
+          email: form.email,
+          phone: form.phone,
+          role: backendRole,
+          employeeId: form.employeeId,
+          department: form.department,
+          region: form.region,
+        });
       if (result?.emailSent) {
         toast.success('User created & OTP email sent', { description: `${form.name} will receive an email with login instructions.` });
       } else {
@@ -182,8 +188,9 @@ try {
       }
       setForm({ name: '', employeeId: '', email: '', phone: '', location: '', department: 'Sales', region: REGIONS[0], role: 'Sales Agent' });
       onClose();
-    } catch (err: any) {
-      toast.error('Failed to create user', { description: err.message });
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      toast.error('Failed to create user', { description: errorMessage });
     }
   }
 
@@ -256,18 +263,18 @@ try {
 }
 
 // ─── User Detail Modal ──────────────────────────────────────
-function UserDetailModal({ user: u, clients, deals, open, onClose }: { user: any; clients: any[]; deals: any[]; open: boolean; onClose: () => void }) {
+function UserDetailModal({ user: u, clients, deals, open, onClose }: { user: User; clients: Client[]; deals: Deal[]; open: boolean; onClose: () => void }) {
   if (!u) return null;
-  const userClients = clients.filter((c: any) => {
+  const userClients = clients.filter((c: Client) => {
     const agentId = c.agent?._id || c.agent;
     return String(agentId) === String(u._id);
   });
-  const userDeals = deals.filter((d: any) => {
+  const userDeals = deals.filter((d: Deal) => {
     const agentId = d.agent?._id || d.agent || d.assignedTo?._id || d.assignedTo;
     return String(agentId) === String(u._id);
   });
-  const wonDeals = userDeals.filter((d: any) => (d.stage || '').toLowerCase() === 'won');
-  const totalRevenue = userDeals.reduce((s: number, d: any) => s + Number(d.value || d.amount || 0), 0);
+  const wonDeals = userDeals.filter((d: Deal) => (d.stage || '').toLowerCase() === 'won');
+  const totalRevenue = userDeals.reduce((s: number, d: Deal) => s + Number(d.value || d.amount || 0), 0);
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -336,7 +343,7 @@ function UserDetailModal({ user: u, clients, deals, open, onClose }: { user: any
                     </tr>
                   </thead>
                   <tbody>
-                    {userClients.map((c: any) => (
+                    {userClients.map((c: Client) => (
                       <tr key={c._id} className="border-t border-border/30">
                         <td className="py-1.5 pr-2 font-medium">{c.name || '—'}</td>
                         <td className="pr-2 text-muted-foreground">{c.company || '—'}</td>
@@ -363,7 +370,7 @@ function UserDetailModal({ user: u, clients, deals, open, onClose }: { user: any
                     </tr>
                   </thead>
                   <tbody>
-                    {userDeals.map((d: any) => (
+                    {userDeals.map((d: Deal) => (
                       <tr key={d._id} className="border-t border-border/30">
                         <td className="py-1.5 pr-2 font-medium">{d.name || d.title || '—'}</td>
                         <td className="pr-2 text-muted-foreground">UGX {Number(d.value || d.amount || 0).toLocaleString()}</td>
@@ -383,24 +390,23 @@ function UserDetailModal({ user: u, clients, deals, open, onClose }: { user: any
 }
 
 // ─── Dashboard View ──────────────────────────────────────
-function DashboardView({ users, clients, deals, schedules, onSelectUser }: { users: any[]; clients: any[]; deals: any[]; schedules: any[]; onSelectUser?: (user: any) => void }) {
+function DashboardView({ users, clients, deals, onSelectUser }: { users: User[]; clients: Client[]; deals: Deal[]; onSelectUser?: (user: User) => void }) {
   const monthlySales = useMemo(() => {
     const now = new Date();
     return deals
-      .filter((d: any) => {
+      .filter((d: Deal) => {
         const dt = d.createdAt ? new Date(d.createdAt) : null;
         return dt && dt.getMonth() === now.getMonth() && dt.getFullYear() === now.getFullYear();
       })
-      .reduce((sum: number, d: any) => sum + Number(d.value || d.amount || 0), 0);
+      .reduce((sum: number, d: Deal) => sum + Number(d.value || d.amount || 0), 0);
   }, [deals]);
 
   const totalUsers = users.length;
-  const activeUsers = users.filter((u: any) => u.isActive).length;
-  const totalLeads = clients.filter((c: any) => c.leadStatus && c.leadStatus !== 'Converted').length;
-  const totalDeals = deals.length;
-  const wonDeals = deals.filter((d: any) => (d.stage || '').toLowerCase() === 'won');
-  const pipelineValue = deals.reduce((s: number, d: any) => s + Number(d.value || d.amount || 0), 0);
-  const wonValue = wonDeals.reduce((s: number, d: any) => s + Number(d.value || d.amount || 0), 0);
+  const activeUsers = users.filter((u: User) => u.isActive).length;
+  const totalLeads = clients.filter((c: Client) => c.leadStatus && c.leadStatus !== 'Converted').length;
+  const wonDeals = deals.filter((d: Deal) => (d.stage || '').toLowerCase() === 'won');
+  const pipelineValue = deals.reduce((s: number, d: Deal) => s + Number(d.value || d.amount || 0), 0);
+  const wonValue = wonDeals.reduce((s: number, d: Deal) => s + Number(d.value || d.amount || 0), 0);
 
   // ── Chart data: Revenue trend (last 7 days) ──
   const revenueData = useMemo(() => {
@@ -424,7 +430,7 @@ function DashboardView({ users, clients, deals, schedules, onSelectUser }: { use
   }, [deals]);
 
   // ── Chart data: Pipeline by stage ──
-  const stageData = useMemo(() => {
+  const _stageData = useMemo(() => {
     const stages = ['new', 'contacted', 'qualified', 'proposal', 'negotiation', 'won', 'lost'];
     return stages.map((s) => ({
       name: s.charAt(0).toUpperCase() + s.slice(1),
@@ -451,12 +457,12 @@ function DashboardView({ users, clients, deals, schedules, onSelectUser }: { use
       const dayLabel = d.toLocaleDateString('en-US', { month: 'short', day: '2-digit' });
       const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate());
       const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
-      const createdDeals = deals.filter((dl: any) => {
+      const createdDeals = deals.filter((dl: Deal) => {
         if (!dl.createdAt) return false;
         const t = new Date(dl.createdAt).getTime();
         return t >= dayStart.getTime() && t < dayEnd.getTime();
       });
-      const createdUsers = users.filter((u: any) => {
+      const createdUsers = users.filter((u: User) => {
         if (!u.createdAt) return false;
         const t = new Date(u.createdAt).getTime();
         return t >= dayStart.getTime() && t < dayEnd.getTime();
@@ -475,6 +481,51 @@ function DashboardView({ users, clients, deals, schedules, onSelectUser }: { use
          <Kpi icon={Star} label="Leads" value={String(totalLeads)} sub={`${totalLeads} total`} up={totalLeads > 0} />
          <Kpi icon={Briefcase} label="Pipeline Value" value={`UGX ${pipelineValue.toLocaleString()}`} sub={`UGX ${wonValue.toLocaleString()} won`} up={pipelineValue > 0} />
        </div>
+
+{/* Users Table */}
+        <Panel title={`Team Members (${users.length})`}>
+          {users.length === 0 ? (
+            <EmptyState icon={Users} label="No users yet" hint="Add your first team member from User Management." />
+          ) : (
+            <div className="overflow-auto">
+              <table className="w-full min-w-[700px] text-sm">
+                <thead className="text-xs text-muted-foreground">
+                  <tr className="text-left">
+                    {['Name', 'Email', 'Role', 'Department', 'Status', 'Joined'].map((h) => (
+                      <th key={h} className="pb-2 pr-3 font-normal">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.slice(0, 10).map((u: User) => {
+                    return (
+                      <tr key={u._id} onClick={() => onSelectUser && onSelectUser(u)} className="border-t border-border/50 hover:bg-accent/50 cursor-pointer transition">
+                        <td className="py-2.5 pr-3">
+                          <div className="flex items-center gap-2">
+                            <div className="h-8 w-8 rounded-full bg-gradient-to-br from-orange-400 to-orange-700 grid place-items-center text-white text-[10px] font-semibold shrink-0">
+                              {(u.name || 'U').split(' ').map((p: string) => p[0]).slice(0, 2).join('').toUpperCase()}
+                            </div>
+                            <span className="font-medium">{u.name || '—'}</span>
+                          </div>
+                        </td>
+                        <td className="pr-3 text-muted-foreground">{u.email}</td>
+                        <td className="pr-3 capitalize">{u.role}</td>
+                       <td className="pr-3 text-muted-foreground">{u.department || '—'}</td>
+                       <td className="pr-3">
+                         <span className={`rounded border px-2 py-0.5 text-[10px] ${u.isActive ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-zinc-500/30 bg-zinc-500/10 text-zinc-300'}`}>
+                           {u.isActive ? 'Active' : 'Inactive'}
+                         </span>
+                       </td>
+                       <td className="pr-3 text-muted-foreground text-xs">{u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '—'}</td>
+                     </tr>
+                   );
+                 })}
+               </tbody>
+             </table>
+           </div>
+         )}
+         {users.length > 10 && <div className="text-xs text-muted-foreground mt-2">Showing 10 of {users.length} users. Click "User Management" to see all.</div>}
+       </Panel>
 
        {/* Charts row 1 */}
        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -532,115 +583,26 @@ function DashboardView({ users, clients, deals, schedules, onSelectUser }: { use
          </Panel>
        </div>
 
-       {/* Charts row 2 */}
-       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-         <Panel title="Pipeline by Stage">
-           <div className="h-64">
-             {stageData.every((s) => s.value === 0) ? (
-               <EmptyState icon={Briefcase} label="No pipeline data" hint="Deals will populate the chart here." />
-             ) : (
-               <ResponsiveContainer>
-                 <BarChart data={stageData}>
-                   <CartesianGrid stroke="#ffffff12" />
-                   <XAxis dataKey="name" stroke="#888" fontSize={9} angle={-30} textAnchor="end" height={50} />
-                   <YAxis stroke="#888" fontSize={10} />
-                   <Tooltip contentStyle={{ background: '#111', border: '1px solid #ffffff22', borderRadius: 8 }} />
-                   <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                     {stageData.map((_, i) => (
-                       <Cell key={i} fill={[ORANGE, '#3b82f6', '#a855f7', '#22c55e', '#f59e0b', '#06b6d4', '#ef4444'][i % 7]} />
-                     ))}
-                   </Bar>
-                 </BarChart>
-               </ResponsiveContainer>
-             )}
-           </div>
-         </Panel>
-
-         <Panel title="Activity (7 days)" className="lg:col-span-2">
-           <div className="h-64">
-             {userActivityData.every((d) => d.users === 0 && d.deals === 0) ? (
-               <EmptyState icon={Activity} label="No activity yet" hint="Activity will appear as your team works." />
-             ) : (
-               <ResponsiveContainer>
-                 <LineChart data={userActivityData}>
-                   <CartesianGrid stroke="#ffffff12" />
-                   <XAxis dataKey="d" stroke="#888" fontSize={10} />
-                   <YAxis stroke="#888" fontSize={10} />
-                   <Tooltip contentStyle={{ background: '#111', border: '1px solid #ffffff22', borderRadius: 8 }} />
-                   <Legend />
-                   <Line type="monotone" dataKey="deals" stroke={ORANGE} strokeWidth={2} name="Deals" dot={{ r: 3 }} />
-                   <Line type="monotone" dataKey="users" stroke={GREEN} strokeWidth={2} name="Users" dot={{ r: 3 }} />
-                 </LineChart>
-               </ResponsiveContainer>
-             )}
-           </div>
-         </Panel>
-       </div>
-
-       {/* Users Table */}
-       <Panel title={`Team Members (${users.length})`} action={`${users.filter((u: any) => u.isActive).length} active`}>
-         {users.length === 0 ? (
-           <EmptyState icon={Users} label="No users yet" hint="Add your first team member from User Management." />
-         ) : (
-           <div className="overflow-auto">
-             <table className="w-full min-w-[700px] text-sm">
-               <thead className="text-xs text-muted-foreground">
-                 <tr className="text-left">
-                   {['Name', 'Email', 'Role', 'Department', 'Status', 'Joined'].map((h) => (
-                     <th key={h} className="pb-2 pr-3 font-normal">{h}</th>
-                   ))}
-                 </tr>
-               </thead>
-<tbody>
-                {users.slice(0, 10).map((u: any) => {
-                  return (
-                     <tr key={u._id} onClick={() => onSelectUser && onSelectUser(u)} className="border-t border-border/50 hover:bg-accent/50 cursor-pointer transition">
-                       <td className="py-2.5 pr-3">
-                         <div className="flex items-center gap-2">
-                           <div className="h-8 w-8 rounded-full bg-gradient-to-br from-orange-400 to-orange-700 grid place-items-center text-white text-[10px] font-semibold shrink-0">
-                             {(u.name || 'U').split(' ').map((p: string) => p[0]).slice(0, 2).join('').toUpperCase()}
-                           </div>
-                           <span className="font-medium">{u.name || '—'}</span>
-                         </div>
-                       </td>
-                       <td className="pr-3 text-muted-foreground">{u.email}</td>
-                       <td className="pr-3 capitalize">{u.role}</td>
-                       <td className="pr-3 text-muted-foreground">{u.department || '—'}</td>
-                       <td className="pr-3">
-                         <span className={`rounded border px-2 py-0.5 text-[10px] ${u.isActive ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-zinc-500/30 bg-zinc-500/10 text-zinc-300'}`}>
-                           {u.isActive ? 'Active' : 'Inactive'}
-                         </span>
-                       </td>
-                       <td className="pr-3 text-muted-foreground text-xs">{u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '—'}</td>
-                     </tr>
-                   );
-                 })}
-               </tbody>
-             </table>
-           </div>
-         )}
-         {users.length > 10 && <div className="text-xs text-muted-foreground mt-2">Showing 10 of {users.length} users. Click "User Management" to see all.</div>}
+       {/* Activity (7 days) */}
+       <Panel title="Activity (7 days)">
+         <div className="h-64">
+           {userActivityData.every((d) => d.users === 0 && d.deals === 0) ? (
+             <EmptyState icon={Activity} label="No activity yet" hint="Activity will appear as your team works." />
+           ) : (
+             <ResponsiveContainer>
+               <LineChart data={userActivityData}>
+                 <CartesianGrid stroke="#ffffff12" />
+                 <XAxis dataKey="d" stroke="#888" fontSize={10} />
+                 <YAxis stroke="#888" fontSize={10} />
+                 <Tooltip contentStyle={{ background: '#111', border: '1px solid #ffffff22', borderRadius: 8 }} />
+                 <Legend />
+                 <Line type="monotone" dataKey="deals" stroke={ORANGE} strokeWidth={2} name="Deals" dot={{ r: 3 }} />
+                 <Line type="monotone" dataKey="users" stroke={GREEN} strokeWidth={2} name="Users" dot={{ r: 3 }} />
+               </LineChart>
+             </ResponsiveContainer>
+           )}
+         </div>
        </Panel>
-
-       {/* Summary stats row */}
-       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-         {[
-           { label: "Total Deals", value: String(totalDeals), icon: Briefcase },
-           { label: "Won Deals", value: String(wonDeals.length), icon: Star },
-           { label: "Active Users", value: String(activeUsers), icon: Users },
-           { label: "Schedules", value: String(schedules.length), icon: Calendar },
-         ].map((s) => (
-           <div key={s.label} className="glass-card rounded-lg p-3 flex items-center gap-3">
-             <span className="grid h-10 w-10 place-items-center rounded-full bg-orange-500/10">
-               <s.icon className="h-5 w-5 text-orange-400" />
-             </span>
-             <div>
-               <div className="text-xs text-muted-foreground">{s.label}</div>
-               <div className="text-lg font-bold">{s.value}</div>
-             </div>
-           </div>
-))}
-        </div>
       </div>
     );
   }
@@ -678,10 +640,8 @@ function UserManagementView({ users, onSelectUser }: { users: any[]; onSelectUse
           className="h-9 px-3 rounded-lg bg-background border border-border text-sm outline-none"
         >
           <option value="all">All Roles</option>
-          <option value="admin">Admin</option>
           <option value="agent">Agent</option>
           <option value="manager">Manager</option>
-          <option value="superadmin">Super Admin</option>
         </select>
       </div>
 
@@ -726,21 +686,29 @@ function UserManagementView({ users, onSelectUser }: { users: any[]; onSelectUse
 }
 
 // ─── Leads View (Table + Kanban) ──────────────────────────────
-function LeadsView({ clients }: { clients: any[] }) {
+function LeadsView({ clients, users }: { clients: any[]; users: any[] }) {
   const [view, setView] = useState<View>("table");
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [agentFilter, setAgentFilter] = useState('all');
+
+  const getAgentName = (agentId: any) => {
+    const id = agentId?._id || agentId;
+    const u = users.find((u: any) => String(u._id) === String(id));
+    return u?.name || '—';
+  };
 
   const leads = useMemo(() => {
     return clients.filter((c: any) => {
-      const matchesSearch = !search ||
-        (c.name || '').toLowerCase().includes(search.toLowerCase()) ||
-        (c.company || '').toLowerCase().includes(search.toLowerCase()) ||
-        (c.email || '').toLowerCase().includes(search.toLowerCase());
-      const matchesStatus = statusFilter === 'all' || c.leadStatus === statusFilter;
-      return matchesSearch && matchesStatus;
+      const q = search.toLowerCase();
+      const matchesSearch = !q ||
+        (c.name || '').toLowerCase().includes(q) ||
+        (c.company || '').toLowerCase().includes(q) ||
+        (c.email || '').toLowerCase().includes(q);
+      const matchesAgent = agentFilter === 'all' ||
+        String(c.agent?._id || c.agent) === agentFilter;
+      return matchesSearch && matchesAgent;
     });
-  }, [clients, search, statusFilter]);
+  }, [clients, search, agentFilter]);
 
   return (
     <div className="space-y-4">
@@ -750,21 +718,19 @@ function LeadsView({ clients }: { clients: any[] }) {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search leads..."
+            placeholder="Search by name, email or company..."
             className="w-full h-9 pl-9 pr-3 rounded-lg bg-background border border-border text-sm outline-none focus:ring-2 focus:ring-primary/40"
           />
         </div>
         <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
+          value={agentFilter}
+          onChange={(e) => setAgentFilter(e.target.value)}
           className="h-9 px-3 rounded-lg bg-background border border-border text-sm outline-none"
         >
-          <option value="all">All Status</option>
-          <option value="New">New</option>
-          <option value="Contacted">Contacted</option>
-          <option value="Qualified">Qualified</option>
-          <option value="Unqualified">Unqualified</option>
-          <option value="Converted">Converted</option>
+          <option value="all">All Agents</option>
+          {users.filter((u: any) => u.role === 'agent' || u.role === 'manager').map((u: any) => (
+            <option key={u._id} value={u._id}>{u.name}</option>
+          ))}
         </select>
         <div className="flex rounded-lg border border-border overflow-hidden">
           <button
@@ -788,10 +754,10 @@ function LeadsView({ clients }: { clients: any[] }) {
             <EmptyState icon={Star} label="No leads found" hint="Leads will appear here once created by agents." />
           ) : (
             <div className="overflow-auto">
-              <table className="w-full min-w-[800px] text-sm">
+              <table className="w-full min-w-[900px] text-sm">
                 <thead className="text-xs text-muted-foreground">
                   <tr className="text-left">
-                    {["Name", "Company", "Email", "Phone", "Status", "Rating", "Created"].map((h) => (
+                    {["Name", "Company", "Agent", "Email", "Phone", "Status", "Rating", "Created"].map((h) => (
                       <th key={h} className="pb-2 pr-3 font-normal">{h}</th>
                     ))}
                   </tr>
@@ -801,6 +767,7 @@ function LeadsView({ clients }: { clients: any[] }) {
                     <tr key={c._id} className="border-t border-border/50 hover:bg-accent/30">
                       <td className="py-2 pr-3 font-medium">{c.name || c.contactName || '—'}</td>
                       <td className="pr-3 text-muted-foreground">{c.company || c.companyName || '—'}</td>
+                      <td className="pr-3 text-muted-foreground">{getAgentName(c.agent)}</td>
                       <td className="pr-3 text-muted-foreground">{c.email || '—'}</td>
                       <td className="pr-3 text-muted-foreground">{c.phone || c.telephone || '—'}</td>
                       <td className="pr-3">
@@ -836,17 +803,305 @@ function LeadsView({ clients }: { clients: any[] }) {
         </div>
       ) : (
         <Panel title="Leads Pipeline" action={<span className="text-xs text-muted-foreground">Drag to update status</span>}>
-          <KanbanBoard rows={leads} type="leads" />
+          <KanbanBoard rows={leads} type="leads" statusKey="leadStatus" />
         </Panel>
       )}
     </div>
   );
 }
 
+// ─── Client Detail Modal ──────────────────────────────────────
+function ClientDetailModal({ client: cl, users, deals, schedules, open, onClose }: { client: any; users: any[]; deals: any[]; schedules: any[]; open: boolean; onClose: () => void }) {
+  if (!cl) return null;
+
+  const getUserName = (userId: any) => {
+    const id = userId?._id || userId;
+    const u = users.find((u: any) => String(u._id) === String(id));
+    return u?.name || '—';
+  };
+
+  const clientDeals = deals.filter((d: any) => {
+    const cid = d.client?._id || d.client;
+    return String(cid) === String(cl._id);
+  });
+  const wonDeals = clientDeals.filter((d: any) => (d.stage || '').toLowerCase() === 'won');
+  const totalRevenue = clientDeals.reduce((s: number, d: any) => s + Number(d.value || d.amount || 0), 0);
+
+  const clientSchedules = schedules.filter((s: any) => {
+    const cid = s.client?._id || s.client;
+    return String(cid) === String(cl._id);
+  });
+
+  const clientTasks = cl.tasks || [];
+  const clientMeetings = (meetings || []).filter((m: any) => {
+    const cid = m.client?._id || m.client;
+    return String(cid) === String(cl._id);
+  });
+  const clientInteractions = cl.interactions || [];
+  const clientContacts = cl.contacts || [];
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="text-gradient-orange">Client Details — {cl.name}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 pt-2">
+          {/* Profile Header */}
+          <div className="flex items-center gap-4 p-4 rounded-lg bg-background/50 border border-border">
+            <div className="h-14 w-14 rounded-full gradient-orange grid place-items-center text-white text-lg font-bold shrink-0">
+              {(cl.name || 'C').split(' ').map((p: string) => p[0]).slice(0, 2).join('').toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="font-bold text-lg">{cl.name}</div>
+              <div className="text-sm text-muted-foreground">{cl.email} · {cl.phone || '—'}</div>
+              <div className="flex flex-wrap gap-2 mt-1">
+                <span className={`text-[10px] px-2 py-0.5 rounded border ${
+                  (cl.status || 'prospect') === 'active' ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' :
+                  (cl.status || '') === 'vip' ? 'border-purple-500/30 bg-purple-500/10 text-purple-300' :
+                  (cl.status || '') === 'inactive' ? 'border-zinc-500/30 bg-zinc-500/10 text-zinc-300' :
+                  'border-blue-500/30 bg-blue-500/10 text-blue-300'
+                }`}>
+                  {(cl.status || 'prospect').charAt(0).toUpperCase() + (cl.status || 'prospect').slice(1)}
+                </span>
+                {cl.priority && (
+                  <span className={`text-[10px] px-2 py-0.5 rounded ${
+                    cl.priority === 'high' ? 'bg-red-500/15 text-red-400' :
+                    cl.priority === 'medium' ? 'bg-amber-500/15 text-amber-400' :
+                    'bg-blue-500/15 text-blue-400'
+                  }`}>
+                    {cl.priority.charAt(0).toUpperCase() + cl.priority.slice(1)} Priority
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Info Grid */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              { label: 'Agent', value: getUserName(cl.agent) },
+              { label: 'Company', value: cl.company || '—' },
+              { label: 'Industry', value: cl.industry || '—' },
+              { label: 'Position', value: cl.position || '—' },
+              { label: 'Address', value: [cl.city, cl.state, cl.country].filter(Boolean).join(', ') || cl.address || '—' },
+              { label: 'NIN', value: cl.nin || '—' },
+              { label: 'Engagement Score', value: cl.engagementScore != null ? `${cl.engagementScore}/100` : '—' },
+              { label: 'Created', value: cl.createdAt ? new Date(cl.createdAt).toLocaleDateString() : '—' },
+            ].map((item) => (
+              <div key={item.label} className="p-3 rounded-lg bg-background/50 border border-border">
+                <div className="text-[10px] text-muted-foreground">{item.label}</div>
+                <div className="text-sm font-medium mt-0.5">{item.value}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Tags */}
+          {cl.tags && cl.tags.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {cl.tags.map((tag: string, i: number) => (
+                <span key={i} className="text-[10px] px-2 py-0.5 rounded bg-orange-500/15 text-orange-400">{tag}</span>
+              ))}
+            </div>
+          )}
+
+          {/* Notes */}
+          {cl.notes && (
+            <Panel title="Notes">
+              <p className="text-sm text-muted-foreground whitespace-pre-wrap">{cl.notes}</p>
+            </Panel>
+          )}
+
+          {/* Performance Summary */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              { label: 'Total Deals', value: String(clientDeals.length), color: 'text-orange-400' },
+              { label: 'Won Deals', value: String(wonDeals.length), color: 'text-emerald-400' },
+              { label: 'Revenue', value: `UGX ${totalRevenue.toLocaleString()}`, color: 'text-purple-400' },
+              { label: 'Schedules', value: String(clientSchedules.length), color: 'text-blue-400' },
+            ].map((item) => (
+              <div key={item.label} className="p-3 rounded-lg bg-background/50 border border-border text-center">
+                <div className={`text-xl font-bold ${item.color}`}>{item.value}</div>
+                <div className="text-[10px] text-muted-foreground mt-1">{item.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Contact Persons */}
+          {clientContacts.length > 0 && (
+            <Panel title={`Contact Persons (${clientContacts.length})`}>
+              <div className="overflow-auto max-h-48">
+                <table className="w-full text-sm">
+                  <thead className="text-xs text-muted-foreground">
+                    <tr className="text-left">
+                      {['Name', 'Position', 'Email', 'Phone', 'Primary'].map((h) => <th key={h} className="pb-1 pr-2 font-normal">{h}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {clientContacts.map((cp: any, i: number) => (
+                      <tr key={i} className="border-t border-border/30">
+                        <td className="py-1.5 pr-2 font-medium">{cp.name || '—'}</td>
+                        <td className="pr-2 text-muted-foreground">{cp.position || '—'}</td>
+                        <td className="pr-2 text-muted-foreground">{cp.email || '—'}</td>
+                        <td className="pr-2 text-muted-foreground">{cp.phone || '—'}</td>
+                        <td className="pr-2">{cp.isPrimary ? <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-500/15 text-orange-400">Primary</span> : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Panel>
+          )}
+
+          {/* Assigned Agents */}
+          {cl.assignedAgents && cl.assignedAgents.length > 0 && (
+            <Panel title={`Assigned Agents (${cl.assignedAgents.length})`}>
+              <div className="flex flex-wrap gap-2">
+                {cl.assignedAgents.map((agId: any, i: number) => (
+                  <span key={i} className="text-sm px-3 py-1 rounded-lg bg-background/50 border border-border">{getUserName(agId)}</span>
+                ))}
+              </div>
+            </Panel>
+          )}
+
+          {/* Deals */}
+          <Panel title={`Deals (${clientDeals.length})`}>
+            {clientDeals.length === 0 ? (
+              <div className="text-sm text-muted-foreground py-4 text-center">No deals recorded</div>
+            ) : (
+              <div className="overflow-auto max-h-48">
+                <table className="w-full text-sm">
+                  <thead className="text-xs text-muted-foreground">
+                    <tr className="text-left">
+                      {['Name', 'Value', 'Agent', 'Stage', 'Created'].map((h) => <th key={h} className="pb-1 pr-2 font-normal">{h}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {clientDeals.map((d: any) => (
+                      <tr key={d._id} className="border-t border-border/30">
+                        <td className="py-1.5 pr-2 font-medium">{d.name || d.title || '—'}</td>
+                        <td className="pr-2 text-muted-foreground">UGX {Number(d.value || d.amount || 0).toLocaleString()}</td>
+                        <td className="pr-2 text-muted-foreground">{getUserName(d.agent || d.assignedTo)}</td>
+                        <td className="pr-2">
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${(d.stage || 'New') === 'Won' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-blue-500/15 text-blue-400'}`}>{d.stage || 'New'}</span>
+                        </td>
+                        <td className="pr-2 text-muted-foreground text-xs">{d.createdAt ? new Date(d.createdAt).toLocaleDateString() : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Panel>
+
+          {/* Schedules */}
+          <Panel title={`Schedules (${clientSchedules.length})`}>
+            {clientSchedules.length === 0 ? (
+              <div className="text-sm text-muted-foreground py-4 text-center">No schedules</div>
+            ) : (
+              <div className="overflow-auto max-h-48">
+                <table className="w-full text-sm">
+                  <thead className="text-xs text-muted-foreground">
+                    <tr className="text-left">
+                      {['Title', 'Date', 'Status'].map((h) => <th key={h} className="pb-1 pr-2 font-normal">{h}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {clientSchedules.map((s: any) => (
+                      <tr key={s._id} className="border-t border-border/30">
+                        <td className="py-1.5 pr-2 font-medium">{s.title || s.name || '—'}</td>
+                        <td className="pr-2 text-muted-foreground text-xs">{s.date ? new Date(s.date).toLocaleDateString() : s.scheduledTime ? new Date(s.scheduledTime).toLocaleDateString() : '—'}</td>
+                        <td className="pr-2"><span className={`text-[10px] px-1.5 py-0.5 rounded ${(s.status || 'scheduled') === 'completed' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-blue-500/15 text-blue-400'}`}>{s.status || 'Scheduled'}</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Panel>
+
+          {/* Tasks */}
+          <Panel title={`Tasks (${clientTasks.length})`}>
+            {clientTasks.length === 0 ? (
+              <div className="text-sm text-muted-foreground py-4 text-center">No tasks</div>
+            ) : (
+              <div className="overflow-auto max-h-48">
+                <table className="w-full text-sm">
+                  <thead className="text-xs text-muted-foreground">
+                    <tr className="text-left">
+                      {['Title', 'Subject', 'Due Date', 'Status', 'Assigned To'].map((h) => <th key={h} className="pb-1 pr-2 font-normal">{h}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {clientTasks.map((t: any, i: number) => (
+                      <tr key={i} className="border-t border-border/30">
+                        <td className="py-1.5 pr-2 font-medium">{t.title || '—'}</td>
+                        <td className="pr-2 text-muted-foreground">{t.subject || '—'}</td>
+                        <td className="pr-2 text-muted-foreground text-xs">{t.dueDate ? new Date(t.dueDate).toLocaleDateString() : '—'}</td>
+                        <td className="pr-2">
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${t.status === 'completed' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-amber-500/15 text-amber-400'}`}>{t.status || 'pending'}</span>
+                        </td>
+                        <td className="pr-2 text-muted-foreground">{t.assignedTo ? getUserName(t.assignedTo) : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Panel>
+
+          {/* Interactions */}
+          <Panel title={`Interactions (${clientInteractions.length})`}>
+            {clientInteractions.length === 0 ? (
+              <div className="text-sm text-muted-foreground py-4 text-center">No interactions recorded</div>
+            ) : (
+              <div className="overflow-auto max-h-48">
+                <table className="w-full text-sm">
+                  <thead className="text-xs text-muted-foreground">
+                    <tr className="text-left">
+                      {['Type', 'Date', 'Notes', 'By'].map((h) => <th key={h} className="pb-1 pr-2 font-normal">{h}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {clientInteractions.map((inter: any, i: number) => (
+                      <tr key={i} className="border-t border-border/30">
+                        <td className="py-1.5 pr-2">
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                            inter.type === 'call' ? 'bg-blue-500/15 text-blue-400' :
+                            inter.type === 'email' ? 'bg-purple-500/15 text-purple-400' :
+                            inter.type === 'meeting' ? 'bg-emerald-500/15 text-emerald-400' :
+                            'bg-zinc-500/15 text-zinc-400'
+                          }`}>{inter.type || 'other'}</span>
+                        </td>
+                        <td className="pr-2 text-muted-foreground text-xs">{inter.date ? new Date(inter.date).toLocaleDateString() : '—'}</td>
+                        <td className="pr-2 text-muted-foreground max-w-[200px] truncate">{inter.notes || '—'}</td>
+                        <td className="pr-2 text-muted-foreground">{inter.createdBy ? getUserName(inter.createdBy) : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Panel>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Clients View ──────────────────────────────────────
-function ClientsView({ clients }: { clients: any[] }) {
+function ClientsView({ clients, users, deals, schedules, meetings, tasks, onSelectClient }: { clients: any[]; users: any[]; deals: any[]; schedules: any[]; meetings: any[]; tasks: any[]; onSelectClient?: (client: any) => void }) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [agentFilter, setAgentFilter] = useState('all');
+  const [actionRow, setActionRow] = useState<string | null>(null);
+  const [selectedClient, setSelectedClient] = useState<any>(null);
+
+  const getAgentName = (agentId: any) => {
+    const id = agentId?._id || agentId;
+    const u = users.find((u: any) => String(u._id) === String(id));
+    return u?.name || '—';
+  };
 
   const filteredClients = useMemo(() => {
     return clients.filter((c: any) => {
@@ -855,9 +1110,11 @@ function ClientsView({ clients }: { clients: any[] }) {
         (c.company || '').toLowerCase().includes(search.toLowerCase()) ||
         (c.email || '').toLowerCase().includes(search.toLowerCase());
       const matchesStatus = statusFilter === 'all' || c.status === statusFilter;
-      return matchesSearch && matchesStatus;
+      const matchesAgent = agentFilter === 'all' ||
+        String(c.agent?._id || c.agent) === agentFilter;
+      return matchesSearch && matchesStatus && matchesAgent;
     });
-  }, [clients, search, statusFilter]);
+  }, [clients, search, statusFilter, agentFilter]);
 
   return (
     <div className="space-y-4">
@@ -871,6 +1128,16 @@ function ClientsView({ clients }: { clients: any[] }) {
             className="w-full h-9 pl-9 pr-3 rounded-lg bg-background border border-border text-sm outline-none focus:ring-2 focus:ring-primary/40"
           />
         </div>
+        <select
+          value={agentFilter}
+          onChange={(e) => setAgentFilter(e.target.value)}
+          className="h-9 px-3 rounded-lg bg-background border border-border text-sm outline-none"
+        >
+          <option value="all">All Agents</option>
+          {users.filter((u: any) => u.role === 'agent' || u.role === 'manager').map((u: any) => (
+            <option key={u._id} value={u._id}>{u.name}</option>
+          ))}
+        </select>
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
@@ -889,19 +1156,20 @@ function ClientsView({ clients }: { clients: any[] }) {
           <EmptyState icon={Building2} label="No clients found" hint="Clients will appear here once created by agents." />
         ) : (
           <div className="overflow-auto">
-            <table className="w-full min-w-[700px] text-sm">
+            <table className="w-full min-w-[900px] text-sm">
               <thead className="text-xs text-muted-foreground">
                 <tr className="text-left">
-                  {["Name", "Company", "Email", "Phone", "Industry", "Status", "Created"].map((h) => (
+                  {["Name", "Company", "Agent", "Email", "Phone", "Industry", "Status", "Created", "Actions"].map((h) => (
                     <th key={h} className="pb-2 pr-3 font-normal">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {filteredClients.map((c: any) => (
-                  <tr key={c._id} className="border-t border-border/50 hover:bg-accent/30">
+                  <tr key={c._id} onClick={() => onSelectClient && onSelectClient(c)} className="border-t border-border/50 hover:bg-accent/30 cursor-pointer transition">
                     <td className="py-2 pr-3 font-medium">{c.name || '—'}</td>
                     <td className="pr-3 text-muted-foreground">{c.company || '—'}</td>
+                    <td className="pr-3 text-muted-foreground">{getAgentName(c.agent)}</td>
                     <td className="pr-3 text-muted-foreground">{c.email || '—'}</td>
                     <td className="pr-3 text-muted-foreground">{c.phone || '—'}</td>
                     <td className="pr-3 text-muted-foreground">{c.industry || '—'}</td>
@@ -917,6 +1185,21 @@ function ClientsView({ clients }: { clients: any[] }) {
                     <td className="pr-3 text-muted-foreground text-xs">
                       {c.createdAt ? new Date(c.createdAt).toLocaleDateString() : '—'}
                     </td>
+                    <td className="pr-3 relative">
+                      <div className="flex items-center gap-1">
+                        <button onClick={(e) => { e.stopPropagation(); setActionRow(actionRow === c._id ? null : c._id); }} className="h-6 w-6 rounded grid place-items-center hover:bg-accent" title="View details">
+                          <MoreHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
+                        </button>
+                        {actionRow === c._id && (
+                          <>
+                            <div className="fixed inset-0 z-40" onClick={() => setActionRow(null)} />
+                            <div className="absolute right-0 top-full mt-1 bg-card border border-border rounded-lg shadow-xl z-50 min-w-[160px] py-1">
+                              <button onClick={(e) => { e.stopPropagation(); setSelectedClient(c); setActionRow(null); }} className="w-full text-left px-4 py-2 text-xs hover:bg-accent flex items-center gap-2"><MoreHorizontal className="h-3 w-3" /> View Details</button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -924,13 +1207,15 @@ function ClientsView({ clients }: { clients: any[] }) {
           </div>
         )}
         <div className="text-xs text-muted-foreground mt-3">Showing {filteredClients.length} of {clients.length} clients</div>
+
+        {selectedClient && <ClientDetailModal client={selectedClient} users={users} deals={deals} schedules={schedules} meetings={meetings} tasks={tasks} open={!!selectedClient} onClose={() => setSelectedClient(null)} />}
       </div>
     </div>
   );
 }
 
 // ─── Deals View ──────────────────────────────────────
-function DealsView({ deals }: { deals: any[] }) {
+function DealsView({ deals, users }: { deals: any[]; users: any[] }) {
   const [search, setSearch] = useState('');
   const [stageFilter, setStageFilter] = useState('all');
 
@@ -977,7 +1262,7 @@ function DealsView({ deals }: { deals: any[] }) {
             <table className="w-full min-w-[700px] text-sm">
               <thead className="text-xs text-muted-foreground">
                 <tr className="text-left">
-                  {["Name", "Value", "Stage", "Client", "Created"].map((h) => (
+                  {["Name", "Value", "Stage", "Client", "Agent", "Created"].map((h) => (
                     <th key={h} className="pb-2 pr-3 font-normal">{h}</th>
                   ))}
                 </tr>
@@ -997,6 +1282,15 @@ function DealsView({ deals }: { deals: any[] }) {
                       </span>
                     </td>
                     <td className="pr-3 text-muted-foreground">{d.client?.name || '—'}</td>
+                    <td className="pr-3 text-muted-foreground">
+                      {(() => {
+                        const raw = d.agent || d.assignedTo;
+                        if (!raw) return '—';
+                        if (typeof raw === 'object' && raw.name) return raw.name;
+                        const found = users.find((u: any) => String(u._id) === String(raw));
+                        return found?.name || '—';
+                      })()}
+                    </td>
                     <td className="pr-3 text-muted-foreground text-xs">
                       {d.createdAt ? new Date(d.createdAt).toLocaleDateString() : '—'}
                     </td>
@@ -1015,6 +1309,9 @@ function DealsView({ deals }: { deals: any[] }) {
 // ─── Schedules View ──────────────────────────────────────
 function SchedulesView({ schedules }: { schedules: any[] }) {
   const [search, setSearch] = useState('');
+  const [showMeetingForm, setShowMeetingForm] = useState(false);
+  const [meetingForm, setMeetingForm] = useState({ title: "", location: "In Person", date: "", time: "" });
+  const queryClient = useQueryClient();
 
   const filteredSchedules = useMemo(() => {
     return schedules.filter((s: any) => {
@@ -1049,7 +1346,7 @@ function SchedulesView({ schedules }: { schedules: any[] }) {
 
       <div className="glass-card rounded-lg p-4">
         {filteredSchedules.length === 0 ? (
-          <EmptyState icon={Calendar} label="No schedules found" hint="Schedules will appear here once created." />
+          <EmptyState icon={CalendarDays} label="No schedules found" hint="Schedules will appear here once created." />
         ) : (
           <div className="overflow-auto">
             <table className="w-full min-w-[700px] text-sm">
@@ -1084,6 +1381,88 @@ function SchedulesView({ schedules }: { schedules: any[] }) {
         )}
         <div className="text-xs text-muted-foreground mt-3">Showing {filteredSchedules.length} schedules</div>
       </div>
+
+      {/* Schedule Meeting Form Dialog */}
+      <Dialog open={showMeetingForm} onOpenChange={setShowMeetingForm}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Schedule Meeting</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 pt-2">
+            <div>
+              <Label className="text-xs font-medium">Meeting Title *</Label>
+              <Input
+                value={meetingForm.title}
+                onChange={(e) => setMeetingForm({ ...meetingForm, title: e.target.value })}
+                placeholder="Meeting title"
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label className="text-xs font-medium">Location</Label>
+              <select
+                value={meetingForm.location}
+                onChange={(e) => setMeetingForm({ ...meetingForm, location: e.target.value })}
+                className="w-full h-9 px-3 rounded-lg bg-background border border-border text-sm outline-none mt-1"
+              >
+                <option>In Person</option>
+                <option>Online</option>
+                <option>Phone Call</option>
+              </select>
+            </div>
+            <div>
+              <Label className="text-xs font-medium">Date *</Label>
+              <Input
+                type="date"
+                value={meetingForm.date}
+                onChange={(e) => setMeetingForm({ ...meetingForm, date: e.target.value })}
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label className="text-xs font-medium">Time</Label>
+              <Input
+                type="time"
+                value={meetingForm.time}
+                onChange={(e) => setMeetingForm({ ...meetingForm, time: e.target.value })}
+                className="mt-1"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowMeetingForm(false)}>Cancel</Button>
+            <Button onClick={async () => {
+              if (!meetingForm.title || !meetingForm.date) {
+                toast.error("Title and date are required");
+                return;
+              }
+              try {
+                let scheduledTime = null;
+                if (meetingForm.date && meetingForm.time) {
+                  scheduledTime = new Date(`${meetingForm.date}T${meetingForm.time}`).toISOString();
+                } else if (meetingForm.date) {
+                  scheduledTime = new Date(meetingForm.date).toISOString();
+                }
+                await apiFetch("/meetings", {
+                  method: "POST",
+                  body: JSON.stringify({
+                    title: meetingForm.title,
+                    location: meetingForm.location,
+                    scheduledTime,
+                  }),
+                });
+                toast.success("Meeting scheduled successfully");
+                setShowMeetingForm(false);
+                setMeetingForm({ title: "", location: "In Person", date: "", time: "" });
+                queryClient.invalidateQueries({ queryKey: ["schedules"] });
+                queryClient.invalidateQueries({ queryKey: ["meetings"] });
+              } catch (err: any) {
+                toast.error("Failed to schedule meeting", { description: err.message });
+              }
+            }} className="gradient-orange text-white">Schedule</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -1094,6 +1473,10 @@ export default function TenantAdminDashboard() {
   const [activeSection, setActiveSection] = useState('Dashboard');
   const [addUserOpen, setAddUserOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [selectedClient, setSelectedClient] = useState<any>(null);
+  const [actionRowClient, setActionRowClient] = useState<string | null>(null);
+  const [showMeetingForm, setShowMeetingForm] = useState(false);
+  const [meetingForm, setMeetingForm] = useState({ title: "", location: "In Person", date: "", time: "" });
 
   const user = getStoredUser();
   const initials = (user?.name || 'Admin')
@@ -1107,10 +1490,14 @@ export default function TenantAdminDashboard() {
   const { data: clientsData } = useClients();
   const { data: dealsData } = useDeals();
   const { data: schedulesData } = useSchedules();
+  const { data: meetingsData } = useMeetings();
+  const { data: tasksData } = useTasks();
   const users = usersData?.users ?? [];
   const clients = clientsData?.clients ?? [];
   const deals = dealsData?.deals ?? [];
   const schedules = schedulesData?.schedules ?? [];
+  const meetings = meetingsData?.meetings ?? [];
+  const tasks = tasksData?.tasks ?? [];
 
   function handleLogout() {
     clearSession();
@@ -1143,21 +1530,21 @@ export default function TenantAdminDashboard() {
         return (
           <div>
             <h2 className="text-lg font-bold mb-4">Leads Pipeline</h2>
-            <LeadsView clients={clients} />
+            <LeadsView clients={clients} users={users} />
           </div>
         );
       case 'Clients & Organizations':
         return (
           <div>
             <h2 className="text-lg font-bold mb-4">Clients & Organizations</h2>
-            <ClientsView clients={clients} />
+            <ClientsView clients={clients} users={users} deals={deals} schedules={schedules} meetings={meetings} tasks={tasks} onSelectClient={setSelectedClient} />
           </div>
         );
       case 'Sales Pipeline':
         return (
           <div>
             <h2 className="text-lg font-bold mb-4">Sales Pipeline</h2>
-            <DealsView deals={deals} />
+            <DealsView deals={deals} users={users} />
           </div>
         );
       case 'Calendar':
@@ -1198,8 +1585,14 @@ export default function TenantAdminDashboard() {
                       UGX {deals.filter((d: any) => (d.stage || '').toLowerCase() === 'lost').reduce((s: number, d: any) => s + Number(d.value || d.amount || 0), 0).toLocaleString()}
                     </div>
                     <div className="text-[10px] text-muted-foreground">Lost</div>
-                  </div>
-                </div>
+        </div>
+        <button
+          onClick={() => setShowMeetingForm(true)}
+          className="h-9 px-3 gradient-orange text-white rounded-md flex items-center gap-2 text-xs font-semibold shadow hover:opacity-90"
+        >
+          <CalendarPlus className="h-4 w-4" /> Schedule Meeting
+        </button>
+      </div>
               </Panel>
               <Panel title="User Summary">
                 <div className="space-y-3">
@@ -1249,31 +1642,33 @@ export default function TenantAdminDashboard() {
                 <div className="mt-1 text-[10px] uppercase tracking-widest text-orange-400">Company Control</div>
               </div>
             )}
-            <button onClick={() => setCollapsed(!collapsed)} className="ml-auto grid h-8 w-8 place-items-center rounded-md hover:bg-accent">
-              <Menu className="h-4 w-4" />
-            </button>
+<div onClick={() => setCollapsed(!collapsed)} className="ml-auto grid h-8 w-8 place-items-center rounded-md hover:bg-accent cursor-pointer" role="button" tabIndex={0}>
+               <Menu className="h-4 w-4" />
+             </div>
           </div>
           <nav className="flex-1 overflow-y-auto px-2 py-3">
             {navSections.map((section) => (
               <div key={section.title} className="mb-3 border-b border-orange-500/20 pb-2 last:border-b-0">
                 {!collapsed && <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-orange-400">{section.title}</div>}
                 {section.items.map((item) => {
-                  const Icon = item.icon;
-                  const active = activeSection === item.label;
-                  return (
-                    <button
-                      key={item.label}
-                      onClick={() => setActiveSection(item.label)}
-                      className={`mb-0.5 flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs transition ${
-                        active
-                          ? 'gradient-orange text-white shadow-md shadow-orange-900/30 font-medium'
-                          : 'text-sidebar-foreground hover:bg-sidebar-accent'
-                      }`}
-                    >
-                      <Icon className="h-4 w-4 shrink-0" />
-                      {!collapsed && <span className="flex-1 truncate">{item.label}</span>}
-                    </button>
-                  );
+const Icon = item.icon;
+                    const active = activeSection === item.label;
+                    return (
+                      <div
+                        key={item.label}
+                        onClick={() => setActiveSection(item.label)}
+                        className={`mb-0.5 flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs transition cursor-pointer ${
+                          active
+                            ? 'gradient-orange text-white shadow-md shadow-orange-900/30 font-medium'
+                            : 'text-sidebar-foreground hover:bg-sidebar-accent'
+                        }`}
+                        role="button"
+                        tabIndex={0}
+                      >
+                        <Icon className="h-4 w-4 shrink-0" />
+                        {!collapsed && <span className="flex-1 truncate">{item.label}</span>}
+                      </div>
+                    );
                 })}
               </div>
             ))}
