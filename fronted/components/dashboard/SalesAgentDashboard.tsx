@@ -1,20 +1,25 @@
 import {
-  Users, UserPlus, BarChart3, DollarSign, Repeat,
+  Users, UserPlus, BarChart3, DollarSign,
   Plus, CalendarPlus, FileText,
   ArrowUp, ArrowDown, Search, Calendar,
   Mail, Phone, X, Loader2, Edit, Trash2,
 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import {
-  ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid,
-  RadialBarChart, RadialBar,
+  ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid,
+  RadialBarChart, RadialBar, LineChart, Line, Legend,
 } from "recharts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { apiFetch } from "@/lib/auth";
 import { toast } from "sonner";
 import { useFormDialog } from "@/hooks/useFormDialog";
 import { useClients, useDeleteClient } from "@/lib/api/clients";
+import { useDeals } from "@/lib/api/deals";
+import { useSales } from "@/lib/api/sales";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 const ORANGE = "#ff8c00";
 const ORANGE_DEEP = "#ff6a00";
@@ -36,8 +41,8 @@ const emptyDashboard: DashboardResponse = {
 };
 
 const fallbackKpis = [
-  { label: "Sales Value", value: "UGX 0", trend: 0, up: true },
-  { label: "Pipeline", value: "UGX 0", trend: 0, up: true },
+  { label: "Number of Sales", value: "0", trend: 0, up: true },
+  { label: "Value of Sales", value: "UGX 0", trend: 0, up: true },
   { label: "Total Clients", value: "0", trend: 0, up: true },
   { label: "Leads", value: "0", trend: 0, up: true },
 ];
@@ -61,16 +66,43 @@ export default function SalesAgentDashboard() {
   const { data: dashData, isLoading: dashLoading } = useQuery({
     queryKey: ["sales-dashboard"],
     queryFn: () => apiFetch<DashboardResponse>("/dashboards/sales"),
+    staleTime: 0,
+    refetchOnWindowFocus: true,
   });
   const dash = dashData ?? emptyDashboard;
   const { data: clientsData, isLoading: clientsLoading } = useClients();
   const allClients: any[] = clientsData?.clients ?? [];
+
+  // ── Deals drive "Number of Sales" and "Value of Sales" on this dashboard,
+  //    matching the calculation used in TenantAdminDashboard /
+  //    SalesManagerDashboard. The backend deals route already filters by the
+  //    current agent when the role is "agent".
+  const { data: dealsData, isLoading: dealsLoading } = useDeals();
+  const allDeals: any[] = dealsData?.deals ?? [];
+
+  // Sales still drive the /sales page (list/kanban) – keep them around so
+  // navigating to /sales stays in sync.
+  const { data: salesData } = useSales();
+
+  // Keep the dashboard in sync when the user comes back to the tab.
+  useEffect(() => {
+    const refresh = () => {
+      queryClient.invalidateQueries({ queryKey: ["deals"] });
+      queryClient.invalidateQueries({ queryKey: ["sales-crm"] });
+      queryClient.invalidateQueries({ queryKey: ["sales-dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+    };
+    window.addEventListener("focus", refresh);
+    return () => window.removeEventListener("focus", refresh);
+  }, [queryClient]);
 
   const [clientSearch, setClientSearch] = useState("");
   const [clientFilter, setClientFilter] = useState("All");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [showDateFilter, setShowDateFilter] = useState(false);
+  const [showMeetingForm, setShowMeetingForm] = useState(false);
+  const [meetingForm, setMeetingForm] = useState({ title: "", location: "In Person", date: "", time: "" });
 
   const filteredClients = useMemo(() => {
     return allClients.filter((c) => {
@@ -105,19 +137,51 @@ export default function SalesAgentDashboard() {
   const totalClients = allClients.length;
   const activeClients = allClients.filter((c) => (c.status || "active") === "active").length;
 
-  // Build kpis from API + local for total clients
-  const displayKpis = dash.kpis.length > 0
-    ? [
-        ...dash.kpis.slice(0, 3),
-        { label: "Total Clients", value: String(totalClients), trend: totalClients > 0 ? 8 : 0, up: true },
-      ]
-    : [
-        ...fallbackKpis.slice(0, 3).map((k) => ({ ...k, value: "0" })),
-        { label: "Total Clients", value: String(totalClients), trend: totalClients > 0 ? 8 : 0, up: true },
-      ];
+  // ── KPI numbers from deals (matches admin dashboard formula) ─────────
+  // Number of sales  =  deals.length     (same as admin "Total Deals")
+  // Value of sales   =  sum(deal.value)  (same as admin "Pipeline Value")
+  const totalDealsCount = allDeals.length;
+  const totalSalesValue = allDeals.reduce(
+    (s: number, d: any) => s + Number(d.value ?? d.amount ?? 0),
+    0
+  );
+  const wonDeals = allDeals.filter(
+    (d: any) => (d.stage || "").toLowerCase() === "won"
+  );
+  const wonValue = wonDeals.reduce(
+    (s: number, d: any) => s + Number(d.value ?? d.amount ?? 0),
+    0
+  );
+  const totalLeads = allClients.filter(
+    (c: any) => c.leadStatus && c.leadStatus !== "Converted"
+  ).length;
 
-  const [showMeetingForm, setShowMeetingForm] = useState(false);
-  const [meetingForm, setMeetingForm] = useState({ title: "", location: "In Person", date: "", time: "" });
+  const displayKpis = [
+    {
+      label: "Number of Sales",
+      value: String(totalDealsCount),
+      trend: totalDealsCount > 0 ? 12 : 0,
+      up: true,
+    },
+    {
+      label: "Value of Sales",
+      value: fmtCurrency(totalSalesValue),
+      trend: totalSalesValue > 0 ? 18 : 0,
+      up: true,
+    },
+    {
+      label: "Total Clients",
+      value: String(totalClients),
+      trend: totalClients > 0 ? 8 : 0,
+      up: true,
+    },
+    {
+      label: "Leads",
+      value: String(totalLeads),
+      trend: totalLeads > 0 ? 5 : 0,
+      up: true,
+    },
+  ];
 
   async function scheduleMeeting() {
     if (!meetingForm.title || !meetingForm.date) {
@@ -148,7 +212,7 @@ export default function SalesAgentDashboard() {
     }
   }
 
-  const kpiIcons = [DollarSign, BarChart3, Users, UserPlus];
+  const kpiIcons = [BarChart3, DollarSign, Users, UserPlus];
   const deleteClient = useDeleteClient();
 
   async function handleDeleteClient(id: string) {
@@ -163,34 +227,43 @@ export default function SalesAgentDashboard() {
 
   return (
     <div className="space-y-4">
-      {/* Meeting Form Modal */}
-      {showMeetingForm && (
-        <div className="glass-card rounded-xl p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="font-semibold">Schedule Meeting</h3>
-            <button onClick={() => setShowMeetingForm(false)} className="h-7 w-7 rounded grid place-items-center hover:bg-accent">✕</button>
-          </div>
+      {/* Meeting Form Dialog (popup) */}
+      <Dialog open={showMeetingForm} onOpenChange={setShowMeetingForm}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-gradient-orange">Schedule Meeting</DialogTitle>
+          </DialogHeader>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <input value={meetingForm.title} onChange={(e) => setMeetingForm({ ...meetingForm, title: e.target.value })}
-              placeholder="Meeting title" className="h-9 px-3 rounded-lg bg-background border border-border text-sm outline-none focus:ring-2 focus:ring-primary/40" />
-            <select value={meetingForm.location} onChange={(e) => setMeetingForm({ ...meetingForm, location: e.target.value })}
-              className="h-9 px-3 rounded-lg bg-background border border-border text-sm outline-none">
-              <option>In Person</option><option>Google Meet</option><option>Phone Call</option>
-            </select>
-            <input type="date" value={meetingForm.date} onChange={(e) => setMeetingForm({ ...meetingForm, date: e.target.value })}
-              className="h-9 px-3 rounded-lg bg-background border border-border text-sm outline-none focus:ring-2 focus:ring-primary/40" />
-            <input type="time" value={meetingForm.time} onChange={(e) => setMeetingForm({ ...meetingForm, time: e.target.value })}
-              className="h-9 px-3 rounded-lg bg-background border border-border text-sm outline-none focus:ring-2 focus:ring-primary/40" />
+            <div className="col-span-2">
+              <Label className="text-xs">Meeting Title *</Label>
+              <Input value={meetingForm.title} onChange={(e) => setMeetingForm({ ...meetingForm, title: e.target.value })} placeholder="Meeting title" />
+            </div>
+            <div>
+              <Label className="text-xs">Location</Label>
+              <select value={meetingForm.location} onChange={(e) => setMeetingForm({ ...meetingForm, location: e.target.value })}
+                className="w-full h-9 rounded-md border border-border bg-card px-2 text-sm outline-none">
+                <option>In Person</option><option>Google Meet</option><option>Phone Call</option>
+              </select>
+            </div>
+            <div>
+              <Label className="text-xs">Date</Label>
+              <Input type="date" value={meetingForm.date} onChange={(e) => setMeetingForm({ ...meetingForm, date: e.target.value })} />
+            </div>
+            <div>
+              <Label className="text-xs">Time</Label>
+              <Input type="time" value={meetingForm.time} onChange={(e) => setMeetingForm({ ...meetingForm, time: e.target.value })} />
+            </div>
           </div>
-          <div className="flex justify-end gap-2">
-            <button onClick={() => setShowMeetingForm(false)} className="h-9 px-4 rounded-lg border border-border text-sm hover:bg-accent">Cancel</button>
-            <button onClick={scheduleMeeting} className="h-9 px-4 gradient-orange text-white rounded-lg text-sm font-medium hover:opacity-90">Schedule</button>
-          </div>
-        </div>
-      )}
-      {/* KPI row */}
+          <DialogFooter>
+            <button onClick={() => setShowMeetingForm(false)} className="px-3 py-1.5 text-sm border border-border rounded-md hover:bg-accent">Cancel</button>
+            <button onClick={scheduleMeeting} className="px-4 py-1.5 text-sm gradient-orange text-white rounded-md font-medium shadow">Schedule</button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* KPI row — uses the same data source & formula as the admin dashboard */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {(dashLoading ? fallbackKpis : displayKpis).map((k, i) => {
+        {(dealsLoading && salesData === undefined ? fallbackKpis : displayKpis).map((k, i) => {
           const Icon = kpiIcons[i] ?? DollarSign;
           return (
             <div key={`kpi-${k.label}-${i}`} className="glass-card rounded-xl p-4">
@@ -198,10 +271,12 @@ export default function SalesAgentDashboard() {
                 <div className="icon-tile h-10 w-10 rounded-lg grid place-items-center">
                   <Icon className="h-5 w-5 text-orange-400" />
                 </div>
-                {dashLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+                {dealsLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
               </div>
               <div className="mt-3 text-xs text-muted-foreground">{k.label}</div>
-              <div className="text-2xl font-bold mt-0.5">{dashLoading ? "..." : k.value}</div>
+              <div className="text-2xl font-bold mt-0.5">
+                {dealsLoading ? "..." : k.value}
+              </div>
               <div className={"text-[11px] mt-1 flex items-center gap-1 " + (k.up ? "text-emerald-400" : "text-red-400")}>
                 {k.up ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
                 {k.trend}% <span className="text-muted-foreground">vs last month</span>
@@ -211,7 +286,7 @@ export default function SalesAgentDashboard() {
         })}
       </div>
 
-      {/* Action buttons */}
+      {/* Action buttons - all open popup forms */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {[
           { i: UserPlus, l: "Add Lead", on: () => setOpenForm("lead") },
@@ -226,67 +301,90 @@ export default function SalesAgentDashboard() {
         ))}
       </div>
 
-      {/* Revenue Trend + Sales Performance */}
+      {/* Sales vs Leads + My Performance */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Revenue Trend */}
+        {/* Sales vs Leads — Sales series is now driven by deals */}
         <div className="glass-card rounded-xl p-4">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold">Revenue Trend</h3>
-            <select className="bg-card border border-border rounded px-2 py-1 text-xs"><option>This Month</option></select>
+            <h3 className="font-semibold">Sales vs Leads</h3>
           </div>
           <div className="h-[240px]">
-            {dash.revenue.length === 0 ? (
-              <div className="h-full grid place-items-center text-sm text-muted-foreground">No revenue data yet</div>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={dash.revenue}>
-                  <defs>
-                    <linearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor={ORANGE} stopOpacity={0.6} />
-                      <stop offset="100%" stopColor={ORANGE} stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" />
-                  <XAxis dataKey="d" stroke="#888" fontSize={11} />
-                  <YAxis stroke="#888" fontSize={11} tickFormatter={(v) => `UGX ${(v / 1000000).toFixed(0)}M`} />
-                  <Tooltip contentStyle={{ background: "#222", border: "1px solid #444", borderRadius: 8 }} />
-                  <Area type="monotone" dataKey="v" stroke={ORANGE_DEEP} strokeWidth={2} fill="url(#grad)" />
-                </AreaChart>
-              </ResponsiveContainer>
-            )}
+            {(() => {
+              const monthMap: Record<string, { sales: number; leads: number }> = {};
+              allDeals.forEach((d: any) => {
+                const dt = d.createdAt || d.saleDate;
+                if (!dt) return;
+                const date = new Date(dt);
+                const key = date.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+                if (!monthMap[key]) monthMap[key] = { sales: 0, leads: 0 };
+                monthMap[key].sales += 1;
+              });
+              allClients.forEach((c: any) => {
+                if (c.leadStatus && c.leadStatus !== "Converted") {
+                  const date = new Date(c.createdAt);
+                  const key = date.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+                  if (!monthMap[key]) monthMap[key] = { sales: 0, leads: 0 };
+                  monthMap[key].leads += 1;
+                }
+              });
+              const chartData = Object.entries(monthMap)
+                .slice(-7)
+                .map(([d, v]) => ({ d, sales: v.sales, leads: v.leads }));
+              if (chartData.length === 0) {
+                chartData.push({ d: "Total", sales: totalDealsCount, leads: totalLeads });
+              }
+              return (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" />
+                    <XAxis dataKey="d" stroke="#888" fontSize={11} />
+                    <YAxis stroke="#888" fontSize={11} />
+                    <Tooltip contentStyle={{ background: "#222", border: "1px solid #444", borderRadius: 8 }} />
+                    <Legend />
+                    <Line type="monotone" dataKey="sales" name="Sales" stroke={ORANGE_DEEP} strokeWidth={2} dot={{ r: 4, fill: ORANGE_DEEP }} />
+                    <Line type="monotone" dataKey="leads" name="Leads" stroke="#a855f7" strokeWidth={2} dot={{ r: 4, fill: "#a855f7" }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              );
+            })()}
           </div>
         </div>
 
-        {/* Sales Performance */}
+        {/* My Performance — driven by deals to match the admin dashboard */}
         <div className="glass-card rounded-xl p-4">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold">Sales Performance</h3>
-            <select className="bg-card border border-border rounded px-2 py-1 text-xs"><option>This Month</option></select>
+            <h3 className="font-semibold">My Performance</h3>
           </div>
           <div className="grid grid-cols-2 gap-3 mb-3">
             <div>
-              <div className="text-xs text-muted-foreground">Total Clients</div>
-              <div className="text-xl font-bold">{totalClients}</div>
+              <div className="text-xs text-muted-foreground">Total Sales</div>
+              <div className="text-xl font-bold">{totalDealsCount}</div>
             </div>
             <div>
-              <div className="text-xs text-muted-foreground">Active Clients</div>
-              <div className="text-xl font-bold">{activeClients}</div>
+              <div className="text-xs text-muted-foreground">Sales Value</div>
+              <div className="text-xl font-bold">{fmtCurrency(totalSalesValue)}</div>
             </div>
           </div>
           <div className="h-[150px] relative">
             {totalClients === 0 ? (
-              <div className="h-full grid place-items-center text-sm text-muted-foreground">No clients yet</div>
+              <div className="h-full grid place-items-center text-sm text-muted-foreground">No data yet</div>
             ) : (
               <>
                 <ResponsiveContainer>
-                  <RadialBarChart innerRadius="70%" outerRadius="100%" data={[{ name: "x", value: Math.round((activeClients / Math.max(totalClients, 1)) * 100), fill: ORANGE }]} startAngle={90} endAngle={-270}>
+                  <RadialBarChart
+                    innerRadius="70%"
+                    outerRadius="100%"
+                    data={[{ name: "x", value: Math.round((activeClients / Math.max(totalClients, 1)) * 100), fill: ORANGE }]}
+                    startAngle={90}
+                    endAngle={-270}
+                  >
                     <RadialBar background={{ fill: "#ffffff15" }} dataKey="value" cornerRadius={10} />
                   </RadialBarChart>
                 </ResponsiveContainer>
                 <div className="absolute inset-0 grid place-items-center">
                   <div className="text-center">
                     <div className="text-2xl font-bold">{totalClients > 0 ? Math.round((activeClients / totalClients) * 100) : 0}%</div>
-                    <div className="text-xs text-muted-foreground">Active Rate</div>
+                    <div className="text-xs text-muted-foreground">Client Activity</div>
                   </div>
                 </div>
               </>
@@ -294,10 +392,10 @@ export default function SalesAgentDashboard() {
           </div>
           <div className="grid grid-cols-4 gap-2 mt-2 text-center text-xs">
             {[
-              ["Total Clients", String(totalClients), "+0%"],
-              ["Active Clients", String(activeClients), "+0%"],
-              ["Leads", String(allClients.filter((c) => c.leadStatus && c.leadStatus !== "Converted").length), "+0%"],
-              ["Pipeline", fmtCurrency(allClients.reduce((s: number, c: any) => s + (c.pipelineValue || 0), 0)), "+0%"],
+              ["My Sales", String(totalDealsCount)],
+              ["My Leads", String(totalLeads)],
+              ["Clients", String(totalClients)],
+              ["Won Value", fmtCurrency(wonValue)],
             ].map(([l, v]) => (
               <div key={l}>
                 <div className="text-muted-foreground">{l}</div>
@@ -305,7 +403,7 @@ export default function SalesAgentDashboard() {
               </div>
             ))}
           </div>
-          <div className="text-center mt-2"><Link to="/clients" className="text-xs text-orange-400 cursor-pointer">View all clients</Link></div>
+          <div className="text-center mt-2"><Link to="/sales" className="text-xs text-orange-400 cursor-pointer">View all sales</Link></div>
         </div>
       </div>
 
@@ -367,52 +465,52 @@ export default function SalesAgentDashboard() {
             <div className="py-8 text-center text-muted-foreground text-sm flex items-center justify-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Loading clients...</div>
           ) : (
             <table className="w-full text-sm">
-<thead className="text-xs text-muted-foreground">
-                 <tr className="text-left">
-                   <th className="font-normal pb-2 pr-3">Name</th>
-                   <th className="font-normal pb-2 pr-3">Industry</th>
-                   <th className="font-normal pb-2 pr-3">Email</th>
-                   <th className="font-normal pb-2 pr-3">Phone</th>
-                   <th className="font-normal pb-2 pr-3">Created</th>
-                   <th className="font-normal pb-2 pr-3">Status</th>
-                   <th className="font-normal pb-2 pr-3">Actions</th>
-                 </tr>
-               </thead>
-<tbody>
-                 {filteredClients.length === 0 && (
-                   <tr><td colSpan={7} className="py-8 text-center text-muted-foreground text-sm">No clients found</td></tr>
-                 )}
-                 {filteredClients.slice(0, 8).map((c: any) => (
-                   <tr key={c._id} className="border-t border-border/50 hover:bg-accent/30">
-                     <td className="py-2.5 pr-3 font-medium">{c.name || c.company || "—"}</td>
-                     <td className="py-2.5 pr-3 text-muted-foreground">{c.industry || "—"}</td>
-                     <td className="py-2.5 pr-3 text-muted-foreground">
-                       <span className="flex items-center gap-1"><Mail className="h-3 w-3 shrink-0" />{c.email || "—"}</span>
-                     </td>
-                     <td className="py-2.5 pr-3 text-muted-foreground">
-                       <span className="flex items-center gap-1"><Phone className="h-3 w-3 shrink-0" />{c.phone || c.telephone || "—"}</span>
-                     </td>
-                     <td className="py-2.5 pr-3 text-muted-foreground text-xs">
-                       {c.createdAt ? new Date(c.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}
-                     </td>
-                     <td className="py-2.5 pr-3">
-                       <span className={`text-[10px] px-2 py-0.5 rounded border ${(c.status || "active") === "active" ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" : "bg-zinc-500/15 text-zinc-400 border-zinc-500/30"}`}>
-                         {(c.status || "Active").charAt(0).toUpperCase() + (c.status || "Active").slice(1)}
-                       </span>
-                     </td>
-                     <td className="py-2.5 pr-3">
-                       <div className="flex gap-1">
-                         <button onClick={(e) => { e.stopPropagation(); setOpenForm("client"); }} className="h-6 w-6 rounded grid place-items-center hover:bg-accent" title="Edit client">
-                           <Edit className="h-3.5 w-3.5 text-orange-400" />
-                         </button>
-                         <button onClick={(e) => { e.stopPropagation(); handleDeleteClient(c._id); }} className="h-6 w-6 rounded grid place-items-center hover:bg-accent" title="Delete client">
-                           <Trash2 className="h-3.5 w-3.5 text-red-400" />
-                         </button>
-                       </div>
-                     </td>
-                   </tr>
-                 ))}
-               </tbody>
+              <thead className="text-xs text-muted-foreground">
+                <tr className="text-left">
+                  <th className="font-normal pb-2 pr-3">Name</th>
+                  <th className="font-normal pb-2 pr-3">Industry</th>
+                  <th className="font-normal pb-2 pr-3">Email</th>
+                  <th className="font-normal pb-2 pr-3">Phone</th>
+                  <th className="font-normal pb-2 pr-3">Created</th>
+                  <th className="font-normal pb-2 pr-3">Status</th>
+                  <th className="font-normal pb-2 pr-3">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredClients.length === 0 && (
+                  <tr><td colSpan={7} className="py-8 text-center text-muted-foreground text-sm">No clients found</td></tr>
+                )}
+                {filteredClients.slice(0, 8).map((c: any) => (
+                  <tr key={c._id} className="border-t border-border/50 hover:bg-accent/30">
+                    <td className="py-2.5 pr-3 font-medium">{c.name || c.company || "—"}</td>
+                    <td className="py-2.5 pr-3 text-muted-foreground">{c.industry || "—"}</td>
+                    <td className="py-2.5 pr-3 text-muted-foreground">
+                      <span className="flex items-center gap-1"><Mail className="h-3 w-3 shrink-0" />{c.email || "—"}</span>
+                    </td>
+                    <td className="py-2.5 pr-3 text-muted-foreground">
+                      <span className="flex items-center gap-1"><Phone className="h-3 w-3 shrink-0" />{c.phone || c.telephone || "—"}</span>
+                    </td>
+                    <td className="py-2.5 pr-3 text-muted-foreground text-xs">
+                      {c.createdAt ? new Date(c.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}
+                    </td>
+                    <td className="py-2.5 pr-3">
+                      <span className={`text-[10px] px-2 py-0.5 rounded border ${(c.status || "active") === "active" ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" : "bg-zinc-500/15 text-zinc-400 border-zinc-500/30"}`}>
+                        {(c.status || "Active").charAt(0).toUpperCase() + (c.status || "Active").slice(1)}
+                      </span>
+                    </td>
+                    <td className="py-2.5 pr-3">
+                      <div className="flex gap-1">
+                        <button onClick={(e) => { e.stopPropagation(); setOpenForm("client", c); }} className="h-6 w-6 rounded grid place-items-center hover:bg-accent" title="Edit client">
+                          <Edit className="h-3.5 w-3.5 text-orange-400" />
+                        </button>
+                        <button onClick={(e) => { e.stopPropagation(); handleDeleteClient(c._id); }} className="h-6 w-6 rounded grid place-items-center hover:bg-accent" title="Delete client">
+                          <Trash2 className="h-3.5 w-3.5 text-red-400" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
             </table>
           )}
         </div>
@@ -422,32 +520,8 @@ export default function SalesAgentDashboard() {
         </div>
       </div>
 
-      {/* Activity Feed + Tasks Due Today */}
+      {/* Tasks Due Today + Upcoming Meetings */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="glass-card rounded-xl p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold">Activity Feed</h3>
-            <Link to="/activities" className="text-xs text-orange-400 cursor-pointer">View all</Link>
-          </div>
-          {dash.activities.length === 0 ? (
-            <div className="py-6 text-center text-sm text-muted-foreground">No recent activity</div>
-          ) : (
-            <ul className="space-y-3">
-              {dash.activities.map((a, i) => (
-                <li key={i} className="flex items-start gap-3">
-                  <span className="icon-tile h-8 w-8 rounded-md grid place-items-center mt-0.5">
-                    <Repeat className="h-4 w-4 text-orange-400" />
-                  </span>
-                  <div className="flex-1">
-                    <div className="text-sm">{a.t}</div>
-                    <div className="text-xs text-muted-foreground">{a.when}</div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
         <div className="glass-card rounded-xl p-4">
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-semibold">Tasks Due Today</h3>
@@ -466,30 +540,29 @@ export default function SalesAgentDashboard() {
             ))
           )}
         </div>
-      </div>
 
-      {/* Upcoming Meetings */}
-      <div className="glass-card rounded-xl p-4">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="font-semibold">Upcoming Meetings</h3>
-          <Link to="/meetings" className="text-xs text-orange-400 cursor-pointer">View all</Link>
-        </div>
-        {dash.meetings.length === 0 ? (
-          <div className="py-6 text-center text-sm text-muted-foreground">No upcoming meetings</div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {dash.meetings.map((m: any) => (
-              <div key={m.co} className="flex items-start gap-3 border border-border/50 rounded-lg p-3">
-                <span className="icon-tile h-9 w-9 rounded-md grid place-items-center shrink-0"><CalendarPlus className="h-4 w-4 text-orange-400" /></span>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium truncate">{m.co}</div>
-                  <div className="text-xs text-muted-foreground">{m.t}</div>
-                  <div className="text-xs text-muted-foreground mt-1">{m.date} · {m.time}</div>
-                </div>
-              </div>
-            ))}
+        <div className="glass-card rounded-xl p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold">Upcoming Meetings</h3>
+            <Link to="/meetings" className="text-xs text-orange-400 cursor-pointer">View all</Link>
           </div>
-        )}
+          {dash.meetings.length === 0 ? (
+            <div className="py-6 text-center text-sm text-muted-foreground">No upcoming meetings</div>
+          ) : (
+            <div className="space-y-3">
+              {dash.meetings.map((m: any) => (
+                <div key={m.co} className="flex items-start gap-3 border border-border/50 rounded-lg p-3">
+                  <span className="icon-tile h-9 w-9 rounded-md grid place-items-center shrink-0"><CalendarPlus className="h-4 w-4 text-orange-400" /></span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium truncate">{m.co}</div>
+                    <div className="text-xs text-muted-foreground">{m.t}</div>
+                    <div className="text-xs text-muted-foreground mt-1">{m.date} · {m.time}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

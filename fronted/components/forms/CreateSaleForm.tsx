@@ -2,14 +2,22 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { apiFetch } from "@/lib/auth";
 import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { useClients } from "@/lib/api/clients";
 
 interface CreateSaleFormProps {
   onClose: () => void;
   onSuccess?: () => void;
 }
+
+// Deal-model stages (matches the backend Deal enum and the admin dashboard)
+const DEAL_STAGES = [
+  { value: "lead", label: "Lead" },
+  { value: "qualification", label: "Qualification" },
+  { value: "proposal", label: "Proposal" },
+  { value: "negotiation", label: "Negotiation" },
+];
 
 export function CreateSaleForm({ onClose, onSuccess }: CreateSaleFormProps) {
   const [isLoading, setIsLoading] = useState(false);
@@ -18,10 +26,26 @@ export function CreateSaleForm({ onClose, onSuccess }: CreateSaleFormProps) {
   const { data: clientsData } = useClients();
 
   const onSubmit = async (vals: any) => {
+    if (!vals.client) {
+      toast.error("Client is required");
+      return;
+    }
+    if (!vals.value) {
+      toast.error("Value is required");
+      return;
+    }
+
     setIsLoading(true);
     try {
-      await apiFetch("/deals", {
+      // Create a Deal (the same record type the admin dashboard counts as
+      // "Number of Sales" / "Value of Sales"). Posting to /deals keeps the
+      // Sales Agent dashboard cards/graphs in sync with the admin.
+      await fetch(`${import.meta.env.VITE_API_URL || (window.location.port !== "5000" ? "http://localhost:5000/api" : `${window.location.origin}/api`)}/deals`, {
         method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${localStorage.getItem("crm.auth.token") || ""}`,
+        },
         body: JSON.stringify({
           title: vals.title,
           value: parseFloat(vals.value) || 0,
@@ -29,13 +53,24 @@ export function CreateSaleForm({ onClose, onSuccess }: CreateSaleFormProps) {
           stage: vals.stage || "lead",
           dealType: vals.dealType === "existing" ? "existing" : "new",
         }),
+      }).then(async (r) => {
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({ message: "Request failed" }));
+          throw new Error(err.message || "Failed to create deal");
+        }
       });
+
+      // Refresh every dashboard/component that counts deals
+      queryClient.invalidateQueries({ queryKey: ["deals"] });
+      queryClient.invalidateQueries({ queryKey: ["sales-dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboards"] });
+
       saleForm.reset();
-      queryClient.invalidateQueries({ queryKey: ["sales-dashboard"] as unknown as readonly unknown[] });
+      toast.success("Sale created successfully");
       onSuccess?.();
       onClose();
     } catch (err: any) {
-      alert(err.message || "Failed to create sale");
+      toast.error(err.message || "Failed to create sale");
     } finally {
       setIsLoading(false);
     }
@@ -51,29 +86,45 @@ export function CreateSaleForm({ onClose, onSuccess }: CreateSaleFormProps) {
       </div>
       <div>
         <label className="text-xs font-medium">Value (UGX) *</label>
-        <Input type="number" {...saleForm.register("value", { required: true })} placeholder="25000000" />
+        <Input
+          type="number"
+          {...saleForm.register("value", { required: true })}
+          placeholder="25000000"
+        />
       </div>
       <div>
         <label className="text-xs font-medium">Client *</label>
-        <select {...saleForm.register("client", { required: true })} className="w-full rounded-md border px-2 py-1 text-sm" disabled={isLoading}>
+        <select
+          {...saleForm.register("client", { required: true })}
+          className="w-full rounded-md border px-2 py-1 text-sm"
+          disabled={isLoading}
+        >
           <option value="">Select client</option>
           {clients.map((c: any) => (
-            <option key={c._id} value={c._id}>{c.name} {c.company && `- ${c.company}`}</option>
+            <option key={c._id} value={c._id}>
+              {c.name}
+              {c.company ? ` - ${c.company}` : ""}
+            </option>
           ))}
         </select>
       </div>
       <div>
         <label className="text-xs font-medium">Stage *</label>
-        <select {...saleForm.register("stage", { required: true })} className="w-full rounded-md border px-2 py-1 text-sm">
-          <option value="lead">Lead</option>
-          <option value="qualification">Qualification</option>
-          <option value="proposal">Proposal</option>
-          <option value="negotiation">Negotiation</option>
+        <select
+          {...saleForm.register("stage", { required: true })}
+          className="w-full rounded-md border px-2 py-1 text-sm"
+        >
+          {DEAL_STAGES.map((s) => (
+            <option key={s.value} value={s.value}>{s.label}</option>
+          ))}
         </select>
       </div>
       <div>
         <label className="text-xs font-medium">Deal Type</label>
-        <select {...saleForm.register("dealType")} className="w-full rounded-md border px-2 py-1 text-sm">
+        <select
+          {...saleForm.register("dealType")}
+          className="w-full rounded-md border px-2 py-1 text-sm"
+        >
           <option value="new">New</option>
           <option value="existing">Existing</option>
         </select>
