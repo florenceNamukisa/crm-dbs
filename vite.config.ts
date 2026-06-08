@@ -19,8 +19,8 @@ export default defineConfig({
     emptyOutDir: true,
   },
   resolve: {
-    alias: {
-      "@": fileURLToPath(new URL("\.\/fronted", import.meta.url)),
+alias: {
+      "@": fileURLToPath(new URL("./fronted", import.meta.url)),
     },
   },
   server: {
