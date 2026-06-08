@@ -17,7 +17,7 @@ import {
   useCreateTenant, useTenantControl, useSuperAdminActivity,
 } from "@/lib/api/superadmin";
 import { useUsers } from "@/lib/api/users";
-import { clearSession, getStoredUser } from "@/lib/auth";
+import { clearSession, getStoredUser, apiFetch } from "@/lib/auth";
 import { useNavigate } from "@tanstack/react-router";
 
 const ORANGE = "#ff8c00";
@@ -171,8 +171,8 @@ function AssignPlanModal({ open, onClose, tenant }: { open: boolean; onClose: ()
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     try {
-      await fetch(`http://localhost:5000/api/tenants/${tenant._id}/subscription`, {
-        method: "PATCH", headers: { "Content-Type": "application/json", authorization: `Bearer ${localStorage.getItem("crm.auth.token")}` },
+      await apiFetch(`/tenants/${tenant._id}/subscription`, {
+        method: "PATCH",
         body: JSON.stringify({ planName: plan }),
       });
       toast.success("Plan updated", { description: `${tenant.name} now on ${plan}` });

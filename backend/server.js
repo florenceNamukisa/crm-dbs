@@ -43,16 +43,24 @@ const __dirname = path.dirname(__filename);
 const app = express();
 
 // CORS configuration with environment support
+// `api.crm.xtreative.com` is the custom domain of the deployed frontend
+// (Vercel project that builds from the `florenceNamukisa/crm-dbs` repo).
+// The backend runs on Render; these origins are pre-allowed as a safety
+// net even when the `CORS_ORIGINS` env var is not refreshed.
 const defaultOrigins = [
   'http://localhost:3000',
   'http://localhost:3001',
   'http://localhost:5173',
   'http://localhost:5174',
+  'https://crm-dbs-2nkf.vercel.app',
   'https://crm-tool-ebon.vercel.app',
   'https://crm-system-brown-kappa.vercel.app',
   'https://crm-system.vercel.app',
+  'https://crm-dbs.vercel.app',
+  'https://api.crm.xtreative.com',
   'https://crm.xtreative.com',
-  'https://www.crm.xtreative.com'
+  'https://www.crm.xtreative.com',
+  'https://crm-dbs.onrender.com',
 ];
 
 const envOrigins = process.env.CORS_ORIGINS
