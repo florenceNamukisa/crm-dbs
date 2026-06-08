@@ -109,8 +109,8 @@ router.post('/', async (req, res) => {
       meetingData.googleMeetLink = `https://meet.google.com/${meetCode}`;
     }
     
-    // Clear Google Meet link if location is In Person
-    if (meetingData.location === 'In Person') {
+    // Clear Google Meet link if location is In Person or Phone Call
+    if (meetingData.location === 'In Person' || meetingData.location === 'Phone Call') {
       meetingData.googleMeetLink = undefined;
     }
     
@@ -139,8 +139,8 @@ router.put('/:id', async (req, res) => {
       updateData.googleMeetLink = `https://meet.google.com/${meetCode}`;
     }
     
-    // Clear Google Meet link if location is changed to In Person
-    if (updateData.location === 'In Person') {
+    // Clear Google Meet link if location is changed to In Person or Phone Call
+    if (updateData.location === 'In Person' || updateData.location === 'Phone Call') {
       updateData.googleMeetLink = undefined;
     }
     

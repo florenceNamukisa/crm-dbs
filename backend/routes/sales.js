@@ -1,6 +1,5 @@
 // routes/sales.js
 import express from 'express';
-import fs from 'fs';
 import Sale from '../models/Sale.js';
 import Stock from '../models/Stock.js';
 import User from '../models/User.js';
@@ -225,54 +224,50 @@ router.get('/stats', async (req, res) => {
   }
 });
 
-// Create new sale
-router.post('/', [
-  body('customerName').trim().isLength({ min: 1 }).withMessage('Customer name is required'),
-  body('items').isArray({ min: 1 }).withMessage('At least one item is required'),
-  body('paymentMethod').isIn(['cash', 'credit']).withMessage('Invalid payment method')
-], async (req, res) => {
+// Create new sale (supports both CRM-style and inventory-style)
+router.post('/', async (req, res) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      console.error('Validation errors:', errors.array());
-      return res.status(400).json({ message: 'Validation errors', errors: errors.array() });
-    }
+    const { customerName, customerEmail, customerPhone, items, paymentMethod, client, notes, dueDate, clientName, amount, stage, type } = req.body;
 
-    const { customerName, customerEmail, customerPhone, items, paymentMethod, client, notes, dueDate } = req.body;
-
-    // Validate items before creating sale
-    if (!items || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ message: 'At least one item is required' });
-    }
-
-    // Validate each item
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      if (!item.itemName || !item.itemName.trim()) {
-        return res.status(400).json({ message: `Item ${i + 1}: Item name is required` });
-      }
-      if (!item.quantity || item.quantity < 1) {
-        return res.status(400).json({ message: `Item ${i + 1}: Quantity must be at least 1` });
-      }
-      if (item.unitPrice === undefined || item.unitPrice === null || item.unitPrice < 0) {
-        return res.status(400).json({ message: `Item ${i + 1}: Unit price must be non-negative` });
-      }
+    // Validate
+    if (!customerName && !clientName && !client) {
+      return res.status(400).json({ message: 'Customer or client name is required' });
     }
 
     // Create sale with tenant assignment
-    const sale = new Sale({
-      customerName,
-      customerEmail,
-      customerPhone,
-      items,
-      paymentMethod,
+    const saleData = {
       agent: req.user.userId,
       tenant: req.user.tenantId,
       client: client || null,
       notes,
-      dueDate: paymentMethod === 'credit' ? dueDate : null,
       saleDate: new Date()
-    });
+    };
+
+    // CRM-style fields
+    if (clientName) saleData.clientName = clientName;
+    else if (customerName) saleData.customerName = customerName;
+    else saleData.clientName = 'Client';
+    
+    if (amount) saleData.amount = parseFloat(amount);
+    if (stage) saleData.stage = stage;
+    if (type) saleData.type = type;
+
+    // Set probability based on stage
+    const stageProb = {
+      'Contacted': 10, 'Proposal': 40, 'Negotiations': 70, 'Closed (Won)': 100, 'Lost': 0
+    };
+    saleData.probability = stage ? (stageProb[stage] || 10) : 10;
+
+    // Inventory-style fields (optional)
+    if (items && Array.isArray(items) && items.length > 0) {
+      saleData.items = items;
+      saleData.paymentMethod = paymentMethod || 'cash';
+      saleData.customerEmail = customerEmail;
+      saleData.customerPhone = customerPhone;
+      saleData.dueDate = paymentMethod === 'credit' && dueDate ? new Date(dueDate) : null;
+    }
+
+    const sale = new Sale(saleData);
 
     try {
       await sale.save();
@@ -284,15 +279,17 @@ router.post('/', [
       });
     }
 
-    // Update stock levels for each item
-    for (const item of items) {
-      try {
-        let stockItem = await Stock.findOne({ itemName: item.itemName });
-        if (stockItem) {
-          await stockItem.updateStock(item.quantity, 'subtract');
+    // Update stock levels if items exist
+    if (items && Array.isArray(items)) {
+      for (const item of items) {
+        try {
+          let stockItem = await Stock.findOne({ itemName: item.itemName });
+          if (stockItem) {
+            await stockItem.updateStock(item.quantity, 'subtract');
+          }
+        } catch (error) {
+          console.warn(`Could not update stock for ${item.itemName}:`, error.message);
         }
-      } catch (error) {
-        console.warn(`Could not update stock for ${item.itemName}:`, error.message);
       }
     }
 
@@ -326,7 +323,7 @@ router.post('/', [
       metadata: {
         customerName: sale.customerName,
         finalAmount: sale.finalAmount,
-        itemCount: items.length
+        itemCount: items ? items.length : 0
       }
     });
 
@@ -398,19 +395,19 @@ router.put('/:id', [
       return res.status(404).json({ message: 'Sale not found' });
     }
 
-    // Only allow editing credit sales
-    if (sale.paymentMethod !== 'credit') {
-      return res.status(400).json({ message: 'Only credit sales can be edited' });
-    }
+    const { customerName, customerEmail, customerPhone, items, notes, dueDate, stage, probability, type, clientName, amount } = req.body;
 
-    const { customerName, customerEmail, customerPhone, items, notes, dueDate } = req.body;
-
-    if (customerName) sale.customerName = customerName;
-    if (customerEmail) sale.customerEmail = customerEmail;
-    if (customerPhone) sale.customerPhone = customerPhone;
+    if (customerName !== undefined) sale.customerName = customerName;
+    if (customerEmail !== undefined) sale.customerEmail = customerEmail;
+    if (customerPhone !== undefined) sale.customerPhone = customerPhone;
     if (items) sale.items = items;
     if (notes !== undefined) sale.notes = notes;
     if (dueDate) sale.dueDate = dueDate;
+    if (stage !== undefined) sale.stage = stage;
+    if (probability !== undefined) sale.probability = probability;
+    if (type !== undefined) sale.type = type;
+    if (clientName !== undefined) sale.clientName = clientName;
+    if (amount !== undefined) sale.amount = amount;
 
     await sale.save();
 
@@ -486,6 +483,24 @@ router.post('/:id/payment', [
     });
   } catch (error) {
     console.error('Error recording payment:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Delete a sale
+router.delete('/:id', async (req, res) => {
+  try {
+    let query = { _id: req.params.id, ...req.tenantQuery };
+    if (req.user.role === 'agent') {
+      query.agent = req.user.userId;
+    }
+    const sale = await Sale.findOneAndDelete(query);
+    if (!sale) {
+      return res.status(404).json({ message: 'Sale not found' });
+    }
+    res.json({ message: 'Sale deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting sale:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });

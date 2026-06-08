@@ -1,8 +1,9 @@
 import express from 'express';
 import PDFDocument from 'pdfkit';
+import mongoose from 'mongoose';
 import twilio from 'twilio';
 import Client from '../models/Client.js';
-import { body, validationResult, query } from 'express-validator';
+import { body, validationResult } from 'express-validator';
 import { tenantAuth } from '../middleware/tenantAuth.js';
 import { logAction } from '../utils/auditLog.js';
 import { sendEmail } from '../services/emailService.js';
@@ -135,11 +136,6 @@ router.get('/:id([0-9a-fA-F]{24})', async (req, res) => {
       return res.status(404).json({ message: 'Client not found' });
     }
 
-    // Check if user has permission to view this client
-    if (req.user.role === 'agent' && client.agent.toString() !== req.user.userId) {
-      return res.status(403).json({ message: 'Access denied' });
-    }
-
     res.json(client);
   } catch (error) {
     console.error('Error fetching client:', error);
@@ -212,11 +208,6 @@ router.put('/:id', [
       return res.status(404).json({ message: 'Client not found' });
     }
 
-    // Check if user has permission to update this client
-    if (req.user.role === 'agent' && client.agent.toString() !== req.user.userId) {
-      return res.status(403).json({ message: 'Access denied' });
-    }
-
     const updatedClient = await Client.findOneAndUpdate(
       { _id: req.params.id, ...req.tenantQuery },
       req.body,
@@ -241,11 +232,6 @@ router.delete('/:id', async (req, res) => {
 
     if (!client) {
       return res.status(404).json({ message: 'Client not found' });
-    }
-
-    // Check if user has permission to delete this client
-    if (req.user.role === 'agent' && client.agent.toString() !== req.user.userId) {
-      return res.status(403).json({ message: 'Access denied' });
     }
 
     await Client.findOneAndDelete({ _id: req.params.id, ...req.tenantQuery });
@@ -273,19 +259,6 @@ router.post('/:id/interactions', [
 
     if (!client) {
       return res.status(404).json({ message: 'Client not found' });
-    }
-
-// Agents can add interactions to their assigned clients or unassigned leads
-    // Admin/managers can add to any client in tenant
-    if (req.user.role === 'agent') {
-      const isOwner = !client.agent || 
-                      client.agent?.toString() === req.user.userId || 
-                      client.assignedAgents?.some(a => a.toString() === req.user.userId);
-      // Allow if agent is owner OR if it's a prospect (unassigned lead)
-      const isProspect = client.status === 'prospect';
-      if (!isOwner && !isProspect) {
-        return res.status(403).json({ message: 'Access denied' });
-      }
     }
 
     const interaction = {
@@ -323,11 +296,6 @@ router.post('/:id/tasks', [
 
     if (!client) {
       return res.status(404).json({ message: 'Client not found' });
-    }
-
-    // Check if user has permission to add tasks
-    if (req.user.role === 'agent' && client.agent.toString() !== req.user.userId) {
-      return res.status(403).json({ message: 'Access denied' });
     }
 
     const task = {
@@ -402,6 +370,113 @@ router.post('/:id/send-email', [
   }
 });
 
+// Add notes as interaction type
+router.post('/:id/notes', [
+  body('notes').trim().isLength({ min: 1 }).withMessage('Notes are required')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const client = await Client.findOne({ _id: req.params.id, ...req.tenantQuery });
+    if (!client) return res.status(404).json({ message: 'Client not found' });
+
+    client.interactions.push({
+      type: 'other',
+      notes: `Note: ${req.body.notes}`,
+      date: new Date(),
+      createdBy: req.user.userId
+    });
+
+    await client.save();
+    res.json({ message: 'Notes saved successfully' });
+  } catch (error) {
+    console.error('Error adding notes:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Forward lead to another agent
+router.post('/:id/forward', [
+  body('agentId').isLength({ min: 1 }).withMessage('Agent is required')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const client = await Client.findOne({ _id: req.params.id, ...req.tenantQuery });
+    if (!client) return res.status(404).json({ message: 'Client not found' });
+
+    const { agentId } = req.body;
+    const targetAgentId = new mongoose.Types.ObjectId(agentId);
+
+    client.assignedAgents = client.assignedAgents || [];
+    if (!client.assignedAgents.some((id) => id.toString() === agentId)) {
+      client.assignedAgents.push(targetAgentId);
+    }
+    client.agent = targetAgentId;
+    await client.save();
+
+    const populatedClient = await Client.findById(client._id)
+      .populate('agent', 'name email');
+
+    await logAction(req, 'UPDATE_CLIENT', `Forwarded client ${client.name} to agent ${populatedClient.agent?.name || agentId}`, { entityType: 'Client', entityId: client._id });
+
+    res.json({ message: 'Lead forwarded successfully', client: populatedClient });
+  } catch (error) {
+    console.error('Error forwarding lead:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Send email to client (re-export existing endpoint path for frontend compatibility)
+router.post('/send-email', async (req, res) => {
+  try {
+    const { clientId, subject, message } = req.body;
+
+    if (!clientId || !subject || !message) {
+      return res.status(400).json({ message: 'Client ID, subject and message are required' });
+    }
+
+    const client = await Client.findOne({ _id: clientId, ...req.tenantQuery });
+    if (!client) return res.status(404).json({ message: 'Client not found' });
+
+    if (!client.email) {
+      return res.status(400).json({ message: 'Client has no email address' });
+    }
+
+    const result = await sendEmail(client.email, 'clientEmail', {
+      clientName: client.name,
+      agentName: req.user.name,
+      subject,
+      message
+    });
+
+    if (!result.success) {
+      return res.status(500).json({ message: 'Failed to send email', error: result.error });
+    }
+
+    await logAction(req, 'OTHER', `Sent email to client ${client.name}`, { entityType: 'Client', entityId: client._id });
+
+    client.interactions.push({
+      type: 'email',
+      notes: `Email sent: ${subject}`,
+      date: new Date(),
+      createdBy: req.user.userId
+    });
+    await client.save();
+
+    res.json({ message: 'Email sent successfully', messageId: result.messageId });
+  } catch (error) {
+    console.error('Error sending email:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
 // Export clients as PDF
 router.get('/export/pdf', async (req, res) => {
   try {
@@ -442,7 +517,6 @@ router.get('/export/pdf', async (req, res) => {
     // ── Colour palette ────────────────────────────────────────────────────────
     const ORANGE  = '#f97316';
     const DARK    = '#1f2937';
-    const MUTED   = '#6b7280';
     const LIGHT   = '#f3f4f6';
     const WHITE   = '#ffffff';
     const PAGE_W  = doc.page.width  - 80; // usable width (margin 40 each side)

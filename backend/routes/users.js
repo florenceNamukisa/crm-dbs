@@ -12,15 +12,24 @@ import AuditLog from '../models/AuditLog.js';
 import SecurityBlock from '../models/SecurityBlock.js';
 import Performance from '../models/Performance.js';
 import { sendEmail, generateOTP } from '../services/emailService.js';
-import { tenantAuth, requireRole, requireSuperAdmin, addTenantFilter, addTenantData, checkUsageLimit } from '../middleware/tenantAuth.js';
+import { tenantAuth, requireRole, addTenantFilter, addTenantData, checkUsageLimit } from '../middleware/tenantAuth.js';
 import { logAction } from '../utils/auditLog.js';
 
 const router = express.Router();
 
 // Get all users (admin only, tenant-scoped)
-router.get('/', tenantAuth, requireRole(['admin', 'manager', 'superadmin']), async (req, res) => {
+router.get('/', tenantAuth, async (req, res) => {
   try {
-    const query = addTenantFilter(req, {});
+    let query = addTenantFilter(req, {});
+
+    if (req.user.role === 'agent') {
+      query.role = 'agent';
+    }
+
+    // Tenant admins should only see agents and managers they registered (no superadmins, no other admins)
+    if (req.user.role === 'admin') {
+      query.role = { $in: ['agent', 'manager'] };
+    }
 
     const users = await User.find(query)
       .select('-password -otp')
@@ -28,7 +37,6 @@ router.get('/', tenantAuth, requireRole(['admin', 'manager', 'superadmin']), asy
       .lean()
       .sort({ createdAt: -1 });
 
-    // Enrich users with tenant logo for frontend session sync
     const enrichedUsers = users.map(u => ({
       ...u,
       tenantLogo: u.tenantLogo || u.tenant?.settings?.logo || null,
@@ -46,7 +54,6 @@ router.post('/', tenantAuth, requireRole(['admin', 'manager', 'superadmin']), ch
     const {
       name, email, phone, role = 'agent', nin = null,
       employeeId = null, department = '', region = '',
-      address = null,
     } = req.body || {};
 
     if (!name || !email) {
@@ -302,9 +309,9 @@ router.delete('/:id', tenantAuth, requireRole(['admin', 'manager', 'superadmin']
         if (Object.keys(updates).length > 0) {
           await Client.findByIdAndUpdate(client._id, updates).session(session);
         }
-      } catch (clientErr) {
-        // Continue with other clients
-      }
+} catch {
+         // Continue with other clients
+       }
     }
 
     // 2. Reassign user's deals to another agent (any active user)

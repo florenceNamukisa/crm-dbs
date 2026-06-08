@@ -1,6 +1,5 @@
 import express from 'express';
 import Dashboard from '../models/Dashboard.js';
-import User from '../models/User.js';
 import Client from '../models/Client.js';
 import Deal from '../models/Deal.js';
 import Sale from '../models/Sale.js';
@@ -8,7 +7,7 @@ import Meeting from '../models/Meeting.js';
 import Schedule from '../models/Schedule.js';
 import AuditLog from '../models/AuditLog.js';
 import Notification from '../models/Notification.js';
-import { tenantAuth, requireRole } from '../middleware/tenantAuth.js';
+import { tenantAuth } from '../middleware/tenantAuth.js';
 import { logAction } from '../utils/auditLog.js';
 
 const router = express.Router();
@@ -391,18 +390,19 @@ router.get('/:id/kpis', async (req, res) => {
 
 // Helper functions for KPI calculations
 async function calculateKPI(config, tenantQuery, dateFilter, agentFilter) {
-  const { metric, period } = config;
+  const { metric } = config;
 
   switch (metric) {
-    case 'total_clients':
+    case 'total_clients': {
       const totalClients = await Client.countDocuments({
         ...tenantQuery,
         ...agentFilter,
         ...(Object.keys(dateFilter).length > 0 && { createdAt: dateFilter })
       });
       return { value: totalClients, label: 'Total Clients' };
+    }
 
-    case 'active_deals':
+    case 'active_deals': {
       const activeDeals = await Deal.countDocuments({
         ...tenantQuery,
         ...agentFilter,
@@ -410,8 +410,9 @@ async function calculateKPI(config, tenantQuery, dateFilter, agentFilter) {
         ...(Object.keys(dateFilter).length > 0 && { createdAt: dateFilter })
       });
       return { value: activeDeals, label: 'Active Deals' };
+    }
 
-    case 'monthly_sales':
+    case 'monthly_sales': {
       const monthlySales = await Sale.aggregate([
         {
           $match: {
@@ -433,25 +434,27 @@ async function calculateKPI(config, tenantQuery, dateFilter, agentFilter) {
         label: 'Monthly Sales',
         format: 'currency'
       };
+    }
 
-    case 'conversion_rate':
+    case 'conversion_rate': {
       const totalDeals = await Deal.countDocuments({
         ...tenantQuery,
         ...agentFilter,
         ...(Object.keys(dateFilter).length > 0 && { createdAt: dateFilter })
       });
-      const wonDeals = await Deal.countDocuments({
+      const wonDealsAgg = await Deal.countDocuments({
         ...tenantQuery,
         ...agentFilter,
         stage: 'won',
         ...(Object.keys(dateFilter).length > 0 && { createdAt: dateFilter })
       });
-      const rate = totalDeals > 0 ? (wonDeals / totalDeals * 100) : 0;
+      const rate = totalDeals > 0 ? (wonDealsAgg / totalDeals * 100) : 0;
       return {
         value: Math.round(rate * 100) / 100,
         label: 'Conversion Rate',
         format: 'percentage'
       };
+    }
 
     default:
       return { value: 0, label: 'Unknown Metric' };
@@ -459,7 +462,7 @@ async function calculateKPI(config, tenantQuery, dateFilter, agentFilter) {
 }
 
 async function calculateChartData(config, tenantQuery, dateFilter, agentFilter) {
-  const { chartType, metric, groupBy } = config;
+  const { metric } = config;
 
   switch (metric) {
     case 'sales_trend':
@@ -640,7 +643,7 @@ async function getPerformanceTrendData(tenantQuery, dateFilter, agentFilter) {
   return { data: performanceData };
 }
 
-async function calculateMetric(config, tenantQuery, dateFilter, agentFilter) {
+async function calculateMetric(_config, _tenantQuery, _dateFilter, _agentFilter) {
   // Custom metric calculations
   return { value: 0, trend: 0 };
 }

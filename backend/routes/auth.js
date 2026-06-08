@@ -147,11 +147,20 @@ router.post('/login', async (req, res) => {
       { expiresIn: '24h' }
     );
 
+    // Map backend roles to frontend-compatible roles
+    const roleMap = {
+      'superadmin': 'superadmin',
+      'admin': 'tenant_admin',
+      'manager': 'sales_manager',
+      'agent': 'sales_agent'
+    };
+    const mappedRole = roleMap[user.role] || user.role;
+
     const userResponse = {
       id: user._id,
       name: user.name,
       email: user.email,
-      role: user.role,
+      role: mappedRole,
       tenant: user.tenant ? { id: user.tenant._id, name: user.tenant.name, logo: user.tenantLogo || user.tenant.settings?.logo || null } : null,
       isFirstLogin: Boolean(user.isFirstLogin),
       otp: user.isFirstLogin ? user.otp : undefined,

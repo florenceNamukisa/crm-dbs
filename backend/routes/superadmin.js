@@ -1,5 +1,4 @@
 import express from 'express';
-import mongoose from 'mongoose';
 import AuditLog from '../models/AuditLog.js';
 import LoginLog from '../models/LoginLog.js';
 import Notification from '../models/Notification.js';
@@ -14,6 +13,7 @@ import Sale from '../models/Sale.js';
 import Subscription from '../models/Subscription.js';
 import SecurityBlock from '../models/SecurityBlock.js';
 import { tenantAuth, requireSuperAdmin } from '../middleware/tenantAuth.js';
+import { cpus, totalmem } from 'os';
 
 const router = express.Router();
 
@@ -69,10 +69,10 @@ router.get('/system/health', requireSuperAdmin, async (req, res) => {
     const health = {
       cpu: {
         usage: metrics?.cpuUsage || Math.round((cpuUsage.user + cpuUsage.system) / 1000000),
-        cores: require('os').cpus().length
+        cores: cpus().length
       },
       memory: {
-        total: require('os').totalmem(),
+        total: totalmem(),
         used: memory.heapUsed + memory.rss,
         usage: metrics?.memoryUsage || Math.round((memory.heapUsed / memory.heapTotal) * 100)
       },

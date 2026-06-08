@@ -132,7 +132,8 @@ router.post('/', async (req, res) => {
         }
       );
 
-      if (emailResult.success) {
+if (emailResult.success) {
+        // Email sent successfully
       } else {
         console.error('❌ Failed to send meeting invite:', emailResult.error);
       }

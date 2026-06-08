@@ -45,7 +45,7 @@ router.get('/analytics', async (req, res) => {
     const agents = await User.find({ role: 'agent', ...req.tenantQuery }).select('name email _id');
 
     // 2. Fetch all data
-    const [deals, schedules, sales, clients] = await Promise.all([
+    const [deals, schedules, sales, _clients] = await Promise.all([
       Deal.find(dealFilter).populate('agent', 'name'),
       Schedule.find(scheduleFilter).populate('agent', 'name'),
       Sale.find(saleFilter).populate('agent', 'name'),
@@ -338,15 +338,6 @@ router.get('/analytics', async (req, res) => {
     res.status(500).json({ message: 'Failed to fetch analytics', error: error.message });
   }
 });
-
-const calculateRating = (won, total, revenue) => {
-  const rate = total > 0 ? (won / total) : 0;
-  if (rate >= 0.8 && revenue > 50000) return 5;
-  if (rate >= 0.6 && revenue > 20000) return 4;
-  if (rate >= 0.4) return 3;
-  if (rate >= 0.2) return 2;
-  return 1;
-};
 
 // Setup multer for file uploads (temporary storage)
 const upload = multer({ dest: 'uploads/' });

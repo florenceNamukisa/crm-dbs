@@ -3,8 +3,7 @@ import Deal from '../models/Deal.js';
 import Client from '../models/Client.js';
 import Sale from '../models/Sale.js';
 import User from '../models/User.js';
-import { tenantAuth, requireRole } from '../middleware/tenantAuth.js';
-import { logAction } from '../utils/auditLog.js';
+import { tenantAuth } from '../middleware/tenantAuth.js';
 
 const router = express.Router();
 
@@ -302,7 +301,7 @@ function calculateConversionProbability(score) {
   return Math.round(probability * 100);
 }
 
-function getRecommendedAction(score, client) {
+function getRecommendedAction(score, _client) {
   if (score >= 80) return 'High priority - Schedule immediate follow-up';
   if (score >= 60) return 'Medium priority - Send personalized proposal';
   if (score >= 40) return 'Low priority - Nurture with educational content';
@@ -356,7 +355,7 @@ function predictAgentPerformance(performanceData, agent) {
   };
 }
 
-function generatePerformanceRecommendations(prediction, agent) {
+function generatePerformanceRecommendations(prediction, _agent) {
   const recommendations = [];
 
   if (prediction.trend === 'improving') {

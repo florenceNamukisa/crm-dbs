@@ -1,7 +1,7 @@
 import express from 'express';
 import User from '../models/User.js';
 import Deal from '../models/Deal.js';
-import { getAgentRankings, updateAgentRating } from '../utils/ratingSystem.js';
+import { getAgentRankings } from '../utils/ratingSystem.js';
 import { tenantAuth } from '../middleware/tenantAuth.js';
 
 const router = express.Router();

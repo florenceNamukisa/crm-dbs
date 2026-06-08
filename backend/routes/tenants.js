@@ -1,5 +1,4 @@
 import express from 'express';
-import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
 import Tenant from '../models/Tenant.js';
@@ -651,16 +650,12 @@ router.patch('/branding/logo', async (req, res) => {
     const tenant = await Tenant.findByIdAndUpdate(req.tenantId, update, { new: true });
     if (!tenant) return res.status(404).json({ message: 'Tenant not found' });
 
-    // Update all users in this tenant with the new logo so their session data stays in sync
+// Update all users in this tenant with the new logo so their session data stays in sync
     if (logo) {
-      try {
-        await User.updateMany(
-          { tenant: req.tenantId },
-          { $set: { tenantLogo: logo } }
-        );
-      } catch (e) {
-        // Non-critical: user sessions will pick up logo from tenant on next /me call
-      }
+      await User.updateMany(
+        { tenant: req.tenantId },
+        { $set: { tenantLogo: logo } }
+      ).catch(() => {}); // Non-critical: user sessions will pick up logo from tenant on next /me call
     }
 
     res.json({ message: 'Branding updated successfully', tenant, logo: tenant.settings?.logo || null });
@@ -961,8 +956,7 @@ router.delete('/:id', requireSuperAdmin, async (req, res) => {
     await Schedule.deleteMany({ tenant: tenantId }).session(session);
 
     // Delete Deal records (references Client, User)
-    const deals = await Deal.find({ tenant: tenantId }).session(session);
-    const dealIds = deals.map(d => d._id);
+    await Deal.find({ tenant: tenantId }).session(session);
     await Deal.deleteMany({ tenant: tenantId }).session(session);
 
     // Delete Sale records (references Client, User)

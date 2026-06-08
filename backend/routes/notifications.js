@@ -172,3 +172,31 @@ router.get('/stats/summary', async (req, res) => {
 
 export { router as notificationRoutes };
 
+// Send email via notifications route (frontend compatibility)
+router.post('/send-email', tenantAuth, async (req, res) => {
+  try {
+    const { to, subject, body } = req.body;
+
+    if (!to || !subject || !body) {
+      return res.status(400).json({ message: 'To, subject and body are required' });
+    }
+
+    const { sendEmail } = await import('../services/emailService.js');
+    const result = await sendEmail(to, 'clientEmail', {
+      clientName: 'Valued Client',
+      agentName: req.user.name,
+      subject,
+      message: body
+    });
+
+    if (!result.success) {
+      return res.status(500).json({ message: 'Failed to send email', error: result.error });
+    }
+
+    res.json({ message: 'Email sent successfully', messageId: result.messageId });
+  } catch (error) {
+    console.error('Error sending email via notifications:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+

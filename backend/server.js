@@ -178,6 +178,7 @@ const updateAgentRankings = async () => {
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/clients/contacts', contactRoutes);
 app.use('/api/clients', clientRoutes);
 app.use('/api/deals', dealRoutes);
 app.use('/api/schedules', scheduleRoutes);
