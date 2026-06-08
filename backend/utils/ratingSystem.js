@@ -36,7 +36,7 @@ export const calculateAgentRatings = async (tenantId = null) => {
     const maxValue = Math.max(...agentStats.map(a => a.totalWonValue));
     const avgValue = agentStats.reduce((sum, a) => sum + a.totalWonValue, 0) / agentStats.length;
 
-    const ratings = agentStats.map((agent, index) => {
+    const ratings = agentStats.map((agent, _index) => {
       let rating = 1; // Default rating
 
       // Rating based on value thresholds relative to max
@@ -114,14 +114,6 @@ export const getAgentRankings = async (tenantId = null) => {
  */
 export const updateAgentRating = async (agentId) => {
   try {
-    // Get agent's won deals
-    const wonDeals = await Deal.find({
-      agent: agentId,
-      stage: 'won'
-    });
-
-    const totalWonValue = wonDeals.reduce((sum, deal) => sum + (Number(deal.value) || 0), 0);
-
     // Get all agents for comparison
     const allAgents = await User.find({ role: 'agent', isActive: true });
     const allAgentStats = await Promise.all(

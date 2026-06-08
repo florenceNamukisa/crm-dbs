@@ -7,8 +7,7 @@ const meetingSchema = new mongoose.Schema({
   },
   client: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Client',
-    required: true
+    ref: 'Client'
   },
   agent: {
     type: mongoose.Schema.Types.ObjectId,
@@ -28,7 +27,7 @@ const meetingSchema = new mongoose.Schema({
   },
   location: {
     type: String,
-    enum: ['Google Meet', 'In Person'],
+    enum: ['Google Meet', 'In Person', 'Phone Call'],
     required: true
   },
   googleMeetLink: {
@@ -66,7 +65,7 @@ meetingSchema.pre('save', function(next) {
   }
   
   // Clear Google Meet link if location is In Person
-  if (this.location === 'In Person') {
+  if (this.location === 'In Person' || this.location === 'Phone Call') {
     this.googleMeetLink = undefined;
   }
   

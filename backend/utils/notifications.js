@@ -91,7 +91,7 @@ const getNotificationData = (type, actor, metadata) => {
         priority: 'medium'
       };
 
-    case 'meeting_response':
+    case 'meeting_response': {
       const responseText = metadata.response === 'accepted' ? 'accepted' :
                           metadata.response === 'declined' ? 'declined' :
                           'responded tentatively to';
@@ -100,6 +100,7 @@ const getNotificationData = (type, actor, metadata) => {
         message: `${metadata.clientName} has ${responseText} the meeting: "${metadata.meetingTitle}"`,
         priority: 'medium'
       };
+    }
 
     case 'sale_created':
       return {

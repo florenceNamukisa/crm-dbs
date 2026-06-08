@@ -28,8 +28,8 @@ const load = async (rel) => {
     const filePath = path.join(__dirname, '..', 'models', rel);
     const mod = await import(pathToFileURL(filePath).href);
     return mod.default;
-  } catch (e) {
-    console.warn(`   ! could not load ${rel}: ${e.message.split('\n')[0]}`);
+  } catch (_e) {
+    console.warn(`   ! could not load ${rel}: ${_e.message.split('\n')[0]}`);
     return null;
   }
 };
@@ -132,7 +132,8 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error('❌ Cleanup failed:', err);
-  try { mongoose.disconnect(); } catch {}
+  console.log('❌ Cleanup failed:', err);
+  // Intentionally ignore cleanup errors on failure
+  void mongoose.disconnect().catch(() => {});
   process.exit(1);
 });

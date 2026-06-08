@@ -1,7 +1,6 @@
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import Tenant from '../models/Tenant.js';
-import Subscription from '../models/Subscription.js';
 
 /**
  * Tenant-Aware Authentication Middleware
@@ -30,7 +29,7 @@ export const tenantAuth = async (req, res, next) => {
     let decoded;
     try {
       decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret');
-    } catch (error) {
+    } catch {
       return res.status(401).json({ 
         message: 'Invalid or expired token.',
         code: 'INVALID_TOKEN'
@@ -58,7 +57,8 @@ export const tenantAuth = async (req, res, next) => {
       });
     }
 
-    // Handle platform roles without tenant restrictions
+    // Handle platform roles without tenant restrictions (superadmin & platform manager)
+    // Admin role is tenant-scoped — they should only see their own company's data
     if (user.role === 'superadmin' || user.role === 'manager') {
       req.user = {
         userId: user._id,
@@ -147,8 +147,8 @@ export const tenantAuth = async (req, res, next) => {
     };
 
     next();
-  } catch (error) {
-    console.error('Tenant auth middleware error:', error);
+  } catch (err) {
+    console.error('Tenant auth middleware error:', err);
     res.status(500).json({ 
       message: 'Authentication service error.',
       code: 'AUTH_SERVICE_ERROR'
@@ -175,9 +175,11 @@ export const requireRole = (allowedRoles) => {
       return next();
     }
 
-    // Check if user has required role
+    // Check if user has required role (also accept frontend-mapped role names)
     const userRole = req.user.role;
-    if (!allowedRoles.includes(userRole)) {
+    const frontendRoleMap = { 'agent': 'sales_agent', 'admin': 'tenant_admin', 'manager': 'sales_manager' };
+    const effectiveRole = frontendRoleMap[userRole] || userRole;
+    if (!allowedRoles.includes(userRole) && !allowedRoles.includes(effectiveRole)) {
       return res.status(403).json({ 
         message: `Access denied. Required role: ${allowedRoles.join(' or ')}`,
         code: 'INSUFFICIENT_ROLE'
@@ -252,8 +254,8 @@ export const requireFeature = (featureName) => {
       }
 
       next();
-    } catch (error) {
-      console.error('Feature access check error:', error);
+    } catch (err) {
+      console.error('Feature access check error:', err);
       res.status(500).json({ 
         message: 'Feature access service error.',
         code: 'FEATURE_SERVICE_ERROR'
@@ -326,9 +328,9 @@ export const checkUsageLimit = (resourceType) => {
         });
       }
 
-      next();
-    } catch (error) {
-      console.error('Usage limit check error:', error);
+next();
+    } catch (err) {
+      console.error('Usage limit check error:', err);
       res.status(500).json({ 
         message: 'Usage limit service error.',
         code: 'USAGE_SERVICE_ERROR'

@@ -32,7 +32,6 @@ const saleItemSchema = new mongoose.Schema({
 const saleSchema = new mongoose.Schema({
   customerName: {
     type: String,
-    required: true,
     trim: true
   },
   customerEmail: {
@@ -43,6 +42,32 @@ const saleSchema = new mongoose.Schema({
   customerPhone: {
     type: String,
     trim: true
+  },
+  // Sales CRM fields
+  clientName: {
+    type: String,
+    default: ''
+  },
+  amount: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  stage: {
+    type: String,
+    enum: ['Contacted', 'Proposal', 'Negotiations', 'Closed (Won)', 'Lost'],
+    default: 'Contacted'
+  },
+  type: {
+    type: String,
+    enum: ['New', 'Existing'],
+    default: 'New'
+  },
+  probability: {
+    type: Number,
+    default: 10,
+    min: 0,
+    max: 100
   },
   items: [saleItemSchema],
   totalAmount: {
@@ -62,7 +87,7 @@ const saleSchema = new mongoose.Schema({
   },
   currency: {
     type: String,
-    default: 'USD'
+    default: 'UGX'
   },
   exchangeRate: {
     type: Number,
@@ -71,12 +96,11 @@ const saleSchema = new mongoose.Schema({
   paymentMethod: {
     type: String,
     enum: ['cash', 'credit'],
-    required: true
   },
   status: {
     type: String,
     enum: ['completed', 'pending', 'cancelled'],
-    default: 'completed'
+    default: 'pending'
   },
   agent: {
     type: mongoose.Schema.Types.ObjectId,
@@ -121,7 +145,6 @@ const saleSchema = new mongoose.Schema({
       enum: ['cash', 'bank_transfer', 'online'],
       default: 'cash'
     },
-    // Bank transfer specific fields
     cardNumber: String,
     bankName: String,
     accountName: String,
@@ -134,50 +157,38 @@ const saleSchema = new mongoose.Schema({
 // Calculate totals before saving
 saleSchema.pre('save', function(next) {
   try {
-    let totalAmount = 0;
-    let discountAmount = 0;
+    if (this.items && Array.isArray(this.items) && this.items.length > 0) {
+      let totalAmount = 0;
+      let discountAmount = 0;
 
-    if (!this.items || !Array.isArray(this.items) || this.items.length === 0) {
-      return next(new Error('At least one item is required'));
-    }
+      this.items.forEach(item => {
+        const quantity = Number(item.quantity) || 0;
+        const unitPrice = Number(item.unitPrice) || 0;
+        const discount = Number(item.discount) || 0;
 
-    let hasInvalidItem = false;
-    this.items.forEach(item => {
-      // Ensure all required fields are present and valid
-      const quantity = Number(item.quantity) || 0;
-      const unitPrice = Number(item.unitPrice) || 0;
-      const discount = Number(item.discount) || 0;
+        const itemTotal = quantity * unitPrice;
+        const itemDiscount = itemTotal * (discount / 100);
 
-      if (quantity <= 0) {
-        hasInvalidItem = true;
-        console.error('Invalid quantity for item:', item);
-        return;
-      }
+        item.totalPrice = itemTotal - itemDiscount;
+
+        totalAmount += itemTotal;
+        discountAmount += itemDiscount;
+      });
+
+      this.totalAmount = totalAmount;
+      this.discountAmount = discountAmount;
+      this.finalAmount = totalAmount - discountAmount;
       
-      if (unitPrice < 0) {
-        hasInvalidItem = true;
-        console.error('Invalid unit price for item:', item);
-        return;
+      // If no explicit amount set, use finalAmount
+      if (!this.amount || this.amount === 0) {
+        this.amount = this.finalAmount;
       }
-
-      const itemTotal = quantity * unitPrice;
-      const itemDiscount = itemTotal * (discount / 100);
-
-      // Store calculated total price on the item
-      item.totalPrice = itemTotal - itemDiscount;
-
-      totalAmount += itemTotal;
-      discountAmount += itemDiscount;
-    });
-
-    if (hasInvalidItem) {
-      return next(new Error('Invalid item data: quantity must be greater than 0 and unit price must be non-negative'));
     }
-
-    // Set the calculated totals
-    this.totalAmount = totalAmount;
-    this.discountAmount = discountAmount;
-    this.finalAmount = totalAmount - discountAmount;
+    
+    // If items not provided but amount is set, use amount
+    if ((!this.items || this.items.length === 0) && this.amount) {
+      this.finalAmount = this.amount;
+    }
 
     next();
   } catch (error) {
