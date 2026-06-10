@@ -49,6 +49,15 @@ export function useTenants() {
   });
 }
 
+export function useTenantProfile(id: string | null) {
+  return useQuery({
+    queryKey: ["tenant", "profile", id],
+    queryFn: () => apiFetch<any>(`/tenants/${id}/profile`),
+    enabled: !!id,
+    staleTime: 30_000,
+  });
+}
+
 export function useCreateTenant() {
   const qc = useQueryClient();
   return useMutation({
@@ -73,7 +82,39 @@ export function useTenantControl() {
       apiFetch<any>(`/tenants/${id}/control`, { method: "PATCH", body: JSON.stringify({ action, reason }) }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["tenants"] });
+      qc.invalidateQueries({ queryKey: ["tenant", "profile"] });
       qc.invalidateQueries({ queryKey: ["superadmin", "overview"] });
     },
+  });
+}
+
+export function useUpdateTenant() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) =>
+      apiFetch<any>(`/tenants/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["tenants"] });
+      qc.invalidateQueries({ queryKey: ["tenant", "profile"] });
+    },
+  });
+}
+
+export function useAssignPlan() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, planName }: { id: string; planName: string }) =>
+      apiFetch<any>(`/tenants/${id}/subscription`, { method: "PATCH", body: JSON.stringify({ planName }) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["tenants"] });
+      qc.invalidateQueries({ queryKey: ["tenant", "profile"] });
+    },
+  });
+}
+
+export function useImpersonateTenant() {
+  return useMutation({
+    mutationFn: (tenantId: string) =>
+      apiFetch<{ token: string; expiresIn: string; user: any }>(`/tenants/${tenantId}/impersonate-admin`, { method: "POST" }),
   });
 }

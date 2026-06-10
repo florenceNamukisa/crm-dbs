@@ -3,6 +3,8 @@ import {
   Building2, CircleDollarSign, CreditCard, FileBarChart, FileClock,
   Gauge, Layers3, LogOut, Menu, Network, Plus, Download,
   Settings, Users, UserCheck, UserX, ShoppingCart, Activity,
+  ChevronRight, ArrowLeft, Eye, Edit3, UserCog,
+  Shield, AlertTriangle, MessageSquare,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -15,9 +17,10 @@ import { ThemeToggle } from "@/components/ui/theme-toggle";
 import {
   useSuperAdminOverview, useSuperAdminAnalytics, useTenants,
   useCreateTenant, useTenantControl, useSuperAdminActivity,
+  useTenantProfile, useUpdateTenant, useAssignPlan, useImpersonateTenant,
 } from "@/lib/api/superadmin";
 import { useUsers } from "@/lib/api/users";
-import { clearSession, getStoredUser, apiFetch } from "@/lib/auth";
+import { clearSession, getStoredUser, saveSession } from "@/lib/auth";
 import { useNavigate } from "@tanstack/react-router";
 
 const ORANGE = "#ff8c00";
@@ -164,44 +167,305 @@ function AddTenantModal({ open, onClose }: { open: boolean; onClose: () => void 
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// ASSIGN PLAN MODAL
+// TENANT DETAIL VIEW
 // ═══════════════════════════════════════════════════════════════════════════════
-function AssignPlanModal({ open, onClose, tenant }: { open: boolean; onClose: () => void; tenant: any }) {
-  const [plan, setPlan] = useState("professional");
-  async function handleSubmit(e: React.FormEvent) {
+function TenantDetailView({ tenantId, onBack }: { tenantId: string; onBack: () => void }) {
+  const { data, isLoading } = useTenantProfile(tenantId);
+  const tenantControl = useTenantControl();
+  const updateTenant = useUpdateTenant();
+  const assignPlan = useAssignPlan();
+  const impersonate = useImpersonateTenant();
+  const navigate = useNavigate();
+
+  const tenant = data?.tenant;
+  const users: any[] = data?.users ?? [];
+  const timeline: any[] = data?.timeline ?? [];
+  const impact = data?.impact;
+
+  // Edit tenant modal
+  const [editOpen, setEditOpen] = useState(false);
+  const [editForm, setEditForm] = useState({ name: "", email: "", phone: "" });
+
+  // Plan modal
+  const [planOpen, setPlanOpen] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState("professional");
+
+  // Status confirm modal
+  const [confirmAction, setConfirmAction] = useState<string | null>(null);
+
+  function openEdit() {
+    if (!tenant) return;
+    setEditForm({ name: tenant.name || "", email: tenant.email || "", phone: tenant.phone || "" });
+    setEditOpen(true);
+  }
+
+  async function handleEdit(e: React.FormEvent) {
     e.preventDefault();
     try {
-      await apiFetch(`/tenants/${tenant._id}/subscription`, {
-        method: "PATCH",
-        body: JSON.stringify({ planName: plan }),
-      });
-      toast.success("Plan updated", { description: `${tenant.name} now on ${plan}` });
-      onClose();
+      await updateTenant.mutateAsync({ id: tenantId, data: editForm });
+      toast.success("Tenant updated");
+      setEditOpen(false);
     } catch (err: any) { toast.error("Failed", { description: err.message }); }
   }
+
+  async function handleControl(action: string) {
+    try {
+      await tenantControl.mutateAsync({ id: tenantId, action });
+      toast.success(`Tenant ${action} successful`);
+      setConfirmAction(null);
+    } catch (err: any) { toast.error("Failed", { description: err.message }); }
+  }
+
+  async function handleAssignPlan(e: React.FormEvent) {
+    e.preventDefault();
+    try {
+      await assignPlan.mutateAsync({ id: tenantId, planName: selectedPlan });
+      toast.success("Plan updated");
+      setPlanOpen(false);
+    } catch (err: any) { toast.error("Failed", { description: err.message }); }
+  }
+
+  async function handleImpersonate() {
+    try {
+      const result = await impersonate.mutateAsync(tenantId);
+      saveSession(result.token, {
+        id: result.user.id,
+        name: result.user.name,
+        email: result.user.email,
+        role: "tenant_admin",
+        tenantId: result.user.tenant?.id || tenantId,
+        tenantName: result.user.tenant?.name || tenant?.name || "",
+      });
+      toast.success(`Impersonating ${result.user.name}`, {
+        description: "You are now logged in as this tenant's admin. Token expires in 30 min.",
+      });
+      navigate({ to: "/tenant-admin" });
+    } catch (err: any) {
+      toast.error("Impersonation failed", { description: err.message });
+    }
+  }
+
+  function openWhatsApp() {
+    const phone = tenant?.phone || users[0]?.phone;
+    if (!phone) {
+      toast.error("No phone number available for this tenant");
+      return;
+    }
+    const cleaned = phone.replace(/[^0-9]/g, "");
+    window.open(`https://wa.me/${cleaned}`, "_blank");
+  }
+
+  if (!tenantId) return null;
+  if (isLoading) return <div className="py-12 text-center text-muted-foreground">Loading tenant details...</div>;
+  if (!tenant) return <div className="py-12 text-center text-muted-foreground">Tenant not found</div>;
+
+  const adminUsers = users.filter((u: any) => u.role === "admin");
+  const agentUsers = users.filter((u: any) => u.role === "agent" || u.role === "manager");
+
   return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-sm">
-        <DialogHeader><DialogTitle>Assign Plan — {tenant?.name}</DialogTitle></DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-3 pt-2">
-          <div><label className="mb-1 block text-xs font-medium text-muted-foreground">Plan</label>
-            <select value={plan} onChange={e => setPlan(e.target.value)} className="h-9 w-full rounded-md border border-border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-primary/40">
-              <option value="starter">Starter</option><option value="professional">Professional</option><option value="enterprise">Enterprise</option></select></div>
-          <button type="submit" className="flex h-10 w-full items-center justify-center gap-2 rounded-md gradient-orange font-semibold text-white hover:opacity-90">Assign Plan</button>
-        </form>
-      </DialogContent>
-    </Dialog>
+    <div className="space-y-4">
+      {/* Back button & header */}
+      <div className="flex items-center gap-3 mb-2">
+        <button onClick={onBack} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="h-3.5 w-3.5" /> Back to Tenants
+        </button>
+        <div className="text-lg font-bold flex items-center gap-2">
+          <Building2 className="h-5 w-5 text-orange-400" />
+          {tenant.name}
+          <span className={badge(tenant.status)}>{(tenant.status || "active").charAt(0).toUpperCase() + (tenant.status || "active").slice(1)}</span>
+        </div>
+      </div>
+
+      {/* Action buttons bar */}
+      <div className="flex flex-wrap items-center gap-2">
+        {tenant.status === "active" ? (
+          <button onClick={() => setConfirmAction("suspend")} className="flex items-center gap-1.5 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/20">
+            <AlertTriangle className="h-3.5 w-3.5" /> Suspend
+          </button>
+        ) : (
+          <button onClick={() => handleControl("reactivate")} className="flex items-center gap-1.5 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-400 hover:bg-emerald-500/20">
+            <UserCheck className="h-3.5 w-3.5" /> Activate
+          </button>
+        )}
+        <button onClick={() => setConfirmAction("deactivate")} className="flex items-center gap-1.5 rounded-md border border-zinc-500/30 bg-zinc-500/10 px-3 py-1.5 text-xs font-medium text-zinc-400 hover:bg-zinc-500/20">
+          <UserX className="h-3.5 w-3.5" /> Deactivate
+        </button>
+        <button onClick={openEdit} className="flex items-center gap-1.5 rounded-md border border-blue-500/30 bg-blue-500/10 px-3 py-1.5 text-xs font-medium text-blue-400 hover:bg-blue-500/20">
+          <Edit3 className="h-3.5 w-3.5" /> Edit
+        </button>
+        <button onClick={() => setPlanOpen(true)} className="flex items-center gap-1.5 rounded-md border border-orange-500/30 bg-orange-500/10 px-3 py-1.5 text-xs font-medium text-orange-400 hover:bg-orange-500/20">
+          <Layers3 className="h-3.5 w-3.5" /> Change Plan
+        </button>
+        <button onClick={handleImpersonate} disabled={impersonate.isPending} className="flex items-center gap-1.5 rounded-md border border-purple-500/30 bg-purple-500/10 px-3 py-1.5 text-xs font-medium text-purple-400 hover:bg-purple-500/20 disabled:opacity-50">
+          <Eye className="h-3.5 w-3.5" /> {impersonate.isPending ? "Impersonating..." : "Impersonate"}
+        </button>
+        <button onClick={openWhatsApp} className="flex items-center gap-1.5 rounded-md border border-green-500/30 bg-green-500/10 px-3 py-1.5 text-xs font-medium text-green-400 hover:bg-green-500/20">
+          <MessageSquare className="h-3.5 w-3.5" /> WhatsApp
+        </button>
+      </div>
+
+      {/* Stats cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <KpiCard icon={Users} label="Total Users" value={String(users.length)} sub={`${users.filter((u: any) => u.isActive).length} active`} up={true} />
+        <KpiCard icon={UserCog} label="Admins" value={String(adminUsers.length)} sub="tenant administrators" up={true} />
+        <KpiCard icon={UserCheck} label="Agents" value={String(agentUsers.length)} sub="sales agents & managers" up={true} />
+        <KpiCard icon={Shield} label="Security Score" value={data?.securityScore != null ? `${data.securityScore}%` : "—"} sub={data?.failedLogins ? `${data.failedLogins} failed logins` : "secure"} up={data?.securityScore != null && data.securityScore >= 70} />
+      </div>
+
+      {/* Users section - Shows ALL users with their info */}
+      <Panel title={`Users (${users.length})`}>
+        <div className="overflow-auto">
+          <table className="w-full text-xs min-w-[600px]">
+            <thead className="text-muted-foreground">
+              <tr className="text-left">
+                {["Name", "Email", "Phone", "Role", "Status", "Last Active"].map(h => <th key={h} className="pb-2 pr-3 font-normal">{h}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {users.length === 0 && <tr><td colSpan={6} className="py-4 text-center text-muted-foreground">No users in this tenant</td></tr>}
+              {users.map((u: any) => (
+                <tr key={u._id} className="border-t border-border/50">
+                  <td className="py-2 pr-3 font-medium">{u.name}</td>
+                  <td className="pr-3 text-muted-foreground">{u.email}</td>
+                  <td className="pr-3 text-muted-foreground">{u.phone || "—"}</td>
+                  <td className="pr-3 capitalize">{u.role}</td>
+                  <td className="pr-3"><span className={badge(u.isActive ? "Active" : "Inactive")}>{u.isActive ? "Active" : "Inactive"}</span></td>
+                  <td className="pr-3 text-muted-foreground">{u.updatedAt ? new Date(u.updatedAt).toLocaleDateString() : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
+
+      {/* Activity Timeline */}
+      <Panel title="Recent Activity" action={`${timeline.length} events`}>
+        <div className="space-y-1.5 text-xs max-h-60 overflow-y-auto">
+          {timeline.length === 0 && <div className="py-4 text-center text-muted-foreground">No activity recorded</div>}
+          {timeline.slice(0, 20).map((entry: any) => (
+            <div key={entry._id} className="flex items-center gap-2 py-1.5 border-b border-border/20 last:border-0">
+              <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${
+                entry.action?.includes("SUSPEND") || entry.action?.includes("DELETE") || entry.status === "failed"
+                  ? "bg-red-500"
+                  : entry.action?.includes("CREATE") || entry.status === "success"
+                    ? "bg-emerald-500"
+                    : "bg-orange-500"
+              }`} />
+              <span className="flex-1 truncate">{entry.description || entry.action}</span>
+              <span className="text-muted-foreground shrink-0">
+                {entry.createdAt ? new Date(entry.createdAt).toLocaleDateString() : "—"}
+              </span>
+            </div>
+          ))}
+        </div>
+      </Panel>
+
+      {/* Impact stats */}
+      {impact && (
+        <Panel title="Business Impact">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-xs">
+            <div className="p-2 rounded bg-border/10 text-center">
+              <div className="text-lg font-bold">{impact.users || 0}</div>
+              <div className="text-muted-foreground">Users</div>
+            </div>
+            <div className="p-2 rounded bg-border/10 text-center">
+              <div className="text-lg font-bold">{impact.clients || 0}</div>
+              <div className="text-muted-foreground">Clients</div>
+            </div>
+            <div className="p-2 rounded bg-border/10 text-center">
+              <div className="text-lg font-bold">{impact.deals || 0}</div>
+              <div className="text-muted-foreground">Deals</div>
+            </div>
+            <div className="p-2 rounded bg-border/10 text-center">
+              <div className="text-lg font-bold">{impact.sales || 0}</div>
+              <div className="text-muted-foreground">Sales</div>
+            </div>
+            <div className="p-2 rounded bg-border/10 text-center">
+              <div className="text-lg font-bold">{fmt(impact.revenue || 0)}</div>
+              <div className="text-muted-foreground">Revenue</div>
+            </div>
+          </div>
+        </Panel>
+      )}
+
+      {/* Confirm action modal */}
+      <Dialog open={!!confirmAction} onOpenChange={() => setConfirmAction(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-red-400" />
+              Confirm {confirmAction === "suspend" ? "Suspension" : "Deactivation"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="text-sm text-muted-foreground">
+            {confirmAction === "suspend"
+              ? `Are you sure you want to suspend ${tenant.name}? All users will lose access until reactivated.`
+              : `Are you sure you want to deactivate ${tenant.name}? The organization will be marked as inactive.`}
+          </div>
+          <div className="flex justify-end gap-2 pt-3">
+            <button onClick={() => setConfirmAction(null)} className="px-4 py-2 rounded-md border border-border text-xs hover:bg-accent">Cancel</button>
+            <button onClick={() => handleControl(confirmAction!)} className="px-4 py-2 rounded-md bg-red-500 text-white text-xs hover:bg-red-600">
+              {confirmAction === "suspend" ? "Suspend" : "Deactivate"}
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit tenant modal */}
+      <Dialog open={editOpen} onOpenChange={() => setEditOpen(false)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Edit {tenant.name}</DialogTitle></DialogHeader>
+          <form onSubmit={handleEdit} className="space-y-3 pt-2">
+            <div><label className="mb-1 block text-xs font-medium text-muted-foreground">Company Name</label>
+              <input type="text" value={editForm.name} required onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} className="h-9 w-full rounded-md border border-border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-primary/40" /></div>
+            <div><label className="mb-1 block text-xs font-medium text-muted-foreground">Email</label>
+              <input type="email" value={editForm.email} required onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))} className="h-9 w-full rounded-md border border-border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-primary/40" /></div>
+            <div><label className="mb-1 block text-xs font-medium text-muted-foreground">Phone</label>
+              <input type="tel" value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} className="h-9 w-full rounded-md border border-border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-primary/40" /></div>
+            <button type="submit" disabled={updateTenant.isPending} className="flex h-10 w-full items-center justify-center gap-2 rounded-md gradient-orange font-semibold text-white hover:opacity-90 disabled:opacity-60">
+              {updateTenant.isPending ? "Saving..." : "Save Changes"}
+            </button>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Plan modal */}
+      <Dialog open={planOpen} onOpenChange={() => setPlanOpen(false)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Change Plan — {tenant.name}</DialogTitle></DialogHeader>
+          <form onSubmit={handleAssignPlan} className="space-y-3 pt-2">
+            <div><label className="mb-1 block text-xs font-medium text-muted-foreground">Plan</label>
+              <select value={selectedPlan} onChange={e => setSelectedPlan(e.target.value)} className="h-9 w-full rounded-md border border-border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-primary/40">
+                <option value="starter">Starter</option><option value="professional">Professional</option><option value="enterprise">Enterprise</option>
+              </select></div>
+            <button type="submit" disabled={assignPlan.isPending} className="flex h-10 w-full items-center justify-center gap-2 rounded-md gradient-orange font-semibold text-white hover:opacity-90 disabled:opacity-60">
+              {assignPlan.isPending ? "Updating..." : "Update Plan"}
+            </button>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// TENANTS TABLE (reusable component)
+// TENANTS VIEW with clickable rows & View More
 // ═══════════════════════════════════════════════════════════════════════════════
-function TenantsTable() {
+function TenantsView() {
   const { data, isLoading } = useTenants();
   const tenantControl = useTenantControl();
   const tenants: any[] = data?.tenants ?? [];
   const [assignTenant, setAssignTenant] = useState<any>(null);
+  const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
+  const total = tenants.length;
+  const active = tenants.filter(t => t.status === "active").length;
+  const suspended = tenants.filter(t => t.status === "suspended").length;
+  const trial = tenants.filter(t => t.status === "trial" || !t.status || t.status === "inactive").length;
+
+  // If a tenant is selected, show the detail view
+  if (selectedTenantId) {
+    return <TenantDetailView tenantId={selectedTenantId} onBack={() => setSelectedTenantId(null)} />;
+  }
 
   const exportToCSV = () => {
     const headers = ["Company", "Sector", "Admin", "Users", "Plan", "Status"];
@@ -214,46 +478,96 @@ function TenantsTable() {
   };
 
   return (
-    <Panel title="All Tenants" action={`${tenants.length} total`}>
-      <div className="flex items-center gap-2 mb-3">
-        <button onClick={exportToCSV} className="h-8 px-3 rounded-lg border border-border text-xs flex items-center gap-1.5 hover:bg-accent">
-          <Download className="h-3.5 w-3.5" /> Export
-        </button>
+    <div className="space-y-4">
+      {/* Tenant cards */}
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+        <KpiCard icon={Building2} label="Total Tenants" value={String(total)} sub={`${total} total`} up={true} />
+        <KpiCard icon={UserCheck} label="Active Tenants" value={String(active)} sub={`${active} active`} up={true} />
+        <KpiCard icon={UserX} label="Suspended Tenants" value={String(suspended)} sub={`${suspended} suspended`} up={false} />
+        <KpiCard icon={CreditCard} label="Trial Tenants" value={String(trial)} sub={`${trial} on trial`} up={true} />
       </div>
-      <div className="overflow-auto">
-        {isLoading ? <div className="py-8 text-center text-muted-foreground text-sm">Loading...</div> : (
-          <table className="w-full min-w-[700px] text-xs">
-            <thead className="text-muted-foreground">
-              <tr className="text-left">
-                {["Company", "Sector", "Admin", "Users", "Plan", "Status", "Actions"].map(h => <th key={h} className="pb-2 pr-3 font-normal">{h}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {tenants.length === 0 && <tr><td colSpan={7} className="py-4 text-center text-muted-foreground">No tenants</td></tr>}
-              {tenants.map((t: any) => (
-                <tr key={t._id} className="border-t border-border/50">
-                  <td className="py-2 pr-3 font-medium">{t.name}</td>
-                  <td className="pr-3 text-muted-foreground">{t.sector || "—"}</td>
-                  <td className="pr-3 text-muted-foreground">{t.email || "—"}</td>
-                  <td className="pr-3">{t.usage?.totalUsers ?? 0}</td>
-                  <td className="pr-3">{t.subscription?.planName || "starter"}</td>
-                  <td className="pr-3"><span className={badge(t.status)}>{(t.status || "active").charAt(0).toUpperCase() + (t.status || "active").slice(1)}</span></td>
-                  <td><div className="flex gap-1">
-                    {t.status === "active" ? (
-                      <button onClick={() => tenantControl.mutate({ id: t._id, action: "suspend" })} className="rounded border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[10px] text-red-400 hover:bg-red-500/20">Suspend</button>
-                    ) : (
-                      <button onClick={() => tenantControl.mutate({ id: t._id, action: "reactivate" })} className="rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-400 hover:bg-emerald-500/20">Activate</button>
-                    )}
-                    <button onClick={() => setAssignTenant(t)} className="rounded border border-orange-500/30 bg-orange-500/10 px-2 py-0.5 text-[10px] text-orange-400 hover:bg-orange-500/20">Plan</button>
-                  </div></td>
+
+      {/* Tenants table */}
+      <Panel title="All Tenants" action={`${tenants.length} total`}>
+        <div className="flex items-center gap-2 mb-3">
+          <button onClick={exportToCSV} className="h-8 px-3 rounded-lg border border-border text-xs flex items-center gap-1.5 hover:bg-accent">
+            <Download className="h-3.5 w-3.5" /> Export
+          </button>
+        </div>
+        <div className="overflow-auto">
+          {isLoading ? <div className="py-8 text-center text-muted-foreground text-sm">Loading...</div> : (
+            <table className="w-full min-w-[800px] text-xs">
+              <thead className="text-muted-foreground">
+                <tr className="text-left">
+                  {["Company", "Sector", "Admin", "Users", "Plan", "Status", "Actions"].map(h => <th key={h} className="pb-2 pr-3 font-normal">{h}</th>)}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+              </thead>
+              <tbody>
+                {tenants.length === 0 && <tr><td colSpan={7} className="py-4 text-center text-muted-foreground">No tenants</td></tr>}
+                {tenants.map((t: any) => (
+                  <tr key={t._id} className="border-t border-border/50 hover:bg-border/5 cursor-pointer transition-colors" onClick={() => setSelectedTenantId(t._id)}>
+                    <td className="py-2 pr-3 font-medium flex items-center gap-2">
+                      <Building2 className="h-3.5 w-3.5 text-orange-400 shrink-0" />
+                      {t.name}
+                    </td>
+                    <td className="pr-3 text-muted-foreground">{t.sector || "—"}</td>
+                    <td className="pr-3 text-muted-foreground">{t.email || "—"}</td>
+                    <td className="pr-3">{t.usage?.totalUsers ?? 0}</td>
+                    <td className="pr-3">{t.subscription?.planName || "starter"}</td>
+                    <td className="pr-3"><span className={badge(t.status)}>{(t.status || "active").charAt(0).toUpperCase() + (t.status || "active").slice(1)}</span></td>
+                    <td>
+                      <div className="flex gap-1" onClick={e => e.stopPropagation()}>
+                        {t.status === "active" ? (
+                          <button onClick={() => tenantControl.mutate({ id: t._id, action: "suspend" })} className="rounded border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[10px] text-red-400 hover:bg-red-500/20">Suspend</button>
+                        ) : (
+                          <button onClick={() => tenantControl.mutate({ id: t._id, action: "reactivate" })} className="rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-400 hover:bg-emerald-500/20">Activate</button>
+                        )}
+                        <button onClick={() => setAssignTenant(t)} className="rounded border border-orange-500/30 bg-orange-500/10 px-2 py-0.5 text-[10px] text-orange-400 hover:bg-orange-500/20">Plan</button>
+                        <button onClick={() => setSelectedTenantId(t._id)} className="rounded border border-purple-500/30 bg-purple-500/10 px-2 py-0.5 text-[10px] text-purple-400 hover:bg-purple-500/20 flex items-center gap-1">
+                          View More <ChevronRight className="h-3 w-3" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </Panel>
       <AssignPlanModal open={!!assignTenant} onClose={() => setAssignTenant(null)} tenant={assignTenant} />
-    </Panel>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ASSIGN PLAN MODAL
+// ═══════════════════════════════════════════════════════════════════════════════
+function AssignPlanModal({ open, onClose, tenant }: { open: boolean; onClose: () => void; tenant: any }) {
+  const assignPlan = useAssignPlan();
+  const [plan, setPlan] = useState("professional");
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    try {
+      await assignPlan.mutateAsync({ id: tenant._id, planName: plan });
+      toast.success("Plan updated", { description: `${tenant.name} now on ${plan}` });
+      onClose();
+    } catch (err: any) { toast.error("Failed", { description: err.message }); }
+  }
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader><DialogTitle>Assign Plan — {tenant?.name}</DialogTitle></DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-3 pt-2">
+          <div><label className="mb-1 block text-xs font-medium text-muted-foreground">Plan</label>
+            <select value={plan} onChange={e => setPlan(e.target.value)} className="h-9 w-full rounded-md border border-border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-primary/40">
+              <option value="starter">Starter</option><option value="professional">Professional</option><option value="enterprise">Enterprise</option></select></div>
+          <button type="submit" disabled={assignPlan.isPending} className="flex h-10 w-full items-center justify-center gap-2 rounded-md gradient-orange font-semibold text-white hover:opacity-90 disabled:opacity-60">
+            {assignPlan.isPending ? "Assigning..." : "Assign Plan"}
+          </button>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -331,87 +645,61 @@ function DashboardView() {
       </div>
 
       {/* Tenants Table */}
-      <TenantsTable />
+      <TenantsOverviewTable />
     </div>
   );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// TENANTS VIEW
+// TENANTS OVERVIEW TABLE (reusable in Dashboard)
 // ═══════════════════════════════════════════════════════════════════════════════
-function TenantsView() {
+function TenantsOverviewTable() {
   const { data, isLoading } = useTenants();
   const tenantControl = useTenantControl();
   const tenants: any[] = data?.tenants ?? [];
-  const [assignTenant, setAssignTenant] = useState<any>(null);
+  const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
 
-  const total = tenants.length;
-  const active = tenants.filter(t => t.status === "active").length;
-  const suspended = tenants.filter(t => t.status === "suspended").length;
-  const trial = tenants.filter(t => t.status === "trial" || !t.status || t.status === "inactive").length;
-
-  const exportToCSV = () => {
-    const headers = ["Company", "Sector", "Admin", "Users", "Plan", "Status"];
-    const rows = tenants.map((t: any) => [t.name, t.sector || "—", t.email || "—", t.usage?.totalUsers ?? 0, t.subscription?.planName || "starter", t.status || "active"]);
-    const csv = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
-    a.download = `tenants-${new Date().toISOString().slice(0, 10)}.csv`; a.click();
-    toast.success("Exported as CSV");
-  };
+  if (selectedTenantId) {
+    return <TenantDetailView tenantId={selectedTenantId} onBack={() => setSelectedTenantId(null)} />;
+  }
 
   return (
-    <div className="space-y-4">
-      {/* Tenant cards */}
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
-        <KpiCard icon={Building2} label="Total Tenants" value={String(total)} sub={`${total} total`} up={true} />
-        <KpiCard icon={UserCheck} label="Active Tenants" value={String(active)} sub={`${active} active`} up={true} />
-        <KpiCard icon={UserX} label="Suspended Tenants" value={String(suspended)} sub={`${suspended} suspended`} up={false} />
-        <KpiCard icon={CreditCard} label="Trial Tenants" value={String(trial)} sub={`${trial} on trial`} up={true} />
-      </div>
-
-      {/* Tenants table */}
-      <Panel title="All Tenants" action={`${tenants.length} total`}>
-        <div className="flex items-center gap-2 mb-3">
-          <button onClick={exportToCSV} className="h-8 px-3 rounded-lg border border-border text-xs flex items-center gap-1.5 hover:bg-accent">
-            <Download className="h-3.5 w-3.5" /> Export
-          </button>
-        </div>
-        <div className="overflow-auto">
-          {isLoading ? <div className="py-8 text-center text-muted-foreground text-sm">Loading...</div> : (
-            <table className="w-full min-w-[700px] text-xs">
-              <thead className="text-muted-foreground">
-                <tr className="text-left">
-                  {["Company", "Sector", "Admin", "Users", "Plan", "Status", "Actions"].map(h => <th key={h} className="pb-2 pr-3 font-normal">{h}</th>)}
+    <Panel title="All Tenants" action={`${tenants.length} total`}>
+      <div className="overflow-auto">
+        {isLoading ? <div className="py-8 text-center text-muted-foreground text-sm">Loading...</div> : (
+          <table className="w-full min-w-[700px] text-xs">
+            <thead className="text-muted-foreground">
+              <tr className="text-left">
+                {["Company", "Sector", "Admin", "Users", "Plan", "Status", "Actions"].map(h => <th key={h} className="pb-2 pr-3 font-normal">{h}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {tenants.length === 0 && <tr><td colSpan={7} className="py-4 text-center text-muted-foreground">No tenants</td></tr>}
+              {tenants.map((t: any) => (
+                <tr key={t._id} className="border-t border-border/50 hover:bg-border/5 cursor-pointer transition-colors" onClick={() => setSelectedTenantId(t._id)}>
+                  <td className="py-2 pr-3 font-medium">{t.name}</td>
+                  <td className="pr-3 text-muted-foreground">{t.sector || "—"}</td>
+                  <td className="pr-3 text-muted-foreground">{t.email || "—"}</td>
+                  <td className="pr-3">{t.usage?.totalUsers ?? 0}</td>
+                  <td className="pr-3">{t.subscription?.planName || "starter"}</td>
+                  <td className="pr-3"><span className={badge(t.status)}>{(t.status || "active").charAt(0).toUpperCase() + (t.status || "active").slice(1)}</span></td>
+                  <td><div className="flex gap-1" onClick={e => e.stopPropagation()}>
+                    {t.status === "active" ? (
+                      <button onClick={() => tenantControl.mutate({ id: t._id, action: "suspend" })} className="rounded border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[10px] text-red-400 hover:bg-red-500/20">Suspend</button>
+                    ) : (
+                      <button onClick={() => tenantControl.mutate({ id: t._id, action: "reactivate" })} className="rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-400 hover:bg-emerald-500/20">Activate</button>
+                    )}
+                    <button onClick={() => setSelectedTenantId(t._id)} className="rounded border border-purple-500/30 bg-purple-500/10 px-2 py-0.5 text-[10px] text-purple-400 hover:bg-purple-500/20 flex items-center gap-1">
+                      View More <ChevronRight className="h-3 w-3" />
+                    </button>
+                  </div></td>
                 </tr>
-              </thead>
-              <tbody>
-                {tenants.length === 0 && <tr><td colSpan={7} className="py-4 text-center text-muted-foreground">No tenants</td></tr>}
-                {tenants.map((t: any) => (
-                  <tr key={t._id} className="border-t border-border/50">
-                    <td className="py-2 pr-3 font-medium">{t.name}</td>
-                    <td className="pr-3 text-muted-foreground">{t.sector || "—"}</td>
-                    <td className="pr-3 text-muted-foreground">{t.email || "—"}</td>
-                    <td className="pr-3">{t.usage?.totalUsers ?? 0}</td>
-                    <td className="pr-3">{t.subscription?.planName || "starter"}</td>
-                    <td className="pr-3"><span className={badge(t.status)}>{(t.status || "active").charAt(0).toUpperCase() + (t.status || "active").slice(1)}</span></td>
-                    <td><div className="flex gap-1">
-                      {t.status === "active" ? (
-                        <button onClick={() => tenantControl.mutate({ id: t._id, action: "suspend" })} className="rounded border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[10px] text-red-400 hover:bg-red-500/20">Suspend</button>
-                      ) : (
-                        <button onClick={() => tenantControl.mutate({ id: t._id, action: "reactivate" })} className="rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-400 hover:bg-emerald-500/20">Activate</button>
-                      )}
-                      <button onClick={() => setAssignTenant(t)} className="rounded border border-orange-500/30 bg-orange-500/10 px-2 py-0.5 text-[10px] text-orange-400 hover:bg-orange-500/20">Plan</button>
-                    </div></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </Panel>
-      <AssignPlanModal open={!!assignTenant} onClose={() => setAssignTenant(null)} tenant={assignTenant} />
-    </div>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </Panel>
   );
 }
 

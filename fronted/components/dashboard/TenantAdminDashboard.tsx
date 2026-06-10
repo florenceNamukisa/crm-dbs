@@ -18,14 +18,57 @@ import { useSchedules } from "@/lib/api/schedules";
 import { useMeetings } from "@/lib/api/meetings";
 import { useTasks } from "@/lib/api/tasks";
 import { KanbanBoard } from "@/components/dashboard/KanbanBoard";
-import { clearSession, getStoredUser } from "@/lib/auth";
+import { clearSession, getStoredUser, apiFetch } from "@/lib/auth";
 import type { User, Client, Deal } from "@/lib/types";
 import {
   Gauge, Users, Star, Building2, Briefcase, Clock, FileBarChart, CalendarDays,
   Menu, LogOut, Plus, Search, MoreHorizontal, Activity, CircleDollarSign,
+  CalendarPlus,
 } from "lucide-react";
 
 const ORANGE = "#ff8c00";
+
+function GlobalMeetingForm({ onClose }: { onClose: () => void }) {
+  const [form, setForm] = useState({ title: "", location: "In Person", date: "", time: "" });
+  const queryClient = useQueryClient();
+  return (
+    <div className="space-y-3 pt-2">
+      <div>
+        <Label className="text-xs font-medium">Meeting Title *</Label>
+        <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Meeting title" className="mt-1" />
+      </div>
+      <div>
+        <Label className="text-xs font-medium">Location</Label>
+        <select value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} className="w-full h-9 px-3 rounded-lg bg-background border border-border text-sm outline-none mt-1">
+          <option>In Person</option><option>Online</option><option>Phone Call</option>
+        </select>
+      </div>
+      <div>
+        <Label className="text-xs font-medium">Date *</Label>
+        <Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} className="mt-1" />
+      </div>
+      <div>
+        <Label className="text-xs font-medium">Time</Label>
+        <Input type="time" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} className="mt-1" />
+      </div>
+      <DialogFooter>
+        <Button variant="outline" onClick={onClose}>Cancel</Button>
+        <Button onClick={async () => {
+          if (!form.title || !form.date) { toast.error("Title and date are required"); return; }
+          try {
+            const scheduledTime = form.date && form.time ? new Date(`${form.date}T${form.time}`).toISOString() : form.date ? new Date(form.date).toISOString() : null;
+            await apiFetch("/meetings", { method: "POST", body: JSON.stringify({ title: form.title, location: form.location, scheduledTime }) });
+            toast.success("Meeting scheduled successfully");
+            onClose();
+            queryClient.invalidateQueries({ queryKey: ["schedules"] });
+            queryClient.invalidateQueries({ queryKey: ["meetings"] });
+          } catch (err: any) { toast.error("Failed to schedule meeting", { description: err.message }); }
+        }} className="gradient-orange text-white">Schedule</Button>
+      </DialogFooter>
+    </div>
+  );
+}
+
 const ORANGE_DEEP = "#ff6a00";
 const GREEN = "#22c55e";
 
@@ -265,12 +308,12 @@ try {
 // ─── User Detail Modal ──────────────────────────────────────
 function UserDetailModal({ user: u, clients, deals, open, onClose }: { user: User; clients: Client[]; deals: Deal[]; open: boolean; onClose: () => void }) {
   if (!u) return null;
-  const userClients = clients.filter((c: Client) => {
-    const agentId = c.agent?._id || c.agent;
+    const userClients = clients.filter((c: Client) => {
+    const agentId = (c.agent as any)?._id || c.agent;
     return String(agentId) === String(u._id);
   });
   const userDeals = deals.filter((d: Deal) => {
-    const agentId = d.agent?._id || d.agent || d.assignedTo?._id || d.assignedTo;
+    const agentId = (d.agent as any)?._id || d.agent || (d.assignedTo as any)?._id || d.assignedTo;
     return String(agentId) === String(u._id);
   });
   const wonDeals = userDeals.filter((d: Deal) => (d.stage || '').toLowerCase() === 'won');
@@ -390,7 +433,7 @@ function UserDetailModal({ user: u, clients, deals, open, onClose }: { user: Use
 }
 
 // ─── Dashboard View ──────────────────────────────────────
-function DashboardView({ users, clients, deals, onSelectUser }: { users: User[]; clients: Client[]; deals: Deal[]; onSelectUser?: (user: User) => void }) {
+function DashboardView({ users, clients, deals, onSelectUser }: { users: User[]; clients: Client[]; deals: Deal[]; schedules?: any[]; onSelectUser?: (user: User) => void }) {
   const monthlySales = useMemo(() => {
     const now = new Date();
     return deals
@@ -802,7 +845,7 @@ function LeadsView({ clients, users }: { clients: any[]; users: any[] }) {
 }
 
 // ─── Client Detail Modal ──────────────────────────────────────
-function ClientDetailModal({ client: cl, users, deals, schedules, open, onClose }: { client: any; users: any[]; deals: any[]; schedules: any[]; open: boolean; onClose: () => void }) {
+function ClientDetailModal({ client: cl, users, deals, schedules, meetings, open, onClose }: { client: any; users: any[]; deals: any[]; schedules: any[]; meetings?: any[]; open: boolean; onClose: () => void }) {
   if (!cl) return null;
 
   const getUserName = (userId: any) => {
@@ -1107,7 +1150,7 @@ function ClientDetailModal({ client: cl, users, deals, schedules, open, onClose 
 }
 
 // ─── Clients View ──────────────────────────────────────
-function ClientsView({ clients, users, deals, schedules, meetings, tasks, onSelectClient }: { clients: any[]; users: any[]; deals: any[]; schedules: any[]; meetings: any[]; tasks: any[]; onSelectClient?: (client: any) => void }) {
+function ClientsView({ clients, users, deals, schedules, meetings, onSelectClient }: { clients: any[]; users: any[]; deals: any[]; schedules: any[]; meetings: any[]; onSelectClient?: (client: any) => void }) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [agentFilter, setAgentFilter] = useState('all');
@@ -1225,7 +1268,7 @@ function ClientsView({ clients, users, deals, schedules, meetings, tasks, onSele
         )}
         <div className="text-xs text-muted-foreground mt-3">Showing {filteredClients.length} of {clients.length} clients</div>
 
-        {selectedClient && <ClientDetailModal client={selectedClient} users={users} deals={deals} schedules={schedules} meetings={meetings} tasks={tasks} open={!!selectedClient} onClose={() => setSelectedClient(null)} />}
+        {selectedClient && <ClientDetailModal client={selectedClient} users={users} deals={deals} schedules={schedules} meetings={meetings} open={!!selectedClient} onClose={() => setSelectedClient(null)} />}
       </div>
     </div>
   );
@@ -1490,6 +1533,9 @@ export default function TenantAdminDashboard() {
   const [activeSection, setActiveSection] = useState('Dashboard');
   const [addUserOpen, setAddUserOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any>(null);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [_, setSelectedClient] = useState<any>(null);
+  const [globalShowMeetingForm, setGlobalShowMeetingForm] = useState(false);
 
   const user = getStoredUser();
   const initials = (user?.name || 'Admin')
@@ -1510,7 +1556,7 @@ export default function TenantAdminDashboard() {
   const deals = dealsData?.deals ?? [];
   const schedules = schedulesData?.schedules ?? [];
   const meetings = meetingsData?.meetings ?? [];
-  const tasks = tasksData?.tasks ?? [];
+  void tasksData;
 
   function handleLogout() {
     clearSession();
@@ -1550,7 +1596,7 @@ export default function TenantAdminDashboard() {
         return (
           <div>
             <h2 className="text-lg font-bold mb-4">Clients & Organizations</h2>
-            <ClientsView clients={clients} users={users} deals={deals} schedules={schedules} meetings={meetings} tasks={tasks} onSelectClient={setSelectedClient} />
+            <ClientsView clients={clients} users={users} deals={deals} schedules={schedules} meetings={meetings} onSelectClient={setSelectedClient} />
           </div>
         );
       case 'Sales Pipeline':
@@ -1599,8 +1645,8 @@ export default function TenantAdminDashboard() {
                     </div>
                     <div className="text-[10px] text-muted-foreground">Lost</div>
         </div>
-        <button
-          onClick={() => setShowMeetingForm(true)}
+          <button
+          onClick={() => setGlobalShowMeetingForm(true)}
           className="h-9 px-3 gradient-orange text-white rounded-md flex items-center gap-2 text-xs font-semibold shadow hover:opacity-90"
         >
           <CalendarPlus className="h-4 w-4" /> Schedule Meeting
@@ -1733,6 +1779,12 @@ const Icon = item.icon;
       </div>
       <AddUserModal open={addUserOpen} onClose={() => setAddUserOpen(false)} />
       <UserDetailModal user={selectedUser} clients={clients} deals={deals} open={!!selectedUser} onClose={() => setSelectedUser(null)} />
+      <Dialog open={globalShowMeetingForm} onOpenChange={setGlobalShowMeetingForm}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Schedule Meeting</DialogTitle></DialogHeader>
+          <GlobalMeetingForm onClose={() => setGlobalShowMeetingForm(false)} />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
