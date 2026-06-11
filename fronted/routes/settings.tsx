@@ -1,17 +1,28 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { apiFetch, getStoredUser } from "@/lib/auth";
+import { applyTheme, getStoredTheme, type ThemeMode } from "@/lib/theme";
 
 function SettingsPage() {
   const user = getStoredUser();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [theme, setTheme] = useState<ThemeMode>("dark");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setTheme(getStoredTheme());
+  }, []);
+
+  function updateTheme(nextTheme: ThemeMode) {
+    setTheme(nextTheme);
+    applyTheme(nextTheme);
+  }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -67,6 +78,32 @@ function SettingsPage() {
                 If you forget your password, use the "Forgot password" link on the login page to receive a secure reset link and OTP by email.
               </p>
             </div>
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-border bg-card p-6 shadow-sm max-w-2xl">
+          <div className="mb-6">
+            <h2 className="text-xl font-semibold">Appearance</h2>
+            <p className="text-sm text-muted-foreground">Choose whether the dashboard uses dark mode or light mode.</p>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => updateTheme("dark")}
+              className={`rounded-2xl border p-4 text-left ${theme === "dark" ? "border-orange-500 bg-orange-500/10" : "border-border bg-background/70 hover:bg-accent"}`}
+            >
+              <div className="font-semibold">Dark mode</div>
+              <div className="mt-1 text-sm text-muted-foreground">Use the high-contrast dark dashboard theme.</div>
+            </button>
+            <button
+              type="button"
+              onClick={() => updateTheme("light")}
+              className={`rounded-2xl border p-4 text-left ${theme === "light" ? "border-orange-500 bg-orange-500/10" : "border-border bg-background/70 hover:bg-accent"}`}
+            >
+              <div className="font-semibold">Light mode</div>
+              <div className="mt-1 text-sm text-muted-foreground">Use the clean light dashboard theme.</div>
+            </button>
           </div>
         </div>
 

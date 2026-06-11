@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
-  Building2, CircleDollarSign, CreditCard, FileBarChart, FileClock,
+  Building2, CircleDollarSign, CreditCard, FileClock,
   Gauge, Layers3, LogOut, Menu, Network, Plus, Download,
-  Settings, Users, UserCheck, UserX, ShoppingCart, Activity,
+  Settings, Users, UserCheck, UserX,
   ChevronRight, ArrowLeft, Eye, Edit3, UserCog,
   Shield, AlertTriangle, MessageSquare,
 } from "lucide-react";
@@ -16,11 +16,11 @@ import { toast } from "sonner";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import {
   useSuperAdminOverview, useSuperAdminAnalytics, useTenants,
-  useCreateTenant, useTenantControl, useSuperAdminActivity,
+  useCreateTenant, useTenantControl,
   useTenantProfile, useUpdateTenant, useAssignPlan, useImpersonateTenant,
 } from "@/lib/api/superadmin";
 import { useUsers } from "@/lib/api/users";
-import { clearSession, getStoredUser, saveSession } from "@/lib/auth";
+import { clearSession, getStoredUser, saveSession, apiFetch } from "@/lib/auth";
 import { useNavigate } from "@tanstack/react-router";
 
 const ORANGE = "#ff8c00";
@@ -29,21 +29,12 @@ type NavItem = { label: string; icon: LucideIcon };
 const navSections: Array<{ title: string; items: NavItem[] }> = [
   { title: "Main", items: [
     { label: "Dashboard", icon: Gauge },
-    { label: "Tenants", icon: Building2 },
-    { label: "Users", icon: Users },
-    { label: "Plans & Pricing", icon: Layers3 },
-    { label: "Transactions", icon: ShoppingCart },
-  ]},
-  { title: "Management", items: [
     { label: "Tenant Management", icon: Network },
     { label: "User Management", icon: Users },
+    { label: "Plans & Pricing", icon: Layers3 },
   ]},
   { title: "System", items: [
     { label: "Audit Logs", icon: FileClock },
-    { label: "Activity Logs", icon: Activity },
-  ]},
-  { title: "Analytics", items: [
-    { label: "Reports & Analytics", icon: FileBarChart },
   ]},
   { title: "Settings", items: [
     { label: "Platform Settings", icon: Settings },
@@ -843,54 +834,52 @@ function PricingView() {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// REPORTS VIEW
-// ═══════════════════════════════════════════════════════════════════════════════
-function ReportsView() {
-  const { data: overviewData } = useSuperAdminOverview();
-  const { data: tenantsData } = useTenants();
-  const { data: usersData } = useUsers();
-  const { data: activityData } = useSuperAdminActivity(20);
+function AuditLogsView() {
+  const [logs, setLogs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const overview = overviewData?.overview;
-  const tenants: any[] = tenantsData?.tenants ?? [];
-  const users: any[] = usersData?.users ?? [];
-  const activities: any[] = activityData?.activities ?? [];
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    apiFetch<any>("/audit-logs?limit=100")
+      .then((data) => {
+        if (active) setLogs(data.logs ?? []);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => { active = false; };
+  }, []);
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <KpiCard icon={Building2} label="Total Tenants" value={String(tenants.length)} sub="all time" up={true} />
-        <KpiCard icon={Users} label="Total Users" value={String(users.length)} sub="all time" up={true} />
-        <KpiCard icon={CreditCard} label="Active Subscriptions" value={String(overview?.subscriptions?.active ?? 0)} sub="active" up={true} />
-        <KpiCard icon={CircleDollarSign} label="Total Revenue" value={fmt(overview?.revenue?.totalRevenue ?? 0)} sub="all time" up={true} />
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Panel title="Platform Activity">
-          <div className="space-y-2 text-xs">
-            {activities.length === 0 && <div className="py-4 text-center text-muted-foreground">No activity</div>}
-            {activities.slice(0, 10).map((a: any) => (
-              <div key={a.id} className="flex items-center gap-2">
-                <span className={`h-2 w-2 rounded-full ${a.action?.includes("CREATE") ? "bg-emerald-500" : a.action?.includes("DELETE") ? "bg-red-500" : "bg-orange-500"}`} />
-                <span className="flex-1 truncate">{a.description}</span>
-                <span className="text-muted-foreground shrink-0">{new Date(a.createdAt).toLocaleDateString()}</span>
-              </div>
-            ))}
+      <Panel title="Audit Logs" action={`${logs.length} entries`}>
+        {loading ? <div className="py-8 text-center text-muted-foreground text-sm">Loading audit logs...</div> : (
+          <div className="overflow-auto">
+            {logs.length === 0 ? <div className="py-8 text-center text-muted-foreground text-sm">No audit logs found</div> : (
+              <table className="w-full min-w-[800px] text-xs">
+                <thead className="text-muted-foreground">
+                  <tr className="text-left">
+                    {["Time", "Action", "User", "Entity", "Status", "Description"].map(h => <th key={h} className="pb-2 pr-3 font-normal">{h}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {logs.map((log: any) => (
+                    <tr key={log._id} className="border-t border-border/50">
+                      <td className="py-2 pr-3 text-muted-foreground">{log.createdAt ? new Date(log.createdAt).toLocaleString() : "—"}</td>
+                      <td className="py-2 pr-3 font-medium">{log.action || "—"}</td>
+                      <td className="py-2 pr-3 text-muted-foreground">{log.userName || log.userEmail || "—"}</td>
+                      <td className="py-2 pr-3 text-muted-foreground">{log.entityType || "—"}</td>
+                      <td className="py-2 pr-3"><span className={badge(log.status || "success")}>{(log.status || "success").charAt(0).toUpperCase() + (log.status || "success").slice(1)}</span></td>
+                      <td className="py-2 pr-3 text-muted-foreground">{log.description || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
-        </Panel>
-
-        <Panel title="System Overview">
-          <div className="space-y-2 text-xs">
-            <div className="flex justify-between py-1 border-b border-border/30"><span>Total Tenants</span><span className="font-semibold">{tenants.length}</span></div>
-            <div className="flex justify-between py-1 border-b border-border/30"><span>Total Users</span><span className="font-semibold">{users.length}</span></div>
-            <div className="flex justify-between py-1 border-b border-border/30"><span>Active Subscriptions</span><span className="font-semibold">{overview?.subscriptions?.active ?? 0}</span></div>
-            <div className="flex justify-between py-1 border-b border-border/30"><span>Total Revenue</span><span className="font-semibold">{fmt(overview?.revenue?.totalRevenue ?? 0)}</span></div>
-            <div className="flex justify-between py-1 border-b border-border/30"><span>Today Actions</span><span className="font-semibold">{overview?.activity?.todayActions ?? 0}</span></div>
-            <div className="flex justify-between py-1"><span>MRR</span><span className="font-semibold">{fmt(overview?.mrr ?? 0)}</span></div>
-          </div>
-        </Panel>
-      </div>
+        )}
+      </Panel>
     </div>
   );
 }
@@ -911,15 +900,13 @@ export default function SuperAdminDashboard() {
   const renderContent = () => {
     switch (section) {
       case "Dashboard": return <DashboardView />;
-      case "Tenants":
       case "Tenant Management": return <TenantsView />;
-      case "Users":
       case "User Management": return <UsersView />;
       case "Plans & Pricing": return <PricingView />;
-      case "Reports & Analytics":
-      case "Audit Logs":
-      case "Activity Logs":
-      case "Transactions": return <ReportsView />;
+      case "Audit Logs": return <AuditLogsView />;
+      case "Platform Settings":
+        navigate({ to: "/settings" });
+        return null;
       default: return <DashboardView />;
     }
   };
