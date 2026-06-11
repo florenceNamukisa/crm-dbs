@@ -21,6 +21,7 @@ import {
 } from "@/lib/api/superadmin";
 import { useUsers } from "@/lib/api/users";
 import { clearSession, getStoredUser, saveSession, apiFetch } from "@/lib/auth";
+import { applyTheme, getStoredTheme, type ThemeMode } from "@/lib/theme";
 import { useNavigate } from "@tanstack/react-router";
 
 const ORANGE = "#ff8c00";
@@ -884,6 +885,99 @@ function AuditLogsView() {
   );
 }
 
+function PlatformSettingsView() {
+  const user = getStoredUser();
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [theme, setTheme] = useState<ThemeMode>("dark");
+
+  useEffect(() => {
+    setTheme(getStoredTheme());
+  }, []);
+
+  function updateTheme(nextTheme: ThemeMode) {
+    setTheme(nextTheme);
+    applyTheme(nextTheme);
+  }
+
+  async function handlePasswordSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (newPassword !== confirmPassword) {
+      toast.error("New password and confirmation do not match.");
+      return;
+    }
+
+    setPasswordLoading(true);
+    try {
+      await apiFetch("/auth/change-password", {
+        method: "POST",
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      toast.success("Password updated successfully.");
+    } catch (error) {
+      toast.error("Could not update password", {
+        description: error instanceof Error ? error.message : "Please try again.",
+      });
+    } finally {
+      setPasswordLoading(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <Panel title="Platform Settings">
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="rounded-2xl border border-border bg-background/70 p-4">
+            <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Super admin profile</div>
+            <div className="mt-3 text-lg font-semibold">{user?.name ?? "Super Admin"}</div>
+            <div className="text-sm text-muted-foreground">{user?.email ?? "No email available"}</div>
+            <div className="mt-3 rounded-2xl bg-muted px-3 py-2 text-xs text-muted-foreground">Role: {user?.role ?? "superadmin"}</div>
+          </div>
+
+          <div className="rounded-2xl border border-border bg-background/70 p-4">
+            <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Appearance</div>
+            <div className="mt-3 grid gap-3">
+              <button type="button" onClick={() => updateTheme("dark")} className={`rounded-2xl border p-4 text-left ${theme === "dark" ? "border-orange-500 bg-orange-500/10" : "border-border hover:bg-accent"}`}>
+                <div className="font-semibold">Dark mode</div>
+                <div className="mt-1 text-sm text-muted-foreground">Use the high-contrast dark dashboard theme.</div>
+              </button>
+              <button type="button" onClick={() => updateTheme("light")} className={`rounded-2xl border p-4 text-left ${theme === "light" ? "border-orange-500 bg-orange-500/10" : "border-border hover:bg-accent"}`}>
+                <div className="font-semibold">Light mode</div>
+                <div className="mt-1 text-sm text-muted-foreground">Use the clean light dashboard theme.</div>
+              </button>
+            </div>
+          </div>
+        </div>
+      </Panel>
+
+      <Panel title="Change password">
+        <form onSubmit={handlePasswordSubmit} className="space-y-4">
+          <div>
+            <label className="mb-2 block text-sm font-medium">Current password</label>
+            <input type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} required className="h-10 w-full rounded-md border border-border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-primary/40" />
+          </div>
+          <div>
+            <label className="mb-2 block text-sm font-medium">New password</label>
+            <input type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} required className="h-10 w-full rounded-md border border-border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-primary/40" />
+          </div>
+          <div>
+            <label className="mb-2 block text-sm font-medium">Confirm new password</label>
+            <input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} required className="h-10 w-full rounded-md border border-border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-primary/40" />
+          </div>
+          <button type="submit" disabled={passwordLoading} className="gradient-orange rounded-md px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">
+            {passwordLoading ? "Updating password..." : "Update password"}
+          </button>
+        </form>
+      </Panel>
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -904,9 +998,7 @@ export default function SuperAdminDashboard() {
       case "User Management": return <UsersView />;
       case "Plans & Pricing": return <PricingView />;
       case "Audit Logs": return <AuditLogsView />;
-      case "Platform Settings":
-        navigate({ to: "/settings" });
-        return null;
+      case "Platform Settings": return <PlatformSettingsView />;
       default: return <DashboardView />;
     }
   };
