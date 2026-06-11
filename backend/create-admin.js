@@ -12,24 +12,42 @@ const createAdmin = async () => {
 
     const superAdminEmail = 'florencenamukisa08@gmail.com';
     const existingAdmin = await User.findOne({ email: superAdminEmail });
-    if (existingAdmin) {
-      console.log('Super admin user already exists');
-      process.exit(0);
+    if (!existingAdmin) {
+      const superAdminPassword = process.env.SUPERADMIN_PASSWORD || 'Pretty08@';
+      const admin = new User({
+        name: 'Super Admin',
+        email: superAdminEmail,
+        password: superAdminPassword,
+        role: 'superadmin',
+        isActive: true,
+        isFirstLogin: false,
+        tenant: null,
+      });
+
+      await admin.save();
+      console.log('Super admin user created successfully');
+    } else {
+      await User.updateOne(
+        { _id: existingAdmin._id },
+        {
+          $set: {
+            role: 'superadmin',
+            isActive: true,
+            isFirstLogin: false,
+            otp: null,
+            otpExpires: null,
+            tenant: null,
+          },
+        }
+      );
+      console.log('Super admin user already exists and was enforced');
     }
 
-    const superAdminPassword = 'Admin@1234';
-    const admin = new User({
-      name: 'Super Admin',
-      email: superAdminEmail,
-      password: superAdminPassword,
+    const removed = await User.deleteMany({
       role: 'superadmin',
-      isActive: true,
-      isFirstLogin: false,
-      tenant: null,
+      email: { $ne: superAdminEmail },
     });
-
-    await admin.save();
-    console.log('Super admin user created successfully');
+    console.log(`Removed ${removed.deletedCount} extra super admin user(s)`);
     process.exit(0);
   } catch (error) {
     console.error('Error creating super admin user:', error);

@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -74,7 +75,7 @@ const GREEN = "#22c55e";
 
 type View = "table" | "kanban";
 
-const DEPARTMENTS = ['Sales', 'Marketing', 'Finance', 'Support', 'HR', 'IT', 'Operations'];
+const DEPARTMENTS = ['Sales'];
 const REGIONS = [
   'Central — Kampala', 'Central — Wakiso', 'Central — Mukono', 'Central — Mpigi',
   'Central — Luweero', 'Central — Mityana', 'Central — Mubende',
@@ -86,13 +87,7 @@ const REGIONS = [
   'West — Bushenyi', 'West — Kabale', 'West — Ibanda', 'West — Ntungamo', 'West — Rukungiri',
 ];
 const ROLES_BY_DEPARTMENT: Record<string, string[]> = {
-  'Sales': ['Sales Manager', 'Sales Agent', 'Sales Coordinator', 'Sales Director'],
-  'Marketing': ['Marketing Manager', 'Marketing Agent', 'Brand Manager'],
-  'Finance': ['Finance Manager', 'Accountant', 'Finance Officer'],
-  'Support': ['Support Manager', 'Support Agent', 'Help Desk Lead'],
-  'HR': ['HR Manager', 'HR Officer', 'Recruiter'],
-  'IT': ['IT Manager', 'IT Officer', 'System Administrator'],
-  'Operations': ['Operations Manager', 'Operations Officer', 'Logistics Lead'],
+  'Sales': ['Sales Manager', 'Sales Agent'],
 };
 
 const navSections = [
@@ -153,9 +148,9 @@ function Kpi({ icon: Icon, label, value, sub, up }: { icon: LucideIcon; label: s
   );
 }
 
-function ConfigSelect({ label, required, value, options, onChange, placeholder = 'Select…' }: {
+function ConfigSelect({ label, required, value, options, onChange, placeholder = 'Select…', allowOther = true }: {
   label: string; required?: boolean; value: string; options: string[];
-  onChange: (next: string) => void; placeholder?: string;
+  onChange: (next: string) => void; placeholder?: string; allowOther?: boolean;
 }) {
   const inOptions = options.includes(value);
   const isOther = !!value && !inOptions;
@@ -172,9 +167,9 @@ function ConfigSelect({ label, required, value, options, onChange, placeholder =
       >
         <option value="">{placeholder}</option>
         {options.map((o) => <option key={o} value={o}>{o}</option>)}
-        <option value="__other__">Other (type below)…</option>
+        {allowOther && <option value="__other__">Other (type below)…</option>}
       </select>
-      {(isOther || !value) && (
+      {allowOther && (isOther || !value) && (
         <input
           type="text"
           value={isOther ? value : ''}
@@ -207,12 +202,7 @@ function AddUserModal({ open, onClose }: { open: boolean; onClose: () => void })
       toast.error('Name and email are required');
       return;
     }
-    const r = form.role.toLowerCase();
-    const isSales = form.department.toLowerCase() === 'sales';
-    let backendRole = 'agent';
-    if (r.includes('manager') && isSales) backendRole = 'sales_manager';
-    else if (r.includes('manager')) backendRole = 'manager';
-    else if (isSales) backendRole = 'sales_agent';
+    const backendRole = form.role === 'Sales Manager' ? 'sales_manager' : 'sales_agent';
 
 try {
         const result = await createUser.mutateAsync({
@@ -291,7 +281,7 @@ try {
           </div>
 
           <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground pt-2">Role</h4>
-          <ConfigSelect label={`Role (${form.department})`} required value={form.role} options={rolesForDept} onChange={(v) => u('role', v)} />
+          <ConfigSelect label="Role" required value={form.role} options={rolesForDept} allowOther={false} onChange={(v) => u('role', v)} />
 
           <div className="mt-4 flex justify-end gap-2 pt-3 border-t border-border">
             <button type="button" onClick={onClose} className="h-9 rounded-md border border-border px-4 text-sm hover:bg-accent">Cancel</button>
@@ -1545,6 +1535,8 @@ export default function TenantAdminDashboard() {
     .join('')
     .toUpperCase();
 
+  const navigate = useNavigate();
+
   const { data: usersData } = useUsers();
   const { data: clientsData } = useClients();
   const { data: dealsData } = useDeals();
@@ -1560,7 +1552,7 @@ export default function TenantAdminDashboard() {
 
   function handleLogout() {
     clearSession();
-    window.location.href = '/login';
+    void navigate({ to: '/login', replace: true });
   }
 
   const renderSection = () => {

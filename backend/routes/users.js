@@ -69,12 +69,13 @@ router.post('/', tenantAuth, requireRole(['admin', 'manager', 'superadmin']), ch
       return res.status(400).json({ message: 'User with this email already exists' });
     }
 
-    const validRoles = ['superadmin', 'admin', 'manager', 'sales_manager', 'agent', 'sales_agent'];
+    const validRoles = ['manager', 'sales_manager', 'agent', 'sales_agent', 'salesagent'];
     if (!validRoles.includes(role)) {
       return res.status(400).json({ message: 'Invalid role specified' });
     }
 
-    const backendRole = role === 'sales_agent' ? 'agent' : role;
+    const normalizedRole = String(role).toLowerCase().replace(/\s+/g, '_');
+    const backendRole = normalizedRole === 'sales_manager' || normalizedRole === 'manager' ? 'manager' : 'agent';
 
     const otp = generateOTP();
 

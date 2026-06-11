@@ -1,4 +1,4 @@
-﻿import { Link, useRouterState } from "@tanstack/react-router";
+﻿import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   LayoutDashboard, Users, Briefcase, Building2,
   CheckSquare, Calendar, Repeat,
@@ -41,6 +41,7 @@ const NAV: NavGroup[] = [
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
+  const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const user = getStoredUser();
   const initials = (user?.name || "CRM")
@@ -127,7 +128,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <button
             onClick={() => {
               clearSession();
-              window.location.href = "/login";
+              void navigate({ to: "/login", replace: true });
             }}
             className="grid h-9 w-9 place-items-center rounded-md border border-border hover:bg-accent"
             aria-label="Sign out"

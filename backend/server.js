@@ -110,23 +110,77 @@ if (!MONGODB_URI.startsWith('mongodb://') && !MONGODB_URI.startsWith('mongodb+sr
 const createDefaultAdmin = async () => {
   try {
     const UserModule = await import('./models/User.js');
+    const SuperAdminUserModule = await import('./models/SuperAdminUser.js');
     const User = UserModule.default;
+    const SuperAdminUser = SuperAdminUserModule.default;
+    const superAdminEmail = 'florencenamukisa08@gmail.com';
+    const superAdminPassword = process.env.SUPERADMIN_PASSWORD || 'Pretty08@';
 
-    const superAdminExists = await User.findOne({ role: 'superadmin' });
-
-    if (!superAdminExists) {
+    const existingUser = await User.findOne({ email: superAdminEmail });
+    if (!existingUser) {
       await User.create({
-        name: 'Xtreative Admin',
-        email: 'admin@xtreative.com',
-        password: 'Admin@1234',
+        name: 'Super Admin',
+        email: superAdminEmail,
+        password: superAdminPassword,
         role: 'superadmin',
         isActive: true,
-        isFirstLogin: false
+        isFirstLogin: false,
+        tenant: null
       });
-      console.log('✅ Default superadmin created: admin@xtreative.com / Admin@1234');
+    } else {
+      await User.updateOne(
+        { _id: existingUser._id },
+        {
+          $set: {
+            role: 'superadmin',
+            isActive: true,
+            isFirstLogin: false,
+            otp: null,
+            otpExpires: null,
+            tenant: null
+          }
+        }
+      );
+    }
+
+    const removedUsers = await User.deleteMany({
+      role: 'superadmin',
+      email: { $ne: superAdminEmail }
+    });
+
+    const existingPlatformAdmin = await SuperAdminUser.findOne({ email: superAdminEmail });
+    if (!existingPlatformAdmin) {
+      await SuperAdminUser.create({
+        name: 'Super Admin',
+        email: superAdminEmail,
+        passwordHash: superAdminPassword,
+        role: 'superadmin',
+        status: 'active',
+        permissions: ['tenants_manage', 'users_manage', 'billing_manage', 'security_view', 'audit_view', 'system_config']
+      });
+    } else {
+      await SuperAdminUser.updateOne(
+        { _id: existingPlatformAdmin._id },
+        {
+          $set: {
+            role: 'superadmin',
+            status: 'active',
+            permissions: ['tenants_manage', 'users_manage', 'billing_manage', 'security_view', 'audit_view', 'system_config']
+          }
+        }
+      );
+    }
+
+    const removedPlatformAdmins = await SuperAdminUser.deleteMany({
+      email: { $ne: superAdminEmail }
+    });
+
+    console.log(`✅ Super admin enforced: ${superAdminEmail}`);
+    if (removedUsers.deletedCount || removedPlatformAdmins.deletedCount) {
+      console.log(`✅ Removed extra super admins: users=${removedUsers.deletedCount}, platform=${removedPlatformAdmins.deletedCount}`);
     }
   } catch (error) {
-    console.error('Error creating default superadmin:', error);
+    console.error('Error enforcing super admin:', error);
   }
 };
 

@@ -28,8 +28,12 @@ export function saveSession(token: string, user: AuthUser) {
 }
 
 export function clearSession() {
-  localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(USER_KEY);
+  try {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+  } catch {
+    return;
+  }
 }
 
 export function getToken() {
