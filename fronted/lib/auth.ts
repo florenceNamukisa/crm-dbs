@@ -19,7 +19,7 @@ export function getApiBase() {
   if (["localhost", "127.0.0.1"].includes(window.location.hostname) && window.location.port !== "5000") {
     return "http://localhost:5000/api";
   }
-  return `${window.location.origin}/api`;
+  return "https://crm-dbs.onrender.com/api";
 }
 
 export function saveSession(token: string, user: AuthUser) {
