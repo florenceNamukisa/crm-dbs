@@ -336,8 +336,8 @@ function UserDetailModal({ user: u, clients, deals, open, onClose }: { user: Use
               <div className="text-sm text-muted-foreground">{u.email}</div>
               <div className="flex flex-wrap gap-2 mt-1">
                 <span className={`text-[10px] px-2 py-0.5 rounded border ${u.isActive ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-zinc-500/30 bg-zinc-500/10 text-zinc-300'}`}>
-                  {u.isActive ? 'Active' : 'Inactive'}
-                </span>
+                          {u.isActive ? 'Active' : 'Deactivated'}
+                        </span>
                 <span className="text-[10px] px-2 py-0.5 rounded bg-orange-500/10 text-orange-400 capitalize">{u.role}</span>
               </div>
             </div>
@@ -547,8 +547,8 @@ function DashboardView({ users, clients, deals, onSelectUser }: { users: User[];
                        <td className="pr-3 text-muted-foreground">{u.department || '—'}</td>
                        <td className="pr-3">
                          <span className={`rounded border px-2 py-0.5 text-[10px] ${u.isActive ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-zinc-500/30 bg-zinc-500/10 text-zinc-300'}`}>
-                           {u.isActive ? 'Active' : 'Inactive'}
-                         </span>
+                  {u.isActive ? 'Active' : 'Deactivated'}
+                </span>
                        </td>
                        <td className="pr-3 text-muted-foreground text-xs">{u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '—'}</td>
                      </tr>
@@ -731,7 +731,7 @@ function UserManagementView({ users, onSelectUser }: { users: any[]; onSelectUse
                     <td className="pr-3 text-muted-foreground">{u.phone || '—'}</td>
                     <td className="pr-3">
                       <span className={`rounded border px-2 py-0.5 text-[10px] ${u.isActive ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-zinc-500/30 bg-zinc-500/10 text-zinc-300'}`}>
-                        {u.isActive ? 'Active' : 'Inactive'}
+                        {u.isActive ? 'Active' : 'Deactivated'}
                       </span>
                     </td>
                     <td className="pr-3 text-muted-foreground">{u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '—'}</td>

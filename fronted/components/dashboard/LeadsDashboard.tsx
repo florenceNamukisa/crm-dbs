@@ -223,9 +223,7 @@ case "whatsapp": {
         }
         toast.success(`Imported ${imported.length} leads`);
       } catch (err: any) {
-        setImportError(err.message);
         toast.error("Import failed", { description: err.message });
-        setTimeout(() => setImportError(null), 4000);
       }
     };
     input.click();

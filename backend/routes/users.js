@@ -57,7 +57,7 @@ router.post('/', tenantAuth, requireRole(['admin', 'manager', 'superadmin']), ch
     } = req.body || {};
 
     if (!name || !email) {
-      return res.status(400).json({ message: 'Name and email are required' });
+      return res.status(400).json({ message: 'Name and email are required', missing: { name: !name, email: !email } });
     }
 
     const existingUserQuery = req.isSuperAdmin
@@ -66,12 +66,12 @@ router.post('/', tenantAuth, requireRole(['admin', 'manager', 'superadmin']), ch
 
     const existingUser = await User.findOne(existingUserQuery);
     if (existingUser) {
-      return res.status(400).json({ message: 'User with this email already exists' });
+      return res.status(400).json({ message: 'User with this email already exists', email });
     }
 
     const validRoles = ['manager', 'sales_manager', 'agent', 'sales_agent', 'salesagent'];
     if (!validRoles.includes(role)) {
-      return res.status(400).json({ message: 'Invalid role specified' });
+      return res.status(400).json({ message: 'Invalid role specified', role });
     }
 
     const normalizedRole = String(role).toLowerCase().replace(/\s+/g, '_');
@@ -133,11 +133,19 @@ router.post('/', tenantAuth, requireRole(['admin', 'manager', 'superadmin']), ch
       user: userResponse,
       emailSent: emailResult.success,
       otp: otp,           // Always return OTP for admin to share
-      error: emailResult.success ? undefined : (emailResult.error || 'Unknown email error'),
+      emailResult: {
+        success: emailResult.success,
+        messageId: emailResult.messageId || null,
+        previewUrl: emailResult.previewUrl || null,
+        error: emailResult.success ? null : (emailResult.error || 'Unknown email error'),
+      }
     };
 
+    console.log('Email result for ' + email + ':', JSON.stringify(emailResult));
     if (!emailResult.success) {
       console.log('Email failed for ' + email + '. OTP to share: ' + otp);
+    } else {
+      console.log('Email sent for ' + email + ' | messageId=' + (emailResult.messageId || 'N/A'));
     }
 
     res.status(201).json(responseData);
@@ -196,8 +204,8 @@ router.put('/:id', tenantAuth, requireRole(['admin', 'manager', 'superadmin']), 
     if (typeof nin !== 'undefined') update.nin = nin;
     if (typeof isActive !== 'undefined') {
       update.isActive = isActive;
-      // if admin deactivates the account, ensure status becomes offline immediately
-      if (isActive === false) update.status = 'offline';
+      // if admin deactivates the account, ensure status becomes deactivated
+      if (isActive === false) update.status = 'deactivated';
     }
     if (typeof status !== 'undefined') update.status = status;
 

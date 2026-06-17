@@ -1,10 +1,12 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express from 'express';
 import mongoose from 'mongoose';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import cors from 'cors';
-import dotenv from 'dotenv';
 
 // Routes imports
 import { authRoutes } from './routes/auth.js';
@@ -34,8 +36,6 @@ import { superAdminRoutes } from './routes/superadmin.js';
 import { testEmailConfig } from './services/emailService.js';
 import { startTaskReminderJob } from './jobs/taskReminderJob.js';
 import { startScheduledExportJob } from './jobs/scheduledExportJob.js';
-
-dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

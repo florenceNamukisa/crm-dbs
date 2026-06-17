@@ -5,7 +5,8 @@ import { toast } from "sonner";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/auth";
 import { useClients } from "@/lib/api/clients";
-import { KpiCard, PageHeader, SectionCard, StatusPill, RowActions, action } from "./parts";
+import { useUsers } from "@/lib/api/users";
+import { KpiCard, PageHeader, SectionCard, StatusPill, RowActions } from "./parts";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -56,6 +57,21 @@ export default function ClientsDashboard() {
   const [form, setForm] = useState<any>({
     name: "", email: "", phone: "", company: "", industry: "", status: "active", notes: "",
   });
+
+  // Action modals state
+  const [showNotesModal, setShowNotesModal] = useState(false);
+  const [showTaskModal, setShowTaskModal] = useState(false);
+  const [showEventModal, setShowEventModal] = useState(false);
+  const [showForwardModal, setShowForwardModal] = useState(false);
+  const [selectedClient, setSelectedClient] = useState<any>(null);
+  const [notes, setNotes] = useState("");
+  const [taskTitle, setTaskTitle] = useState("");
+  const [taskDueDate, setTaskDueDate] = useState("");
+  const [eventTitle, setEventTitle] = useState("");
+  const [eventDate, setEventDate] = useState("");
+  const [eventTime, setEventTime] = useState("");
+  const [eventType, setEventType] = useState("meeting");
+  const [forwardAgent, setForwardAgent] = useState("");
 
   const createClientMutation = useMutation({
     mutationFn: (data: any) => apiFetch("/clients", { method: "POST", body: JSON.stringify(data) }),
@@ -147,19 +163,31 @@ export default function ClientsDashboard() {
         else toast.error("No phone number");
         break;
       case "notes":
-        toast.success("Notes feature opened");
+        setSelectedClient(client);
+        setNotes("");
+        setShowNotesModal(true);
         break;
       case "task":
-        toast.success("Task creation opened");
+        setSelectedClient(client);
+        setTaskTitle("");
+        setTaskDueDate("");
+        setShowTaskModal(true);
         break;
       case "event":
-        toast.success("Event scheduling opened");
+        setSelectedClient(client);
+        setEventTitle("");
+        setEventDate("");
+        setEventTime("");
+        setEventType("meeting");
+        setShowEventModal(true);
         break;
       case "forward":
-        toast.success("Forward to agent opened");
+        setSelectedClient(client);
+        setForwardAgent("");
+        setShowForwardModal(true);
         break;
       default:
-        action(actionType);
+        toast.info("Action not supported yet");
     }
   }
 
@@ -419,6 +447,124 @@ export default function ClientsDashboard() {
           </DndContext>
         )}
       </SectionCard>
+
+      {/* Notes Modal */}
+      {showNotesModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowNotesModal(false)}>
+          <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold mb-4">Notes for {selectedClient?.name}</h3>
+            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Add notes about this client..." className="w-full h-32 rounded-lg bg-background border border-border text-sm p-3 outline-none focus:ring-2 focus:ring-primary/40 mb-4" />
+            <div className="flex gap-2">
+              <button onClick={() => setShowNotesModal(false)} className="flex-1 px-4 py-2 text-sm border border-border rounded-md hover:bg-accent">Cancel</button>
+              <button onClick={async () => {
+                if (!notes.trim()) { toast.error("Please enter notes"); return; }
+                try {
+                  await apiFetch(`/clients/${selectedClient._id}/notes`, { method: "POST", body: JSON.stringify({ notes }) });
+                  toast.success("Notes saved successfully!");
+                  setShowNotesModal(false);
+                } catch (err: any) { toast.error(err.message || "Failed to save notes"); }
+              }} className="flex-1 px-4 py-2 text-sm gradient-orange text-white rounded-md font-medium">Save Notes</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Task Modal */}
+      {showTaskModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowTaskModal(false)}>
+          <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold mb-4">Create Task for {selectedClient?.name}</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-medium">Task Title *</label>
+                <input value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} placeholder="Enter task title" className="w-full h-9 px-3 rounded-lg bg-background border border-border text-sm outline-none focus:ring-2 focus:ring-primary/40" />
+              </div>
+              <div>
+                <label className="text-xs font-medium">Due Date</label>
+                <input type="date" value={taskDueDate} onChange={(e) => setTaskDueDate(e.target.value)} className="w-full h-9 px-3 rounded-lg bg-background border border-border text-sm outline-none focus:ring-2 focus:ring-primary/40" />
+              </div>
+            </div>
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => setShowTaskModal(false)} className="flex-1 px-4 py-2 text-sm border border-border rounded-md hover:bg-accent">Cancel</button>
+              <button onClick={async () => {
+                if (!taskTitle.trim()) { toast.error("Please enter a task title"); return; }
+                try {
+                  await apiFetch("/tasks", { method: "POST", body: JSON.stringify({ clientId: selectedClient._id, title: taskTitle, subject: "Other", dueDate: taskDueDate || undefined, priority: "Medium", status: "pending" }) });
+                  toast.success("Task created successfully!");
+                  setShowTaskModal(false);
+                } catch (err: any) { toast.error(err.message || "Failed to create task"); }
+              }} className="flex-1 px-4 py-2 text-sm gradient-orange text-white rounded-md font-medium">Create Task</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Event Modal */}
+      {showEventModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowEventModal(false)}>
+          <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold mb-4">Schedule Event for {selectedClient?.name}</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-medium">Event Title *</label>
+                <input value={eventTitle} onChange={(e) => setEventTitle(e.target.value)} placeholder="Enter event title" className="w-full h-9 px-3 rounded-lg bg-background border border-border text-sm outline-none focus:ring-2 focus:ring-primary/40" />
+              </div>
+              <div>
+                <label className="text-xs font-medium">Event Type</label>
+                <select value={eventType} onChange={(e) => setEventType(e.target.value)} className="w-full h-9 px-3 rounded-lg bg-background border border-border text-sm outline-none focus:ring-2 focus:ring-primary/40">
+                  <option value="meeting">Meeting</option>
+                  <option value="call">Call</option>
+                  <option value="follow-up">Follow-up</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium">Date *</label>
+                <input type="date" value={eventDate} onChange={(e) => setEventDate(e.target.value)} className="w-full h-9 px-3 rounded-lg bg-background border border-border text-sm outline-none focus:ring-2 focus:ring-primary/40" />
+              </div>
+              <div>
+                <label className="text-xs font-medium">Time</label>
+                <input type="time" value={eventTime} onChange={(e) => setEventTime(e.target.value)} className="w-full h-9 px-3 rounded-lg bg-background border border-border text-sm outline-none focus:ring-2 focus:ring-primary/40" />
+              </div>
+            </div>
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => setShowEventModal(false)} className="flex-1 px-4 py-2 text-sm border border-border rounded-md hover:bg-accent">Cancel</button>
+              <button onClick={async () => {
+                if (!eventTitle.trim() || !eventDate) { toast.error("Please enter event title and date"); return; }
+                try {
+                  await apiFetch("/meetings", { method: "POST", body: JSON.stringify({ client: selectedClient._id, title: eventTitle, type: eventType, scheduledDate: eventDate, scheduledTime: eventTime, status: "scheduled" }) });
+                  toast.success("Event created successfully!");
+                  setShowEventModal(false);
+                } catch (err: any) { toast.error(err.message || "Failed to create event"); }
+              }} className="flex-1 px-4 py-2 text-sm gradient-orange text-white rounded-md font-medium">Create Event</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Forward Modal */}
+      {showForwardModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowForwardModal(false)}>
+          <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold mb-4">Forward Client to Agent</h3>
+            <p className="text-sm text-muted-foreground mb-4">Select an agent to forward <strong>{selectedClient?.name}</strong> to:</p>
+            <select value={forwardAgent} onChange={(e) => setForwardAgent(e.target.value)} className="w-full h-9 px-3 rounded-lg bg-background border border-border text-sm outline-none focus:ring-2 focus:ring-primary/40 mb-4">
+              <option value="">-- Select Agent --</option>
+              {(useUsers().data?.users || []).filter((u: any) => u.role === "agent").map((a: any) => (<option key={a._id || a.id} value={a._id || a.id}>{a.name} ({a.email})</option>))}
+            </select>
+            <div className="flex gap-2">
+              <button onClick={() => setShowForwardModal(false)} className="flex-1 px-4 py-2 text-sm border border-border rounded-md hover:bg-accent">Cancel</button>
+              <button onClick={async () => {
+                if (!forwardAgent) { toast.error("Please select an agent"); return; }
+                try {
+                  await apiFetch(`/clients/${selectedClient._id}/forward`, { method: "POST", body: JSON.stringify({ agentId: forwardAgent }) });
+                  toast.success("Client forwarded successfully!");
+                  setShowForwardModal(false);
+                } catch (err: any) { toast.error(err.message || "Failed to forward client"); }
+              }} className="flex-1 px-4 py-2 text-sm gradient-orange text-white rounded-md font-medium">Forward</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <Dialog open={showForm} onOpenChange={setShowForm}>
         <DialogContent className="max-w-lg">

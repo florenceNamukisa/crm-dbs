@@ -63,7 +63,7 @@ export function KanbanBoard({
     if (hoverStage !== stage) setHoverStage(stage);
   }
 
-  function handleDragLeave(e: React.DragEvent, stage: string) {
+  function handleDragLeave(_e: React.DragEvent, stage: string) {
     dragCounter.current[stage] = (dragCounter.current[stage] || 0) - 1;
     if ((dragCounter.current[stage] || 0) <= 0) {
       dragCounter.current[stage] = 0;

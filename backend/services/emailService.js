@@ -5,13 +5,6 @@ import nodemailer from 'nodemailer';
 // Environment variables are already available via process.env.
 
 console.log('[EmailService] Initializing...');
-const hasCredentials = !!(process.env.EMAIL_USER && process.env.EMAIL_PASS);
-if (hasCredentials) {
-  console.log('[EmailService] SMTP configured for: ' + process.env.EMAIL_USER);
-  console.log('[EmailService] Host: ' + (process.env.EMAIL_HOST || 'smtp.gmail.com') + ':' + (process.env.EMAIL_PORT || '587'));
-} else {
-  console.log('[EmailService] No SMTP credentials found - will use Ethereal test account');
-}
 
 /**
  * Create a FRESH transporter every time - no caching to avoid stale connections
@@ -301,21 +294,27 @@ const emailTemplates = {
 // ===========================================================================
 
 export const sendEmail = async function (to, templateName, templateData) {
-  console.log('[EmailService] sendEmail to: ' + to + ', template: ' + templateName);
+  console.log('[EmailService] sendEmail called | to=' + to + ' | template=' + templateName);
   try {
     const template = emailTemplates[templateName];
-    if (!template) throw new Error('Email template "' + templateName + '" not found');
+    if (!template) {
+      console.error('[EmailService] Template not found: ' + templateName);
+      return { success: false, error: 'Email template "' + templateName + '" not found' };
+    }
 
     const emailContent = template(templateData || {});
+    console.log('[EmailService] Subject: ' + emailContent.subject);
 
+    console.log('[EmailService] Gmail check: EMAIL_USER=' + (process.env.EMAIL_USER || '') + ' EMAIL_PASS=' + ((process.env.EMAIL_PASS || '').length > 0 ? 'set' : 'missing'));
     // ---- TRY GMAIL FIRST ----
+    let gmailError = null;
     if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
       try {
-        console.log('[EmailService] Attempting Gmail SMTP...');
+        console.log('[EmailService] Using Gmail credentials: ' + process.env.EMAIL_USER);
         const transporter = nodemailer.createTransport({
           host: process.env.EMAIL_HOST || 'smtp.gmail.com',
           port: Number(process.env.EMAIL_PORT) || 587,
-          secure: false,
+          secure: String(process.env.EMAIL_SECURE) === 'true',
           auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
           connectionTimeout: 15000,
           greetingTimeout: 15000,
@@ -323,53 +322,43 @@ export const sendEmail = async function (to, templateName, templateData) {
           tls: { rejectUnauthorized: false },
         });
 
-        const result = await transporter.sendMail({
-          from: process.env.EMAIL_FROM || process.env.EMAIL_USER || 'noreply@xtreative.com',
+        const fromName = 'Xtreative CRM';
+        const fromAddress = process.env.EMAIL_FROM || process.env.EMAIL_USER || 'noreply@xtreative.com';
+        const mailOptions = {
+          from: '"' + fromName + '" <' + fromAddress + '>',
           to: to,
           subject: emailContent.subject,
           html: emailContent.html,
-        });
-
-        console.log('[EmailService] Gmail SUCCESS. MessageId: ' + result.messageId);
-        return { success: true, messageId: result.messageId };
-      } catch (gmailError) {
-        console.log('[EmailService] Gmail FAILED: ' + gmailError.message + '. Falling back to Ethereal...');
+          text: emailContent.html.replace(/<[^>]*>/g, ''),
+          headers: {
+            'Reply-To': fromAddress,
+            'X-Mailer': 'Xtreative CRM Mailer',
+            'X-Priority': '3',
+            'List-Unsubscribe': '<mailto:unsubscribe@xtreative.com>, <https://xtreative.com/unsubscribe>',
+          },
+        };
+        console.log('[EmailService] Sending via Gmail | from=' + mailOptions.from + ' | to=' + mailOptions.to);
+        const result = await transporter.sendMail(mailOptions);
+        const previewUrl = nodemailer.getTestMessageUrl(result);
+        console.log('[EmailService] Gmail SUCCESS | messageId=' + result.messageId + ' | preview=' + (previewUrl || 'N/A'));
+        console.log('[EmailService] Accepted=' + (result.accepted || []) + ' Rejected=' + (result.rejected || []));
+        return { success: true, messageId: result.messageId, previewUrl };
+      } catch (gmailErr) {
+        gmailError = gmailErr;
+        console.error('[EmailService] Gmail sending failed: ' + gmailErr.message);
+        if (gmailErr.code) console.error('[EmailService] Gmail error code: ' + gmailErr.code);
+        if (gmailErr.response) console.error('[EmailService] Gmail server response: ' + gmailErr.response);
+        console.log('[EmailService] Not retrying. Aborting send to avoid silent failure.');
       }
+    } else {
+      console.error('[EmailService] EMAIL_USER or EMAIL_PASS missing in env. Cannot send email.');
     }
 
-    // ---- FALLBACK TO ETHEREAL ----
-    console.log('[EmailService] Using Ethereal test email...');
-    const testAccount = await nodemailer.createTestAccount();
-    const etherealTransporter = nodemailer.createTransport({
-      host: 'smtp.ethereal.email',
-      port: 587,
-      secure: false,
-      auth: { user: testAccount.user, pass: testAccount.pass },
-    });
-
-    const result = await etherealTransporter.sendMail({
-      from: 'noreply@xtreative.com',
-      to: to,
-      subject: emailContent.subject,
-      html: emailContent.html,
-    });
-
-    const previewUrl = nodemailer.getTestMessageUrl(result);
-    console.log('[EmailService] Ethereal SUCCESS! Preview URL: ' + (previewUrl || 'N/A'));
-    console.log('[EmailService] Login at https://ethereal.email to view email');
-    console.log('[EmailService]   Username: ' + testAccount.user);
-    console.log('[EmailService]   Password: ' + testAccount.pass);
-
-    // Return preview URL so it can be shown to user
-    return {
-      success: true,
-      messageId: result.messageId,
-      previewUrl: previewUrl,
-      ethereal: true,
-      note: 'Gmail failed, sent via Ethereal test email. Check preview URL.'
-    };
+    // Fail closed so callers know email was not sent
+    console.error('[EmailService] Email not sent.');
+    return { success: false, error: gmailError ? gmailError.message : 'Email credentials missing' };
   } catch (error) {
-    console.error('[EmailService] COMPLETE FAILURE sending to ' + to + ': ' + error.message);
+    console.error('[EmailService] Unexpected error sending email: ' + error.message);
     if (error.code) console.error('[EmailService] Error code: ' + error.code);
     if (error.response) console.error('[EmailService] Server response: ' + error.response);
     return { success: false, error: error.message };
