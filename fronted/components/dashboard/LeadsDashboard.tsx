@@ -44,6 +44,7 @@ export default function LeadsDashboard() {
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [showEventModal, setShowEventModal] = useState(false);
   const [showForwardModal, setShowForwardModal] = useState(false);
+  const [showStatusModal, setShowStatusModal] = useState(false);
   const [selectedLead, setSelectedLead] = useState<any>(null);
 
   // Form states
@@ -60,21 +61,13 @@ export default function LeadsDashboard() {
   const { data: usersData } = useUsers();
   const agents = (usersData?.users || []).filter((u: any) => u.role === "agent");
 
-  const LEAD_STAGES = ["New", "Contacted", "Qualified", "Converted"];
+  const LEAD_STAGES = ["New", "Contacted", "Unqualified", "Qualified", "Converted"];
 
   const handleLeadAction = async (actionType: string, lead: any) => {
     switch (actionType) {
       case "change_status": {
-        const currentIdx = LEAD_STAGES.indexOf(lead.status || "New");
-        const nextStatus = LEAD_STAGES[(currentIdx + 1) % LEAD_STAGES.length];
-        try {
-          await apiFetch(`/clients/${lead._id}`, {
-            method: "PUT",
-            body: JSON.stringify({ leadStatus: nextStatus }),
-          });
-          toast.success(`Status changed to "${nextStatus}"`);
-          qc.invalidateQueries({ queryKey: ["clients"] });
-        } catch (err: any) { toast.error(err.message || "Failed to change status"); }
+        setSelectedLead(lead);
+        setShowStatusModal(true);
         break;
       }
       case "call":
@@ -495,7 +488,6 @@ case "whatsapp": {
                 <select value={eventType} onChange={(e) => setEventType(e.target.value)} className="w-full h-9 px-3 rounded-lg bg-background border border-border text-sm outline-none focus:ring-2 focus:ring-primary/40">
                   <option value="meeting">Meeting</option>
                   <option value="call">Call</option>
-                  <option value="follow-up">Follow-up</option>
                 </select>
               </div>
               <div>
@@ -529,6 +521,43 @@ case "whatsapp": {
             <div className="flex gap-2">
               <button onClick={() => setShowForwardModal(false)} className="flex-1 px-4 py-2 text-sm border border-border rounded-md hover:bg-accent">Cancel</button>
               <button onClick={handleForwardSubmit} className="flex-1 px-4 py-2 text-sm gradient-orange text-white rounded-md font-medium" disabled={agents.length === 0}>Forward</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Status Change Modal */}
+      {showStatusModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowStatusModal(false)}>
+          <div className="bg-card border border-border rounded-xl p-6 w-full max-w-sm shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold mb-2">Change Status</h3>
+            <p className="text-xs text-muted-foreground mb-4">Select a new status for <strong>{selectedLead?.name}</strong>:</p>
+            <div className="space-y-2">
+              {LEAD_STAGES.map((stage) => (
+                <button
+                  key={stage}
+                  onClick={async () => {
+                    try {
+                      await apiFetch(`/clients/${selectedLead._id}`, {
+                        method: "PUT",
+                        body: JSON.stringify({ leadStatus: stage }),
+                      });
+                      toast.success(`Status changed to "${stage}"`);
+                      qc.invalidateQueries({ queryKey: ["clients"] });
+                      qc.invalidateQueries({ queryKey: ["sales-dashboard"] });
+                    } catch (err: any) {
+                      toast.error(err.message || "Failed to change status");
+                    }
+                    setShowStatusModal(false);
+                  }}
+                  className={`w-full text-left px-4 py-2.5 rounded-lg text-sm border transition hover:border-orange-400/50 ${(selectedLead?.leadStatus || "New") === stage ? "border-orange-400 bg-orange-400/10 font-medium" : "border-border"}`}
+                >
+                  {stage}
+                </button>
+              ))}
+            </div>
+            <div className="mt-4">
+              <button onClick={() => setShowStatusModal(false)} className="w-full px-4 py-2 text-sm border border-border rounded-md hover:bg-accent">Cancel</button>
             </div>
           </div>
         </div>

@@ -85,6 +85,7 @@ const tenantSchema = new mongoose.Schema({
   usage: {
     totalUsers: { type: Number, default: 0 },
     totalClients: { type: Number, default: 0 },
+    totalLeads: { type: Number, default: 0 },
     totalDeals: { type: Number, default: 0 },
     storageUsed: { type: Number, default: 0 }, // in MB
     lastActivity: { type: Date, default: Date.now }
@@ -178,6 +179,11 @@ tenantSchema.methods.canAddUser = function() {
 tenantSchema.methods.canAddClient = function() {
   const maxClients = this.hasFeature('maxClients') || this.settings.features.maxClients;
   return this.usage.totalClients < maxClients;
+};
+
+tenantSchema.methods.canAddLead = function() {
+  const maxClients = this.hasFeature('maxClients') || this.settings.features.maxClients;
+  return this.usage.totalLeads < maxClients;
 };
 
 tenantSchema.methods.canAddDeal = function() {

@@ -53,10 +53,11 @@ export function AppShell({ children }: { children: ReactNode }) {
     .toUpperCase();
   const visibleNav = NAV.map((group) => ({
     ...group,
-    items: group.items.filter((item) => {
+    items:     group.items.filter((item) => {
       if (item.to === "/super-admin") return user?.role === "superadmin";
       if (item.to === "/tenant-admin") return user?.role === "superadmin" || user?.role === "tenant_admin";
       if (item.to === "/reports") return ["superadmin", "tenant_admin", "admin", "manager", "sales_manager"].includes(user?.role || "");
+      if (item.to === "/followups") return !["agent", "sales_agent"].includes(user?.role || "");
       return true;
     }),
   })).filter((group) => group.items.length > 0);

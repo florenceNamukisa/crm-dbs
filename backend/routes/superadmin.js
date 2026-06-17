@@ -250,12 +250,11 @@ router.get('/leads', requireSuperAdmin, async (req, res) => {
   try {
     const { tenantId, search, limit = 100 } = req.query;
     
-    const query = {};
+    const query = { status: 'prospect' };
     if (tenantId) query.tenant = tenantId;
     if (search) {
       query.$or = [
-        { firstName: { $regex: search, $options: 'i' } },
-        { lastName: { $regex: search, $options: 'i' } },
+        { name: { $regex: search, $options: 'i' } },
         { email: { $regex: search, $options: 'i' } },
         { phone: { $regex: search, $options: 'i' } }
       ];

@@ -212,7 +212,7 @@ const clientSchema = new mongoose.Schema({
   leadStatus: {
     type: String,
     enum: ['New', 'Contacted', 'Unqualified', 'Qualified', 'Converted', ''],
-    default: 'New'
+    default: ''
   },
   rating: {
     type: String,

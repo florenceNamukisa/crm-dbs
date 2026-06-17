@@ -73,6 +73,7 @@ export const tenantAuth = async (req, res, next) => {
       req.tenantQuery = {}; // Super admin sees all data
       req.canAddUsers = () => true;
       req.canAddClients = () => true;
+      req.canAddLeads = () => true;
       req.canAddDeals = () => true;
       req.updateTenantUsage = async () => {}; // No-op for super admin
       return next();
@@ -128,6 +129,7 @@ export const tenantAuth = async (req, res, next) => {
     // Usage check helpers
     req.canAddUsers = () => user.tenant.canAddUser();
     req.canAddClients = () => user.tenant.canAddClient();
+    req.canAddLeads = () => user.tenant.canAddLead();
     req.canAddDeals = () => user.tenant.canAddDeal();
 
     // Usage update helper
@@ -135,6 +137,7 @@ export const tenantAuth = async (req, res, next) => {
       const fieldMap = {
         users: 'usage.totalUsers',
         clients: 'usage.totalClients',
+        leads: 'usage.totalLeads',
         deals: 'usage.totalDeals'
       };
       const field = fieldMap[resource];
@@ -306,6 +309,11 @@ export const checkUsageLimit = (resourceType) => {
           break;
         case 'clients':
           currentUsage = tenant.usage.totalClients || 0;
+          limit = tenant.settings?.features?.maxClients || 1000;
+          canAdd = currentUsage < limit;
+          break;
+        case 'leads':
+          currentUsage = tenant.usage.totalLeads || 0;
           limit = tenant.settings?.features?.maxClients || 1000;
           canAdd = currentUsage < limit;
           break;

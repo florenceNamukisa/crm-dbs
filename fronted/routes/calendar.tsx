@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
-import { Calendar as CalendarIcon, Clock, ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import { useSchedules, useCreateSchedule } from "@/lib/api/schedules";
 import { useClients } from "@/lib/api/clients";
@@ -252,9 +252,50 @@ function SchedulesPage() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 gap-6">
+          {/* Schedules Table */}
+          <div className="rounded-2xl border border-border bg-card p-6">
+            <h2 className="font-semibold text-lg mb-4">Schedules</h2>
+            {isLoading ? (
+              <div className="text-center text-sm text-muted-foreground py-8">Loading schedules...</div>
+            ) : allSchedules.length === 0 ? (
+              <div className="text-center text-sm text-muted-foreground py-8">No schedules yet. Click "Schedule Meeting" to create one.</div>
+            ) : (
+              <div className="overflow-auto">
+                <table className="w-full min-w-[600px] text-sm">
+                  <thead className="text-xs text-muted-foreground">
+                    <tr className="text-left">
+                      {["Title", "Client", "Date", "Time", "Status"].map((h) => (
+                        <th key={h} className="pb-2 pr-3 font-normal">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {allSchedules.map((s: any) => (
+                      <tr key={s._id} className="border-t border-border/50 hover:bg-accent/30">
+                        <td className="py-2 pr-3 font-medium">{s.title || s.name || '—'}</td>
+                        <td className="pr-3 text-muted-foreground">{s.client?.name || s.clientName || '—'}</td>
+                        <td className="pr-3 text-muted-foreground">
+                          {s.date ? new Date(s.date).toLocaleDateString() : '—'}
+                        </td>
+                        <td className="pr-3 text-muted-foreground">
+                          {s.date ? new Date(s.date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '—'}
+                        </td>
+                        <td className="pr-3">
+                          <span className={`inline-block text-[10px] font-medium px-2 py-0.5 rounded-full ${statusColors[s.status || 'scheduled'] || statusColors.scheduled}`}>
+                            {s.status || 'scheduled'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
           {/* Calendar with navigation */}
-          <div className="lg:col-span-2 rounded-2xl border border-border bg-card p-6">
+          <div className="rounded-2xl border border-border bg-card p-6">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <CalendarIcon className="h-5 w-5 text-muted-foreground" />
@@ -314,78 +355,6 @@ function SchedulesPage() {
               })}
             </div>
           </div>
-
-          {/* Upcoming Schedules List */}
-          <div className="rounded-2xl border border-border bg-card p-6">
-            <h2 className="font-semibold text-lg mb-4 flex items-center gap-2">
-              <Clock className="h-5 w-5 text-muted-foreground" />
-              All Schedules
-            </h2>
-            {isLoading ? (
-              <div className="text-center text-sm text-muted-foreground py-8">Loading schedules...</div>
-            ) : allSchedules.length === 0 ? (
-              <div className="text-center text-sm text-muted-foreground py-8">
-                No schedules yet. Click "Schedule Meeting" to create one.
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {allSchedules.map((s: any) => (
-                  <div key={s._id} className="rounded-xl border border-border p-3 space-y-1">
-                    <div className="font-medium text-sm">{s.title || s.name || '—'}</div>
-                    <div className="text-xs text-muted-foreground">
-                      with {s.client?.name || s.clientName || '—'}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {s.date ? new Date(s.date).toLocaleDateString() : '—'}
-                      {s.date ? ` at ${new Date(s.date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}` : ''}
-                    </div>
-                    <span className={`inline-block text-[10px] font-medium px-2 py-0.5 rounded-full ${statusColors[s.status || 'scheduled'] || statusColors.scheduled}`}>
-                      {s.status || 'scheduled'}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Schedules Table */}
-        <div className="rounded-2xl border border-border bg-card p-6">
-          <h2 className="font-semibold text-lg mb-4">Schedules Table</h2>
-          {allSchedules.length === 0 ? (
-            <div className="text-center text-sm text-muted-foreground py-8">No schedules to display</div>
-          ) : (
-            <div className="overflow-auto">
-              <table className="w-full min-w-[600px] text-sm">
-                <thead className="text-xs text-muted-foreground">
-                  <tr className="text-left">
-                    {["Title", "Client", "Date", "Time", "Status"].map((h) => (
-                      <th key={h} className="pb-2 pr-3 font-normal">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {allSchedules.map((s: any) => (
-                    <tr key={s._id} className="border-t border-border/50 hover:bg-accent/30">
-                      <td className="py-2 pr-3 font-medium">{s.title || s.name || '—'}</td>
-                      <td className="pr-3 text-muted-foreground">{s.client?.name || s.clientName || '—'}</td>
-                      <td className="pr-3 text-muted-foreground">
-                        {s.date ? new Date(s.date).toLocaleDateString() : '—'}
-                      </td>
-                      <td className="pr-3 text-muted-foreground">
-                        {s.date ? new Date(s.date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '—'}
-                      </td>
-                      <td className="pr-3">
-                        <span className={`inline-block text-[10px] font-medium px-2 py-0.5 rounded-full ${statusColors[s.status || 'scheduled'] || statusColors.scheduled}`}>
-                          {s.status || 'scheduled'}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
         </div>
       </div>
     </AppShell>

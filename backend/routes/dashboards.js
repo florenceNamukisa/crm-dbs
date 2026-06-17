@@ -47,7 +47,7 @@ router.get('/sales', async (req, res) => {
       recentNotifications,
       followupClients,
     ] = await Promise.all([
-      Client.countDocuments(tenantAgentFilter),
+      Client.countDocuments({ ...tenantAgentFilter, status: 'prospect' }),
       Deal.find({ ...tenantAgentFilter, stage: { $in: ['lead', 'qualification', 'proposal', 'negotiation'] } }).lean(),
       Deal.find({ ...tenantAgentFilter, stage: 'won' }).lean(),
       Sale.aggregate([

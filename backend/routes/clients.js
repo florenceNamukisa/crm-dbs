@@ -155,12 +155,22 @@ router.post('/', [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    // Check usage limits
-    if (!req.canAddClients()) {
-      return res.status(403).json({ 
-        message: 'Client limit reached for your subscription plan',
-        limit: req.tenant.subscription?.features?.maxClients || 0
-      });
+    const isLead = req.body.status === 'prospect';
+
+    if (isLead) {
+      if (!req.canAddLeads()) {
+        return res.status(403).json({ 
+          message: 'Lead limit reached for your subscription plan',
+          limit: req.tenant.subscription?.features?.maxClients || 0
+        });
+      }
+    } else {
+      if (!req.canAddClients()) {
+        return res.status(403).json({ 
+          message: 'Client limit reached for your subscription plan',
+          limit: req.tenant.subscription?.features?.maxClients || 0
+        });
+      }
     }
 
     const clientData = {
@@ -169,11 +179,18 @@ router.post('/', [
       agent: req.user.role === 'agent' ? req.user.userId : req.body.agent
     };
 
+    if (!isLead) {
+      clientData.leadStatus = '';
+    }
+
     const client = new Client(clientData);
     await client.save();
 
-    // Update tenant usage
-    await req.updateTenantUsage('clients', 1);
+    if (isLead) {
+      await req.updateTenantUsage('leads', 1);
+    } else {
+      await req.updateTenantUsage('clients', 1);
+    }
 
     await logAction(req, 'CREATE_CLIENT', `Created client ${clientData.name}`, { entityType: 'Client', entityId: client._id });
 
@@ -208,11 +225,23 @@ router.put('/:id', [
       return res.status(404).json({ message: 'Client not found' });
     }
 
+    const wasLead = client.status === 'prospect';
+    const nextStatus = req.body.status;
+    const willBeLead = nextStatus === 'prospect';
+
     const updatedClient = await Client.findOneAndUpdate(
       { _id: req.params.id, ...req.tenantQuery },
       req.body,
       { new: true }
     ).populate('agent', 'name email');
+
+    if (wasLead && !willBeLead) {
+      await req.updateTenantUsage('leads', -1);
+      await req.updateTenantUsage('clients', 1);
+    } else if (!wasLead && willBeLead) {
+      await req.updateTenantUsage('clients', -1);
+      await req.updateTenantUsage('leads', 1);
+    }
 
     await logAction(req, 'UPDATE_CLIENT', `Updated client ${client.name}`, { entityType: 'Client', entityId: client._id });
     res.json(updatedClient);
@@ -234,8 +263,14 @@ router.delete('/:id', async (req, res) => {
       return res.status(404).json({ message: 'Client not found' });
     }
 
+    const wasLead = client.status === 'prospect';
+
     await Client.findOneAndDelete({ _id: req.params.id, ...req.tenantQuery });
-    await req.updateTenantUsage('clients', -1);
+    if (wasLead) {
+      await req.updateTenantUsage('leads', -1);
+    } else {
+      await req.updateTenantUsage('clients', -1);
+    }
     await logAction(req, 'DELETE_CLIENT', `Deleted client ${client.name}`, { entityType: 'Client', entityId: client._id });
     res.json({ message: 'Client deleted successfully' });
   } catch (error) {
