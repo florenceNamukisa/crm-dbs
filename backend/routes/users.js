@@ -108,31 +108,39 @@ router.post('/', tenantAuth, requireRole(['admin', 'manager', 'superadmin']), ch
 
     await logAction(req, 'CREATE_USER', `Created user ${email}`, { entityType: 'User', entityId: user._id });
 
-    const emailResult = await sendEmail(
-      email,
-      'agentWelcome',
-      { name, email, otp, loginUrl: (process.env.APP_URL || process.env.FRONTEND_URL || 'http://localhost:5173') + '/login' }
-    );
+    // Attempt to send email but DO NOT block user creation on email failure
+    let emailResult = { success: false, error: 'Email sending skipped' };
+    try {
+      emailResult = await sendEmail(
+        email,
+        'agentWelcome',
+        { name, email, otp, loginUrl: (process.env.APP_URL || process.env.FRONTEND_URL || 'http://localhost:5173') + '/login' }
+      );
+    } catch (emailErr) {
+      console.error('Email sending threw exception for ' + email + ':', emailErr.message);
+      emailResult = { success: false, error: emailErr.message };
+    }
 
     const userResponse = await User.findById(user._id)
       .select('-password -otp')
       .populate('tenant', 'name slug');
 
-    if (emailResult.success) {
-      res.status(201).json({
-        message: 'User created successfully and welcome email sent',
-        user: userResponse,
-        emailSent: true
-      });
-    } else {
-      res.status(201).json({
-        message: 'User created but failed to send welcome email',
-        user: userResponse,
-        emailSent: false,
-        otp: otp,
-        error: emailResult.error
-      });
+    // ALWAYS return the OTP so admin can manually share it if email fails
+    const responseData = {
+      message: emailResult.success
+        ? 'User created successfully and welcome email sent'
+        : 'User created successfully. Welcome email could not be sent. Share OTP manually.',
+      user: userResponse,
+      emailSent: emailResult.success,
+      otp: otp,           // Always return OTP for admin to share
+      error: emailResult.success ? undefined : (emailResult.error || 'Unknown email error'),
+    };
+
+    if (!emailResult.success) {
+      console.log('Email failed for ' + email + '. OTP to share: ' + otp);
     }
+
+    res.status(201).json(responseData);
   } catch (error) {
     if (error.code === 11000) {
       return res.status(400).json({ message: 'Email already exists' });
@@ -245,11 +253,11 @@ router.delete('/:id', tenantAuth, requireRole(['admin', 'manager', 'superadmin']
       }
       // Superadmin can delete admins, managers, agents freely
     } else if (req.user.role === 'admin') {
-      // Regular admins can only delete agents within their tenant
-      if (user.role !== 'agent') {
+      // Admins can delete agents and managers within their tenant (but not other admins or superadmins)
+      if (user.role !== 'agent' && user.role !== 'manager') {
         await session.abortTransaction();
         session.endSession();
-        return res.status(403).json({ message: 'Admins can only delete agent accounts' });
+        return res.status(403).json({ message: 'Admins can only delete agent and manager accounts' });
       }
       // Also ensure user is in same tenant (already enforced by query, but double-check)
       if (user.tenant && !user.tenant.equals(req.tenantId)) {
@@ -258,7 +266,7 @@ router.delete('/:id', tenantAuth, requireRole(['admin', 'manager', 'superadmin']
         return res.status(403).json({ message: 'Cannot delete users from other organizations' });
       }
     } else if (req.user.role === 'manager') {
-      // Managers (platform-wide) can delete agents only for safety
+      // Managers can delete agents for safety
       if (user.role !== 'agent') {
         await session.abortTransaction();
         session.endSession();

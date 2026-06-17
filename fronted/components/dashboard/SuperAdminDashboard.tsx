@@ -19,7 +19,7 @@ import {
   useCreateTenant, useTenantControl,
   useTenantProfile, useUpdateTenant, useAssignPlan, useImpersonateTenant,
 } from "@/lib/api/superadmin";
-import { useUsers } from "@/lib/api/users";
+import { useUsers, useUpdateUser, useDeleteUser } from "@/lib/api/users";
 import { clearSession, getStoredUser, saveSession, apiFetch } from "@/lib/auth";
 import { applyTheme, getStoredTheme, type ThemeMode } from "@/lib/theme";
 import { useNavigate } from "@tanstack/react-router";
@@ -91,6 +91,26 @@ function Panel({ title, action, children, className = "" }: { title: string; act
       {children}
     </section>
   );
+}
+
+function TablePagination({ page, totalPages, onPageChange }: { page: number; totalPages: number; onPageChange: (page: number) => void }) {
+  if (totalPages <= 1) return null;
+  return (
+    <div className="flex items-center justify-between gap-3 border-t border-border/30 pt-3 text-xs text-muted-foreground">
+      <button type="button" disabled={page <= 1} onClick={() => onPageChange(page - 1)} className="rounded border border-border px-3 py-1.5 disabled:opacity-40 hover:bg-accent">
+        Previous
+      </button>
+      <span>Page {page} of {totalPages}</span>
+      <button type="button" disabled={page >= totalPages} onClick={() => onPageChange(page + 1)} className="rounded border border-border px-3 py-1.5 disabled:opacity-40 hover:bg-accent">
+        Next
+      </button>
+    </div>
+  );
+}
+
+function getPageSlice<T>(items: T[], page: number, pageSize: number) {
+  const start = (page - 1) * pageSize;
+  return items.slice(start, start + pageSize);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -184,6 +204,10 @@ function TenantDetailView({ tenantId, onBack }: { tenantId: string; onBack: () =
 
   // Status confirm modal
   const [confirmAction, setConfirmAction] = useState<string | null>(null);
+  const [usersPage, setUsersPage] = useState(1);
+  const usersPageSize = 8;
+  const visibleUsers = getPageSlice(users, usersPage, usersPageSize);
+  const usersTotalPages = Math.max(1, Math.ceil(users.length / usersPageSize));
 
   function openEdit() {
     if (!tenant) return;
@@ -315,7 +339,7 @@ function TenantDetailView({ tenantId, onBack }: { tenantId: string; onBack: () =
             </thead>
             <tbody>
               {users.length === 0 && <tr><td colSpan={6} className="py-4 text-center text-muted-foreground">No users in this tenant</td></tr>}
-              {users.map((u: any) => (
+              {visibleUsers.map((u: any) => (
                 <tr key={u._id} className="border-t border-border/50">
                   <td className="py-2 pr-3 font-medium">{u.name}</td>
                   <td className="pr-3 text-muted-foreground">{u.email}</td>
@@ -326,8 +350,9 @@ function TenantDetailView({ tenantId, onBack }: { tenantId: string; onBack: () =
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
+            </table>
+            <TablePagination page={usersPage} totalPages={usersTotalPages} onPageChange={setUsersPage} />
+          </div>
       </Panel>
 
       {/* Activity Timeline */}
@@ -449,6 +474,10 @@ function TenantsView() {
   const tenants: any[] = data?.tenants ?? [];
   const [assignTenant, setAssignTenant] = useState<any>(null);
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
+  const [tenantsPage, setTenantsPage] = useState(1);
+  const tenantsPageSize = 10;
+  const visibleTenants = getPageSlice(tenants, tenantsPage, tenantsPageSize);
+  const tenantsTotalPages = Math.max(1, Math.ceil(tenants.length / tenantsPageSize));
   const total = tenants.length;
   const active = tenants.filter(t => t.status === "active").length;
   const suspended = tenants.filter(t => t.status === "suspended").length;
@@ -488,7 +517,8 @@ function TenantsView() {
         </div>
         <div className="overflow-auto">
           {isLoading ? <div className="py-8 text-center text-muted-foreground text-sm">Loading...</div> : (
-            <table className="w-full min-w-[800px] text-xs">
+            <>
+              <table className="w-full min-w-[800px] text-xs">
               <thead className="text-muted-foreground">
                 <tr className="text-left">
                   {["Company", "Sector", "Admin", "Users", "Plan", "Status", "Actions"].map(h => <th key={h} className="pb-2 pr-3 font-normal">{h}</th>)}
@@ -496,7 +526,7 @@ function TenantsView() {
               </thead>
               <tbody>
                 {tenants.length === 0 && <tr><td colSpan={7} className="py-4 text-center text-muted-foreground">No tenants</td></tr>}
-                {tenants.map((t: any) => (
+                {visibleTenants.map((t: any) => (
                   <tr key={t._id} className="border-t border-border/50 hover:bg-border/5 cursor-pointer transition-colors" onClick={() => setSelectedTenantId(t._id)}>
                     <td className="py-2 pr-3 font-medium flex items-center gap-2">
                       <Building2 className="h-3.5 w-3.5 text-orange-400 shrink-0" />
@@ -524,6 +554,8 @@ function TenantsView() {
                 ))}
               </tbody>
             </table>
+              <TablePagination page={tenantsPage} totalPages={tenantsTotalPages} onPageChange={setTenantsPage} />
+            </>
           )}
         </div>
       </Panel>
@@ -650,6 +682,10 @@ function TenantsOverviewTable() {
   const tenantControl = useTenantControl();
   const tenants: any[] = data?.tenants ?? [];
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
+  const [overviewPage, setOverviewPage] = useState(1);
+  const overviewPageSize = 8;
+  const visibleTenants = getPageSlice(tenants, overviewPage, overviewPageSize);
+  const overviewTotalPages = Math.max(1, Math.ceil(tenants.length / overviewPageSize));
 
   if (selectedTenantId) {
     return <TenantDetailView tenantId={selectedTenantId} onBack={() => setSelectedTenantId(null)} />;
@@ -659,7 +695,8 @@ function TenantsOverviewTable() {
     <Panel title="All Tenants" action={`${tenants.length} total`}>
       <div className="overflow-auto">
         {isLoading ? <div className="py-8 text-center text-muted-foreground text-sm">Loading...</div> : (
-          <table className="w-full min-w-[700px] text-xs">
+          <>
+            <table className="w-full min-w-[700px] text-xs">
             <thead className="text-muted-foreground">
               <tr className="text-left">
                 {["Company", "Sector", "Admin", "Users", "Plan", "Status", "Actions"].map(h => <th key={h} className="pb-2 pr-3 font-normal">{h}</th>)}
@@ -667,7 +704,7 @@ function TenantsOverviewTable() {
             </thead>
             <tbody>
               {tenants.length === 0 && <tr><td colSpan={7} className="py-4 text-center text-muted-foreground">No tenants</td></tr>}
-              {tenants.map((t: any) => (
+              {visibleTenants.map((t: any) => (
                 <tr key={t._id} className="border-t border-border/50 hover:bg-border/5 cursor-pointer transition-colors" onClick={() => setSelectedTenantId(t._id)}>
                   <td className="py-2 pr-3 font-medium">{t.name}</td>
                   <td className="pr-3 text-muted-foreground">{t.sector || "—"}</td>
@@ -689,6 +726,8 @@ function TenantsOverviewTable() {
               ))}
             </tbody>
           </table>
+          <TablePagination page={overviewPage} totalPages={overviewTotalPages} onPageChange={setOverviewPage} />
+        </>
         )}
       </div>
     </Panel>
@@ -704,6 +743,40 @@ function UsersView() {
   const { data: tenantsData } = useTenants();
   const tenantList: any[] = tenantsData?.tenants ?? [];
   const { data: analyticsData } = useSuperAdminAnalytics("30d");
+  const [usersPage, setUsersPage] = useState(1);
+  const usersPageSize = 12;
+  const visibleUsers = getPageSlice(users, usersPage, usersPageSize);
+  const usersTotalPages = Math.max(1, Math.ceil(users.length / usersPageSize));
+
+  // Edit user state
+  const updateUser = useUpdateUser();
+  const deleteUser = useDeleteUser();
+  const [editUser, setEditUser] = useState<any>(null);
+  const [editForm, setEditForm] = useState({ name: "", phone: "", isActive: true });
+  const [deleteConfirm, setDeleteConfirm] = useState<any>(null);
+
+  function openEdit(u: any) {
+    setEditForm({ name: u.name || "", phone: u.phone || "", isActive: u.isActive ?? true });
+    setEditUser(u);
+  }
+
+  async function handleEditSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editUser) return;
+    try {
+      await updateUser.mutateAsync({ id: editUser._id, data: editForm });
+      toast.success("User updated", { description: `${editUser.name} has been updated.` });
+      setEditUser(null);
+    } catch (err: any) { toast.error("Failed to update user", { description: err.message }); }
+  }
+
+  async function handleDeleteUser(u: any) {
+    try {
+      await deleteUser.mutateAsync(u._id);
+      toast.success("User deleted", { description: `${u.name} has been permanently deleted.` });
+      setDeleteConfirm(null);
+    } catch (err: any) { toast.error("Failed to delete user", { description: err.message }); }
+  }
 
   const total = users.length;
   const active = users.filter((u: any) => u.isActive).length;
@@ -757,15 +830,16 @@ function UsersView() {
       <Panel title="All Users">
         <div className="overflow-auto">
           {isLoading ? <div className="py-8 text-center text-muted-foreground text-sm">Loading...</div> : (
-            <table className="w-full min-w-[600px] text-xs">
+            <>
+              <table className="w-full min-w-[800px] text-xs">
               <thead className="text-muted-foreground">
                 <tr className="text-left">
-                  {["Name", "Email", "Role", "Tenant", "Status", "Last Active"].map(h => <th key={h} className="pb-2 pr-3 font-normal">{h}</th>)}
+                  {["Name", "Email", "Role", "Tenant", "Status", "Last Active", "Actions"].map(h => <th key={h} className="pb-2 pr-3 font-normal">{h}</th>)}
                 </tr>
               </thead>
               <tbody>
-                {users.length === 0 && <tr><td colSpan={6} className="py-4 text-center text-muted-foreground">No users</td></tr>}
-                {users.slice(0, 15).map((u: any) => (
+                {users.length === 0 && <tr><td colSpan={7} className="py-4 text-center text-muted-foreground">No users</td></tr>}
+                {visibleUsers.map((u: any) => (
                   <tr key={u._id} className="border-t border-border/50">
                     <td className="py-2 pr-3 font-medium">{u.name}</td>
                     <td className="pr-3 text-muted-foreground">{u.email}</td>
@@ -773,13 +847,71 @@ function UsersView() {
                     <td className="pr-3 text-muted-foreground">{u.tenant?.name || "—"}</td>
                     <td className="pr-3"><span className={badge(u.isActive ? "Active" : "Inactive")}>{u.isActive ? "Active" : "Inactive"}</span></td>
                     <td className="pr-3 text-muted-foreground">{u.updatedAt ? new Date(u.updatedAt).toLocaleDateString() : "—"}</td>
+                    <td>
+                      <div className="flex gap-1">
+                        <button onClick={() => openEdit(u)} className="rounded border border-blue-500/30 bg-blue-500/10 px-2 py-0.5 text-[10px] text-blue-400 hover:bg-blue-500/20">
+                          Edit
+                        </button>
+                        <button onClick={() => setDeleteConfirm(u)} className="rounded border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[10px] text-red-400 hover:bg-red-500/20">
+                          Delete
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+              <TablePagination page={usersPage} totalPages={usersTotalPages} onPageChange={setUsersPage} />
+            </>
           )}
         </div>
       </Panel>
+
+      {/* Edit User Modal */}
+      <Dialog open={!!editUser} onOpenChange={() => setEditUser(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Edit User — {editUser?.name}</DialogTitle></DialogHeader>
+          <form onSubmit={handleEditSubmit} className="space-y-3 pt-2">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">Full Name</label>
+              <input type="text" value={editForm.name} required onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} className="h-9 w-full rounded-md border border-border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-primary/40" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">Phone</label>
+              <input type="tel" value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} className="h-9 w-full rounded-md border border-border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-primary/40" />
+            </div>
+            <div className="flex items-center gap-3">
+              <label className="text-xs font-medium text-muted-foreground">Active</label>
+              <input type="checkbox" checked={editForm.isActive} onChange={e => setEditForm(f => ({ ...f, isActive: e.target.checked }))} className="h-4 w-4 rounded border-border accent-orange-500" />
+            </div>
+            <button type="submit" disabled={updateUser.isPending} className="flex h-10 w-full items-center justify-center gap-2 rounded-md gradient-orange font-semibold text-white hover:opacity-90 disabled:opacity-60">
+              {updateUser.isPending ? "Saving..." : "Save Changes"}
+            </button>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete User Confirmation Modal */}
+      <Dialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-red-400" />
+              Delete User
+            </DialogTitle>
+          </DialogHeader>
+          <div className="text-sm text-muted-foreground">
+            Are you sure you want to permanently delete <strong>{deleteConfirm?.name}</strong> ({deleteConfirm?.email})?<br /><br />
+            This will also remove all associated data and reassign clients/deals to other active users.
+          </div>
+          <div className="flex justify-end gap-2 pt-3">
+            <button onClick={() => setDeleteConfirm(null)} className="px-4 py-2 rounded-md border border-border text-xs hover:bg-accent">Cancel</button>
+            <button onClick={() => handleDeleteUser(deleteConfirm!)} disabled={deleteUser.isPending} className="px-4 py-2 rounded-md bg-red-500 text-white text-xs hover:bg-red-600 disabled:opacity-60">
+              {deleteUser.isPending ? "Deleting..." : "Delete User"}
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -796,6 +928,10 @@ function PricingView() {
     { name: "Professional", price: "$9,900", cycle: "Monthly", features: "50 users, 1K clients, 500 deals, reports, API", subscribers: tenants.filter(t => t.subscription?.planName === "professional").length },
     { name: "Enterprise", price: "$29,900", cycle: "Monthly", features: "Unlimited users, clients & deals, SSO, priority support", subscribers: tenants.filter(t => t.subscription?.planName === "enterprise").length },
   ];
+  const [plansPage, setPlansPage] = useState(1);
+  const plansPageSize = 10;
+  const visiblePlans = getPageSlice(plans, plansPage, plansPageSize);
+  const plansTotalPages = Math.max(1, Math.ceil(plans.length / plansPageSize));
 
   return (
     <div className="space-y-4">
@@ -819,7 +955,7 @@ function PricingView() {
             </tr>
           </thead>
           <tbody>
-            {plans.map(p => (
+            {visiblePlans.map(p => (
               <tr key={p.name} className="border-t border-border/50">
                 <td className="py-2 pr-3 font-medium">{p.name}</td>
                 <td className="pr-3">{p.price}</td>
@@ -830,6 +966,7 @@ function PricingView() {
             ))}
           </tbody>
         </table>
+        <TablePagination page={plansPage} totalPages={plansTotalPages} onPageChange={setPlansPage} />
       </Panel>
     </div>
   );
@@ -838,23 +975,29 @@ function PricingView() {
 function AuditLogsView() {
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const pageSize = 10;
 
   useEffect(() => {
     let active = true;
     setLoading(true);
-    apiFetch<any>("/audit-logs?limit=100")
+    apiFetch<any>(`/audit-logs?limit=${pageSize}&page=${page}`)
       .then((data) => {
-        if (active) setLogs(data.logs ?? []);
+        if (active) {
+          setLogs(data.logs ?? []);
+          setTotalPages(Math.max(1, data.pagination?.pages || Math.ceil((data.pagination?.total || 0) / pageSize)));
+        }
       })
       .finally(() => {
         if (active) setLoading(false);
       });
     return () => { active = false; };
-  }, []);
+  }, [page]);
 
   return (
     <div className="space-y-4">
-      <Panel title="Audit Logs" action={`${logs.length} entries`}>
+      <Panel title="Audit Logs" action={`${loading ? "loading" : `${logs.length} entries`}`}>
         {loading ? <div className="py-8 text-center text-muted-foreground text-sm">Loading audit logs...</div> : (
           <div className="overflow-auto">
             {logs.length === 0 ? <div className="py-8 text-center text-muted-foreground text-sm">No audit logs found</div> : (
@@ -878,6 +1021,7 @@ function AuditLogsView() {
                 </tbody>
               </table>
             )}
+            <TablePagination page={page} totalPages={totalPages} onPageChange={setPage} />
           </div>
         )}
       </Panel>

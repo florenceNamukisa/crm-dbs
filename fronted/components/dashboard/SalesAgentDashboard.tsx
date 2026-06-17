@@ -214,14 +214,21 @@ export default function SalesAgentDashboard() {
 
   const kpiIcons = [BarChart3, DollarSign, Users, UserPlus];
   const deleteClient = useDeleteClient();
+  const [deletingClientId, setDeletingClientId] = useState<string | null>(null);
 
   async function handleDeleteClient(id: string) {
     if (!confirm("Are you sure you want to delete this client?")) return;
+    setDeletingClientId(id);
     try {
-      await deleteClient.mutateAsync(id);
+      await deleteClient.mutateAsync(String(id));
       toast.success("Client deleted");
     } catch (err: any) {
       toast.error("Failed to delete client", { description: err.message });
+    } finally {
+      setDeletingClientId(null);
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+      queryClient.invalidateQueries({ queryKey: ["sales-dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboards"] });
     }
   }
 
@@ -500,10 +507,10 @@ export default function SalesAgentDashboard() {
                     </td>
                     <td className="py-2.5 pr-3">
                       <div className="flex gap-1">
-                        <button onClick={(e) => { e.stopPropagation(); setOpenForm("client", c); }} className="h-6 w-6 rounded grid place-items-center hover:bg-accent" title="Edit client">
+                        <button type="button" onClick={(e) => { e.stopPropagation(); setOpenForm("client", c); }} className="h-6 w-6 rounded grid place-items-center hover:bg-accent" title="Edit client">
                           <Edit className="h-3.5 w-3.5 text-orange-400" />
                         </button>
-                        <button onClick={(e) => { e.stopPropagation(); handleDeleteClient(c._id); }} className="h-6 w-6 rounded grid place-items-center hover:bg-accent" title="Delete client">
+                        <button type="button" disabled={deletingClientId === c._id} onClick={(e) => { e.stopPropagation(); handleDeleteClient(c._id); }} className="h-6 w-6 rounded grid place-items-center hover:bg-accent disabled:opacity-50" title="Delete client">
                           <Trash2 className="h-3.5 w-3.5 text-red-400" />
                         </button>
                       </div>

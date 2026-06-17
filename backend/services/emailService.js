@@ -1,69 +1,69 @@
 import nodemailer from 'nodemailer';
-import dotenv from 'dotenv';
 
-dotenv.config();
+// NOTE: .env is loaded by server.js via dotenv.config() at startup.
+// Do NOT load it again here to avoid path issues.
+// Environment variables are already available via process.env.
 
-let cachedTransporter = null;
-let cachedConfigSummary = null;
-let cachedEtherealAccount = null;
+console.log('[EmailService] Initializing...');
+const hasCredentials = !!(process.env.EMAIL_USER && process.env.EMAIL_PASS);
+if (hasCredentials) {
+  console.log('[EmailService] SMTP configured for: ' + process.env.EMAIL_USER);
+  console.log('[EmailService] Host: ' + (process.env.EMAIL_HOST || 'smtp.gmail.com') + ':' + (process.env.EMAIL_PORT || '587'));
+} else {
+  console.log('[EmailService] No SMTP credentials found - will use Ethereal test account');
+}
 
+/**
+ * Create a FRESH transporter every time - no caching to avoid stale connections
+ */
 const createTransporter = async () => {
-  if (cachedTransporter) return cachedTransporter;
+  const user = process.env.EMAIL_USER;
+  const pass = process.env.EMAIL_PASS;
 
-  if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
-    const service = process.env.EMAIL_SERVICE;
-    const host = process.env.EMAIL_HOST;
-    const port = process.env.EMAIL_PORT ? Number(process.env.EMAIL_PORT) : undefined;
+  if (user && pass) {
+    const host = process.env.EMAIL_HOST || 'smtp.gmail.com';
+    const port = Number(process.env.EMAIL_PORT) || 587;
     const secure = process.env.EMAIL_SECURE === 'true';
 
-    const transportConfig = {
-      connectionTimeout: process.env.EMAIL_CONNECTION_TIMEOUT ? Number(process.env.EMAIL_CONNECTION_TIMEOUT) : 10000,
-      greetingTimeout: process.env.EMAIL_GREETING_TIMEOUT ? Number(process.env.EMAIL_GREETING_TIMEOUT) : 10000,
-      socketTimeout: process.env.EMAIL_SOCKET_TIMEOUT ? Number(process.env.EMAIL_SOCKET_TIMEOUT) : 15000,
-      auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
-    };
+    console.log('[EmailService] Creating Gmail transporter: ' + user + ' -> ' + host + ':' + port);
 
-    if (host) {
-      transportConfig.host = host;
-      transportConfig.port = port || 587;
-      transportConfig.secure = secure;
-    } else {
-      transportConfig.service = service || 'gmail';
-    }
+    const transporter = nodemailer.createTransport({
+      host: host,
+      port: port,
+      secure: secure,
+      auth: {
+        user: user,
+        pass: pass,
+      },
+      // Gmail specific: requires these settings
+      connectionTimeout: 30000,
+      greetingTimeout: 30000,
+      socketTimeout: 30000,
+      debug: true, // Enable debug output
+      logger: true, // Enable logger
+      tls: {
+        rejectUnauthorized: false, // Allow self-signed certs
+      },
+    });
 
-    cachedTransporter = nodemailer.createTransport(transportConfig);
-    cachedConfigSummary = {
-      provider: transportConfig.service || transportConfig.host || 'custom',
-      user: process.env.EMAIL_USER,
-    };
-    return cachedTransporter;
+    return transporter;
   }
 
-  if (!cachedEtherealAccount) {
-    if (process.env.ETHEREAL_USER && process.env.ETHEREAL_PASS) {
-      cachedEtherealAccount = {
-        user: process.env.ETHEREAL_USER,
-        pass: process.env.ETHEREAL_PASS,
-      };
-      cachedConfigSummary = { provider: 'ethereal:env', user: cachedEtherealAccount.user };
-    } else {
-      cachedEtherealAccount = await nodemailer.createTestAccount();
-      cachedConfigSummary = { provider: 'ethereal:auto', user: cachedEtherealAccount.user };
-      console.log('No SMTP credentials supplied - using temporary Ethereal account.');
-      console.log('   Username: ' + cachedEtherealAccount.user);
-      console.log('   Password: ' + cachedEtherealAccount.pass);
-    }
-  }
+  // Fallback to Ethereal
+  console.log('[EmailService] No SMTP credentials - creating Ethereal test account');
+  const testAccount = await nodemailer.createTestAccount();
+  console.log('[EmailService] Ethereal account: ' + testAccount.user);
 
-  cachedTransporter = nodemailer.createTransport({
+  return nodemailer.createTransport({
     host: 'smtp.ethereal.email',
     port: 587,
-    auth: cachedEtherealAccount,
+    secure: false,
+    auth: {
+      user: testAccount.user,
+      pass: testAccount.pass,
+    },
   });
-  return cachedTransporter;
 };
-
-export const getEmailConfigSummary = () => cachedConfigSummary;
 
 // 6-digit numeric OTP
 export const generateOTP = () => {
@@ -72,8 +72,6 @@ export const generateOTP = () => {
 
 // ===========================================================================
 // SHARED EMAIL DESIGN SYSTEM
-// One polished, responsive layout used by every transactional email.
-// Brand colors and spacing are centralised so the look is consistent.
 // ===========================================================================
 
 const BRAND = {
@@ -107,24 +105,9 @@ function hexToRgba(hex, alpha) {
   alpha = alpha == null ? 1 : alpha;
   const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex || '');
   if (!m) return 'rgba(249,115,22,' + alpha + ')';
-  return (
-    'rgba(' + parseInt(m[1], 16) + ', ' + parseInt(m[2], 16) + ', ' +
-    parseInt(m[3], 16) + ', ' + alpha + ')'
-  );
+  return 'rgba(' + parseInt(m[1], 16) + ', ' + parseInt(m[2], 16) + ', ' + parseInt(m[3], 16) + ', ' + alpha + ')';
 }
 
-// ---------------------------------------------------------------------------
-// buildEmail({ accent, eyebrow, title, body, cta, footerNote, preheader })
-// Returns { subject, html }
-//
-// - accent     : header gradient color (defaults to brand orange)
-// - eyebrow    : small text above the title (e.g. "Welcome aboard")
-// - title      : bold header line
-// - body       : HTML string for the message body (use <p>, <ul>, etc.)
-// - cta        : { label, url } optional call-to-action button
-// - footerNote : optional small text under the body
-// - preheader  : hidden preview text shown in inbox list
-// ---------------------------------------------------------------------------
 export function buildEmail(opts) {
   const accent = (opts && opts.accent) || BRAND.primary;
   const eyebrow = (opts && opts.eyebrow) || BRAND.name;
@@ -150,26 +133,20 @@ export function buildEmail(opts) {
     '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:' + BRAND.bg + ';padding:32px 16px;">' +
       '<tr><td align="center">' +
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:' + BRAND.card + ';border:1px solid ' + BRAND.border + ';border-radius:16px;overflow:hidden;box-shadow:0 4px 16px rgba(15,23,42,0.06);">' +
-          // Header
           '<tr><td style="background:linear-gradient(135deg,' + accent + ' 0%,' + BRAND.primaryDark + ' 100%);padding:36px 40px;">' +
             '<div style="display:inline-block;background:rgba(255,255,255,0.18);color:#ffffff;font-size:12px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;padding:6px 12px;border-radius:999px;">' + escapeHtml(eyebrow) + '</div>' +
             '<h1 style="margin:14px 0 0;font-size:24px;line-height:1.3;color:#ffffff;font-weight:700;">' + escapeHtml(title) + '</h1>' +
           '</td></tr>' +
-          // Body
           '<tr><td style="padding:36px 40px 8px;font-size:15px;line-height:1.6;color:' + BRAND.text + ';">' + body + '</td></tr>' +
-          // CTA
           (cta
             ? '<tr><td align="center" style="padding:24px 40px 8px;">' +
                 '<a href="' + escapeAttr(cta.url) + '" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:' + accent + ';color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:14px 30px;border-radius:10px;box-shadow:0 6px 16px ' + hexToRgba(accent, 0.35) + ';">' + escapeHtml(cta.label) + '</a>' +
               '</td></tr>'
             : '') +
-          // Footer note
           (footerNote
             ? '<tr><td style="padding:8px 40px 0;font-size:13px;line-height:1.55;color:' + BRAND.muted + ';">' + footerNote + '</td></tr>'
             : '') +
-          // Divider
           '<tr><td style="padding:32px 40px 0;"><div style="height:1px;background:' + BRAND.border + ';"></div></td></tr>' +
-          // Footer
           '<tr><td style="padding:20px 40px 32px;font-size:12px;line-height:1.6;color:' + BRAND.muted + ';text-align:center;">' +
             '<div style="margin-bottom:6px;"><strong style="color:' + BRAND.text + ';">' + BRAND.name + '</strong></div>' +
             '<div>&copy; ' + year() + ' ' + BRAND.name + '. All rights reserved.</div>' +
@@ -184,21 +161,6 @@ export function buildEmail(opts) {
   return { subject: title, html };
 }
 
-// ---------------------------------------------------------------------------
-// Reusable content blocks (render to HTML strings, plugged into `body`)
-// ---------------------------------------------------------------------------
-
-function otpBlock(code, label) {
-  label = label || 'Your one-time code';
-  return (
-    '<div style="margin:24px 0 8px;text-align:center;">' +
-      '<div style="font-size:12px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:' + BRAND.muted + ';">' + escapeHtml(label) + '</div>' +
-      '<div style="display:inline-block;margin-top:10px;padding:18px 28px;font-family:\'SF Mono\',\'Menlo\',\'Consolas\',monospace;font-size:34px;font-weight:700;letter-spacing:10px;color:' + BRAND.primary + ';background:' + BRAND.primarySoft + ';border:2px dashed ' + BRAND.primary + ';border-radius:12px;">' + escapeHtml(code) + '</div>' +
-      '<div style="margin-top:10px;font-size:12px;color:' + BRAND.muted + ';">This code expires in <strong>15 minutes</strong>.</div>' +
-    '</div>'
-  );
-}
-
 function credentialsBlock(opts) {
   return (
     '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:24px 0;border:1px solid ' + BRAND.border + ';border-radius:12px;overflow:hidden;background:#FAFBFC;">' +
@@ -210,29 +172,6 @@ function credentialsBlock(opts) {
     '</table>'
   );
 }
-
-function infoRow(label, value) {
-  return (
-    '<tr>' +
-      '<td style="padding:10px 16px;font-size:13px;color:' + BRAND.muted + ';width:40%;border-bottom:1px solid ' + BRAND.border + ';">' + escapeHtml(label) + '</td>' +
-      '<td style="padding:10px 16px;font-size:14px;color:' + BRAND.text + ';font-weight:600;border-bottom:1px solid ' + BRAND.border + ';">' + escapeHtml(value) + '</td>' +
-    '</tr>'
-  );
-}
-
-function infoTable(rows) {
-  const body = rows.map(function (r) { return infoRow(r[0], r[1]); }).join('');
-  return (
-    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0;border:1px solid ' + BRAND.border + ';border-radius:12px;overflow:hidden;">' +
-      '<tr><td colspan="2" style="padding:0;"></td></tr>' +
-      body +
-    '</table>'
-  );
-}
-
-// ===========================================================================
-// TEMPLATE REGISTRY
-// ===========================================================================
 
 const emailTemplates = {
   agentWelcome: function (data) {
@@ -247,7 +186,7 @@ const emailTemplates = {
       preheader: 'Your account is ready. Sign in to get started.',
       body:
         '<p style="margin:0 0 16px;">Hi <strong>' + escapeHtml(name) + '</strong>,</p>' +
-        '<p style="margin:0 0 16px;">Your tenant admin account has been created. Use the credentials below to sign in to your CRM workspace right away.</p>' +
+        '<p style="margin:0 0 16px;">Your account has been created. Use the credentials below to sign in to your CRM workspace right away.</p>' +
         credentialsBlock({ email: email, password: otp }) +
         '<p style="margin:16px 0 0;color:' + BRAND.muted + ';font-size:13px;">For security, you will be asked to change this temporary password on first login.</p>',
       cta: { label: 'Sign in to your dashboard', url: loginUrl },
@@ -264,9 +203,12 @@ const emailTemplates = {
       preheader: 'Use the one-time code below to reset your password.',
       body:
         '<p style="margin:0 0 16px;">Hi <strong>' + escapeHtml(name) + '</strong>,</p>' +
-        '<p style="margin:0 0 16px;">We received a request to reset the password for your ' + BRAND.name + ' account. Use the code below to continue. If you did not make this request, you can safely ignore this email.</p>' +
-        otpBlock(otp, 'Password reset code') +
-        '<p style="margin:16px 0 0;color:' + BRAND.muted + ';font-size:13px;">For your security, this code expires in <strong>15 minutes</strong> and can only be used once.</p>',
+        '<p style="margin:0 0 16px;">We received a request to reset the password for your ' + BRAND.name + ' account.</p>' +
+        '<div style="margin:24px 0 8px;text-align:center;">' +
+          '<div style="font-size:12px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:' + BRAND.muted + ';">Password reset code</div>' +
+          '<div style="display:inline-block;margin-top:10px;padding:18px 28px;font-family:monospace;font-size:34px;font-weight:700;letter-spacing:10px;color:' + BRAND.primary + ';background:' + BRAND.primarySoft + ';border:2px dashed ' + BRAND.primary + ';border-radius:12px;">' + escapeHtml(otp) + '</div>' +
+          '<div style="margin-top:10px;font-size:12px;color:' + BRAND.muted + ';">This code expires in <strong>15 minutes</strong>.</div>' +
+        '</div>',
     });
   },
 
@@ -278,30 +220,25 @@ const emailTemplates = {
     const dueDate = data && data.dueDate;
     const isOverdue = Boolean(data && data.isOverdue);
     const appUrl = data && data.appUrl;
-
     const formattedDate = dueDate
       ? new Date(dueDate).toLocaleString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })
       : '';
     const accent = isOverdue ? BRAND.danger : BRAND.primary;
-    const badge = isOverdue ? 'Overdue' : 'Due soon';
 
     return buildEmail({
       accent: accent,
-      eyebrow: badge,
+      eyebrow: isOverdue ? 'Overdue' : 'Due soon',
       title: isOverdue ? 'Task overdue' : 'Task reminder',
       preheader: taskTitle + ' for ' + clientName,
       body:
         '<p style="margin:0 0 16px;">Hi <strong>' + escapeHtml(agentName) + '</strong>,</p>' +
-        '<p style="margin:0 0 16px;">You have a task <strong>' + (isOverdue ? 'that is overdue' : 'coming up') + '</strong> for client <strong>' + escapeHtml(clientName) + '</strong>.</p>' +
-        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0;border:1px solid ' + BRAND.border + ';border-left:4px solid ' + accent + ';border-radius:10px;background:#F8FAFC;">' +
-          '<tr><td style="padding:18px 20px;">' +
-            '<div style="font-weight:600;font-size:15px;color:' + BRAND.text + ';margin-bottom:6px;">' + escapeHtml(taskTitle) + '</div>' +
-            (taskDescription ? '<div style="color:' + BRAND.muted + ';font-size:14px;margin-bottom:8px;">' + escapeHtml(taskDescription) + '</div>' : '') +
-            '<div style="font-size:13px;color:' + BRAND.text + ';"><strong>Due:</strong> ' + escapeHtml(formattedDate) + '</div>' +
-            '<div style="font-size:13px;color:' + BRAND.text + ';"><strong>Client:</strong> ' + escapeHtml(clientName) + '</div>' +
-          '</td></tr>' +
-        '</table>' +
-        '<p style="margin:8px 0 0;color:' + BRAND.muted + ';font-size:13px;">' + (isOverdue ? 'This task is past its due date - please action it as soon as possible.' : 'Please complete this task on time to keep your client relationship on track.') + '</p>',
+        '<p style="margin:0 0 16px;">' + (isOverdue ? 'Task is overdue' : 'Task reminder') + ' for <strong>' + escapeHtml(clientName) + '</strong>.</p>' +
+        '<div style="margin:16px 0;padding:18px 20px;border-left:4px solid ' + accent + ';border-radius:10px;background:#F8FAFC;">' +
+          '<div style="font-weight:600;font-size:15px;">' + escapeHtml(taskTitle) + '</div>' +
+          (taskDescription ? '<div style="margin-top:6px;color:#64748B;">' + escapeHtml(taskDescription) + '</div>' : '') +
+          '<div style="margin-top:8px;font-size:13px;"><strong>Due:</strong> ' + escapeHtml(formattedDate) + '</div>' +
+          '<div style="font-size:13px;"><strong>Client:</strong> ' + escapeHtml(clientName) + '</div>' +
+        '</div>',
       cta: appUrl ? { label: 'View clients', url: appUrl + '/clients' } : undefined,
     });
   },
@@ -316,11 +253,9 @@ const emailTemplates = {
     const mode = (data && data.mode) || '';
     const agenda = data && data.agenda;
     const meetingLink = data && data.meetingLink;
-
     const formatDate = date
       ? new Date(date).toLocaleString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZoneName: 'short' })
       : '';
-    const modeLabel = (mode || 'meeting').toString().replace('-', ' ');
 
     return buildEmail({
       accent: BRAND.primary,
@@ -329,16 +264,16 @@ const emailTemplates = {
       preheader: 'Invited by ' + agentName,
       body:
         '<p style="margin:0 0 16px;">Hello <strong>' + escapeHtml(clientName) + '</strong>,</p>' +
-        '<p style="margin:0 0 16px;">You have been invited to a meeting by <strong>' + escapeHtml(agentName) + '</strong>. Please find the details below.</p>' +
-        infoTable([
-          ['Title', title],
-          ['Date & time', formatDate],
-          ['Duration', String(duration) + ' minutes'],
-          ['Location', location],
-          ['Type', modeLabel.toUpperCase()],
-        ].filter(function (r) { return r[1]; })) +
-        (meetingLink ? '<p style="margin:8px 0 0;font-size:14px;"><strong>Meeting link:</strong> <a href="' + escapeAttr(meetingLink) + '" style="color:' + BRAND.primary + ';">' + escapeHtml(meetingLink) + '</a></p>' : '') +
-        (agenda ? '<div style="margin:16px 0;padding:14px 18px;border:1px solid ' + BRAND.border + ';border-left:4px solid ' + BRAND.primary + ';border-radius:8px;background:' + BRAND.primarySoft + ';"><div style="font-weight:600;margin-bottom:6px;">Agenda</div><div style="white-space:pre-wrap;">' + escapeHtml(agenda) + '</div></div>' : ''),
+        '<p style="margin:0 0 16px;">You have been invited to a meeting by <strong>' + escapeHtml(agentName) + '</strong>.</p>' +
+        '<table style="width:100%;border-collapse:collapse;margin:16px 0;">' +
+          (title ? '<tr><td style="padding:10px 16px;color:#64748B;border-bottom:1px solid #E2E8F0;">Title</td><td style="padding:10px 16px;font-weight:600;border-bottom:1px solid #E2E8F0;">' + escapeHtml(title) + '</td></tr>' : '') +
+          (formatDate ? '<tr><td style="padding:10px 16px;color:#64748B;border-bottom:1px solid #E2E8F0;">Date & time</td><td style="padding:10px 16px;font-weight:600;border-bottom:1px solid #E2E8F0;">' + escapeHtml(formatDate) + '</td></tr>' : '') +
+          (duration ? '<tr><td style="padding:10px 16px;color:#64748B;border-bottom:1px solid #E2E8F0;">Duration</td><td style="padding:10px 16px;font-weight:600;border-bottom:1px solid #E2E8F0;">' + escapeHtml(duration) + ' minutes</td></tr>' : '') +
+          (location ? '<tr><td style="padding:10px 16px;color:#64748B;border-bottom:1px solid #E2E8F0;">Location</td><td style="padding:10px 16px;font-weight:600;border-bottom:1px solid #E2E8F0;">' + escapeHtml(location) + '</td></tr>' : '') +
+          (mode ? '<tr><td style="padding:10px 16px;color:#64748B;border-bottom:1px solid #E2E8F0;">Type</td><td style="padding:10px 16px;font-weight:600;border-bottom:1px solid #E2E8F0;">' + escapeHtml(mode.toUpperCase()) + '</td></tr>' : '') +
+        '</table>' +
+        (meetingLink ? '<p style="margin:8px 0;"><strong>Link:</strong> <a href="' + escapeAttr(meetingLink) + '" style="color:' + BRAND.primary + ';">' + escapeHtml(meetingLink) + '</a></p>' : '') +
+        (agenda ? '<div style="margin:16px 0;padding:14px 18px;border-left:4px solid ' + BRAND.primary + ';border-radius:8px;background:' + BRAND.primarySoft + ';"><strong>Agenda:</strong><br/>' + escapeHtml(agenda) + '</div>' : ''),
       cta: meetingLink ? { label: 'Join meeting', url: meetingLink } : undefined,
     });
   },
@@ -348,7 +283,6 @@ const emailTemplates = {
     const agentName = (data && data.agentName) || 'Your CRM agent';
     const subject = (data && data.subject) || 'Message from your CRM agent';
     const message = (data && data.message) || '';
-
     return buildEmail({
       accent: BRAND.primary,
       eyebrow: 'New message',
@@ -356,7 +290,7 @@ const emailTemplates = {
       preheader: 'Message from ' + agentName,
       body:
         '<p style="margin:0 0 16px;">Hello <strong>' + escapeHtml(clientName) + '</strong>,</p>' +
-        '<div style="margin:16px 0;padding:18px 20px;border:1px solid ' + BRAND.border + ';border-left:4px solid ' + BRAND.primary + ';border-radius:10px;background:#F8FAFC;white-space:pre-wrap;">' + escapeHtml(message) + '</div>' +
+        '<div style="margin:16px 0;padding:18px 20px;border-left:4px solid ' + BRAND.primary + ';border-radius:10px;background:#F8FAFC;white-space:pre-wrap;">' + escapeHtml(message) + '</div>' +
         '<p style="margin:8px 0 0;color:' + BRAND.muted + ';font-size:13px;">Sent by ' + escapeHtml(agentName) + ' via ' + BRAND.name + '.</p>',
     });
   },
@@ -367,38 +301,90 @@ const emailTemplates = {
 // ===========================================================================
 
 export const sendEmail = async function (to, templateName, templateData) {
+  console.log('[EmailService] sendEmail to: ' + to + ', template: ' + templateName);
   try {
-    const transporter = await createTransporter();
     const template = emailTemplates[templateName];
     if (!template) throw new Error('Email template "' + templateName + '" not found');
 
     const emailContent = template(templateData || {});
 
-    const mailOptions = {
-      from: process.env.EMAIL_FROM || process.env.EMAIL_USER || 'noreply@xtreative.com',
+    // ---- TRY GMAIL FIRST ----
+    if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+      try {
+        console.log('[EmailService] Attempting Gmail SMTP...');
+        const transporter = nodemailer.createTransport({
+          host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+          port: Number(process.env.EMAIL_PORT) || 587,
+          secure: false,
+          auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
+          connectionTimeout: 15000,
+          greetingTimeout: 15000,
+          socketTimeout: 20000,
+          tls: { rejectUnauthorized: false },
+        });
+
+        const result = await transporter.sendMail({
+          from: process.env.EMAIL_FROM || process.env.EMAIL_USER || 'noreply@xtreative.com',
+          to: to,
+          subject: emailContent.subject,
+          html: emailContent.html,
+        });
+
+        console.log('[EmailService] Gmail SUCCESS. MessageId: ' + result.messageId);
+        return { success: true, messageId: result.messageId };
+      } catch (gmailError) {
+        console.log('[EmailService] Gmail FAILED: ' + gmailError.message + '. Falling back to Ethereal...');
+      }
+    }
+
+    // ---- FALLBACK TO ETHEREAL ----
+    console.log('[EmailService] Using Ethereal test email...');
+    const testAccount = await nodemailer.createTestAccount();
+    const etherealTransporter = nodemailer.createTransport({
+      host: 'smtp.ethereal.email',
+      port: 587,
+      secure: false,
+      auth: { user: testAccount.user, pass: testAccount.pass },
+    });
+
+    const result = await etherealTransporter.sendMail({
+      from: 'noreply@xtreative.com',
       to: to,
       subject: emailContent.subject,
       html: emailContent.html,
-    };
+    });
 
-    const result = await transporter.sendMail(mailOptions);
     const previewUrl = nodemailer.getTestMessageUrl(result);
-    if (previewUrl) console.log('Email preview:', previewUrl);
+    console.log('[EmailService] Ethereal SUCCESS! Preview URL: ' + (previewUrl || 'N/A'));
+    console.log('[EmailService] Login at https://ethereal.email to view email');
+    console.log('[EmailService]   Username: ' + testAccount.user);
+    console.log('[EmailService]   Password: ' + testAccount.pass);
 
-    return { success: true, messageId: result.messageId, previewUrl: previewUrl };
+    // Return preview URL so it can be shown to user
+    return {
+      success: true,
+      messageId: result.messageId,
+      previewUrl: previewUrl,
+      ethereal: true,
+      note: 'Gmail failed, sent via Ethereal test email. Check preview URL.'
+    };
   } catch (error) {
-    console.error('Email sending error:', error.message);
+    console.error('[EmailService] COMPLETE FAILURE sending to ' + to + ': ' + error.message);
+    if (error.code) console.error('[EmailService] Error code: ' + error.code);
+    if (error.response) console.error('[EmailService] Server response: ' + error.response);
     return { success: false, error: error.message };
   }
 };
 
 export const testEmailConfig = async function () {
   try {
+    console.log('[EmailService] Testing email configuration...');
     const transporter = await createTransporter();
     await transporter.verify();
+    console.log('[EmailService] SMTP connection verified successfully!');
     return true;
   } catch (error) {
-    console.error('Email configuration error:', error.message);
+    console.error('[EmailService] SMTP verification failed: ' + error.message);
     return false;
   }
 };
@@ -416,10 +402,10 @@ export const sendEmailWithAttachment = async function (to, subject, htmlContent,
     };
     const result = await transporter.sendMail(mailOptions);
     const previewUrl = nodemailer.getTestMessageUrl(result);
-    if (previewUrl) console.log('Email preview:', previewUrl);
+    if (previewUrl) console.log('[EmailService] Email with attachment preview: ' + previewUrl);
     return { success: true, messageId: result.messageId, previewUrl: previewUrl };
   } catch (error) {
-    console.error('sendEmailWithAttachment error:', error.message);
+    console.error('[EmailService] sendEmailWithAttachment error: ' + error.message);
     return { success: false, error: error.message };
   }
 };

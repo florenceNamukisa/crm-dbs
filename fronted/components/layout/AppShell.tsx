@@ -2,7 +2,7 @@
 import {
   LayoutDashboard, Users, Briefcase, Building2,
   CheckSquare, Calendar, Repeat,
-  StickyNote, Bot,
+  StickyNote, Bot, FileBarChart,
   Search, Plus, Calendar as CalIcon,
   ShieldCheck, Settings, Globe, LogOut,
 } from "lucide-react";
@@ -36,6 +36,7 @@ const NAV: NavGroup[] = [
   { title: "Admin", items: [
     { label: "Super Admin", to: "/super-admin", icon: Globe },
     { label: "Tenant Admin", to: "/tenant-admin", icon: ShieldCheck },
+    { label: "Reports", to: "/reports", icon: FileBarChart },
     { label: "Settings", to: "/settings", icon: Settings },
   ]},
 ];
@@ -55,6 +56,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     items: group.items.filter((item) => {
       if (item.to === "/super-admin") return user?.role === "superadmin";
       if (item.to === "/tenant-admin") return user?.role === "superadmin" || user?.role === "tenant_admin";
+      if (item.to === "/reports") return ["superadmin", "tenant_admin", "admin", "manager", "sales_manager"].includes(user?.role || "");
       return true;
     }),
   })).filter((group) => group.items.length > 0);
