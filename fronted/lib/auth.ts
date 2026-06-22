@@ -15,10 +15,12 @@ const TOKEN_KEY = "crm.auth.token";
 const USER_KEY = "crm.auth.user";
 
 export function getApiBase() {
-  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
-  if (["localhost", "127.0.0.1"].includes(window.location.hostname) && window.location.port !== "5000") {
+  // When running locally, always use localhost backend
+  if (["localhost", "127.0.0.1"].includes(window.location.hostname)) {
     return "http://localhost:5000/api";
   }
+  // For deployed environments, use env var or fallback to Render
+  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
   return "https://crm-dbs.onrender.com/api";
 }
 
