@@ -68,22 +68,22 @@ export function CreateLeadForm({ onClose, onSuccess }: CreateLeadFormProps) {
         <label className="text-xs font-medium">Company Email</label>
         <Input type="email" {...leadForm.register("companyEmail")} placeholder="company@example.com" />
       </div>
-      <div>
+<div>
         <label className="text-xs font-medium">Rating</label>
-        <select {...leadForm.register("rating")} className="w-full rounded-md border px-2 py-1 text-sm">
-          <option value="">Select rating</option>
-          <option>Cold</option>
-          <option>Warm</option>
-          <option>Hot</option>
+        <select {...leadForm.register("rating")} className="w-full rounded-md border px-2 py-1 text-sm bg-card text-foreground">
+          <option value="" className="text-foreground">Select rating</option>
+          <option className="text-foreground">Cold</option>
+          <option className="text-foreground">Warm</option>
+          <option className="text-foreground">Hot</option>
         </select>
       </div>
       <div>
         <label className="text-xs font-medium">Status</label>
-        <select {...leadForm.register("status")} className="w-full rounded-md border px-2 py-1 text-sm">
-          <option>New</option>
-          <option>Contacted</option>
-          <option>Unqualified</option>
-          <option>Qualified</option>
+        <select {...leadForm.register("status")} className="w-full rounded-md border px-2 py-1 text-sm bg-card text-foreground">
+          <option className="text-foreground">New</option>
+          <option className="text-foreground">Contacted</option>
+          <option className="text-foreground">Unqualified</option>
+          <option className="text-foreground">Qualified</option>
         </select>
       </div>
       <div className="flex gap-2 pt-2">

@@ -10,7 +10,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/auth";
 import { useClients } from "@/lib/api/clients";
 import { useUsers } from "@/lib/api/users";
-import { useSales } from "@/lib/api/sales";
+import { useSales, useUpdateSale } from "@/lib/api/sales";
+import { useDeals, useUpdateDeal } from "@/lib/api/deals";
 import { KpiCard, PageHeader, StatusPill, RowActions, action } from "@/components/dashboard/parts";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -76,8 +77,28 @@ function SalesPage() {
   // Use the standardized hook so the cache is shared with the dashboard
   // and any other component. The hook already configures staleTime: 0
   // + refetchOnWindowFocus so updates land instantly.
-  const { data: salesData, isLoading } = useSales();
+  const { data: salesData, isLoading: salesLoading } = useSales();
   const allSales = salesData?.sales ?? [];
+
+  // Also fetch deals - this is the primary source since CreateSaleForm creates deals
+  // which are what the dashboard displays as "Number of Sales"
+  const { data: dealsData, isLoading: dealsLoadingState } = useDeals();
+  const allDeals = dealsData?.deals ?? [];
+
+  // Use deals as primary source if sales is empty (they share the same agent filter)
+  // Once deals are loaded, prefer them since CreateSaleForm creates deals
+  const displaySales = allSales.length > 0 ? allSales : allDeals.map((d: any) => ({
+    _id: d._id,
+    clientName: d.client?.name || d.clientName,
+    amount: d.value || d.amount,
+    stage: d.stage === "won" ? "Closed (Won)" : d.stage === "lost" ? "Lost" : d.stage === "proposal" ? "Proposal" : d.stage === "negotiation" ? "Negotiations" : "Contacted",
+    type: d.dealType === "existing" ? "Existing" : "New",
+    probability: d.probability || 0,
+    createdAt: d.createdAt,
+    client: d.client,
+  }));
+
+  const isLoading = salesLoading || dealsLoadingState;
 
   const [search, setSearch] = useState("");
   const [view, setView] = useState<"list" | "kanban">("list");
@@ -114,13 +135,14 @@ function SalesPage() {
   });
 
   const createSaleMutation = useMutation({
-    mutationFn: (data: any) => apiFetch("/sales", { method: "POST", body: JSON.stringify(data) }),
+    mutationFn: (data: any) => apiFetch("/deals", { method: "POST", body: JSON.stringify({ ...data, value: data.amount }) }),
     onSuccess: () => {
       // Invalidate EVERY sales-related key so the dashboard,
       // kanban, and any other mounted component refreshes.
       queryClient.invalidateQueries({ queryKey: ["sales-crm"] });
       queryClient.invalidateQueries({ queryKey: ["sales-dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["sales"] });
+      queryClient.invalidateQueries({ queryKey: ["deals"] });
       toast.success("Sale created");
       setShowForm(false);
       resetForm();
@@ -128,15 +150,7 @@ function SalesPage() {
     onError: (err: any) => toast.error("Failed to create sale", { description: err.message }),
   });
 
-  const updateSaleMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) => apiFetch(`/sales/${id}`, { method: "PUT", body: JSON.stringify(data) }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["sales-crm"] });
-      queryClient.invalidateQueries({ queryKey: ["sales-dashboard"] });
-      queryClient.invalidateQueries({ queryKey: ["sales"] });
-    },
-    onError: (err: any) => toast.error("Update failed", { description: err.message }),
-  });
+  const updateDealMutation = useUpdateDeal();
 
   function resetForm() {
     setForm({ clientId: "", clientName: "", amount: "", stage: "Contacted", type: "New", notes: "" });
@@ -146,27 +160,32 @@ function SalesPage() {
     if (!form.clientId && !form.clientName) { toast.error("Client is required"); return; }
     if (!form.amount) { toast.error("Amount is required"); return; }
     const client = clients.find((c: any) => c._id === form.clientId);
+    // Map sales stages to deal stages
+    const dealStageMap: Record<string, string> = {
+      "Contacted": "lead",
+      "Proposal": "proposal",
+      "Negotiations": "negotiation",
+      "Closed (Won)": "won",
+      "Lost": "lost",
+    };
     createSaleMutation.mutate({
+      title: `Sale - ${form.clientName || client?.name || "Client"}`,
+      value: parseFloat(form.amount),
       client: form.clientId || undefined,
-      clientName: client?.name || form.clientName,
-      amount: parseFloat(form.amount),
-      stage: form.stage,
-      type: form.type,
-      probability: getProbability(form.stage),
-      notes: form.notes,
-      customerName: client?.name || form.clientName,
+      stage: dealStageMap[form.stage] || "lead",
+      dealType: form.type === "Existing" ? "existing" : "new",
     });
   }
 
   const filteredSales = useMemo(() => {
-    return allSales.filter((s: any) => {
+    return displaySales.filter((s: any) => {
       if (!search) return true;
       const q = search.toLowerCase();
       return (s.clientName || s.client?.name || "").toLowerCase().includes(q) ||
         (s.amount?.toString() || "").includes(q) ||
         (s.stage || "").toLowerCase().includes(q);
     });
-  }, [allSales, search]);
+  }, [displaySales, search]);
 
   const groupedByStage = useMemo(() => {
     const g: Record<string, any[]> = {};
@@ -179,15 +198,24 @@ function SalesPage() {
     return g;
   }, [filteredSales]);
 
-  const totalSales = allSales.length;
-  const totalAmount = allSales.reduce((sum: number, s: any) => sum + (s.amount || 0), 0);
-  const activeCount = allSales.filter((s: any) => s.stage !== "Lost" && s.stage !== "Closed (Won)").length;
+  const totalSales = displaySales.length;
+  const totalAmount = displaySales.reduce((sum: number, s: any) => sum + (s.amount || 0), 0);
+const activeCount = displaySales.filter((s: any) => s.stage !== "Lost" && s.stage !== "Closed (Won)").length;
 
   function handleStageChange(saleId: string, newStage: string) {
-    updateSaleMutation.mutate({ id: saleId, data: { stage: newStage, probability: getProbability(newStage) } });
+    // Map sales stages to deal stages
+    const dealStageMap: Record<string, string> = {
+      "Contacted": "lead",
+      "Proposal": "proposal",
+      "Negotiations": "negotiation",
+      "Closed (Won)": "won",
+      "Lost": "lost",
+    };
+    const dealStage = dealStageMap[newStage] || "lead";
+    updateDealMutation.mutate({ id: saleId, data: { stage: dealStage } });
   }
 
-function handleAction(actionType: string, sale: any) {
+  function handleAction(actionType: string, sale: any) {
     switch (actionType) {
       case "change_status": {
         const stages = STAGES;
@@ -478,8 +506,8 @@ function handleAction(actionType: string, sale: any) {
                         <td className="py-2.5 pr-3 font-medium">{s.clientName || s.client?.name || "—"}</td>
                         <td className="py-2.5 pr-3">{fmtUGX(s.amount || 0)}</td>
                         <td className="py-2.5 pr-3">
-                          <select value={s.stage || "Contacted"} onChange={(e) => handleStageChange(s._id, e.target.value)} className="text-[10px] px-1 py-0.5 rounded bg-background border border-border outline-none">
-                            {STAGES.map((st) => <option key={st} value={st}>{st}</option>)}
+                          <select value={s.stage || "Contacted"} onChange={(e) => handleStageChange(s._id, e.target.value)} className="text-[10px] px-1 py-0.5 rounded bg-background border border-border outline-none text-foreground">
+                            {STAGES.map((st) => <option key={st} value={st} className="text-foreground">{st}</option>)}
                           </select>
                         </td>
                         <td className="py-2.5 pr-3 text-muted-foreground">{s.type || "New"}</td>
@@ -492,7 +520,7 @@ function handleAction(actionType: string, sale: any) {
                 </table>
               </div>
             )}
-            <div className="text-xs text-muted-foreground mt-3">Showing {filteredSales.length} of {allSales.length} sales</div>
+            <div className="text-xs text-muted-foreground mt-3">Showing {filteredSales.length} of {displaySales.length} sales</div>
           </div>
         )}
 
@@ -516,16 +544,16 @@ function handleAction(actionType: string, sale: any) {
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2">
                 <Label className="text-xs">Client *</Label>
-                <select value={form.clientId} onChange={(e) => {
-                  const val = e.target.value;
-                  if (val === "__new__") {
-                    const name = prompt("Enter new client name:");
-                    if (name) setForm({ ...form, clientName: name, clientId: "__custom__" });
-                  } else setForm({ ...form, clientId: val, clientName: "" });
-                }} className="w-full h-9 rounded-md border border-border bg-card px-2 text-sm outline-none">
-                  <option value="">Select client</option>
-                  {clients.map((c: any) => <option key={c._id} value={c._id}>{c.name || c.company}</option>)}
-                  <option value="__new__">+ Type new client...</option>
+<select value={form.clientId} onChange={(e) => {
+                   const val = e.target.value;
+                   if (val === "__new__") {
+                     const name = prompt("Enter new client name:");
+                     if (name) setForm({ ...form, clientName: name, clientId: "__custom__" });
+                   } else setForm({ ...form, clientId: val, clientName: "" });
+                 }} className="w-full h-9 rounded-md border border-border bg-card px-2 text-sm outline-none text-foreground">
+                  <option value="" className="text-foreground">Select client</option>
+                  {clients.map((c: any) => <option key={c._id} value={c._id} className="text-foreground">{c.name || c.company}</option>)}
+                  <option value="__new__" className="text-foreground">+ Type new client...</option>
                 </select>
               </div>
               {form.clientId === "__custom__" && (
@@ -533,10 +561,10 @@ function handleAction(actionType: string, sale: any) {
               )}
               <div><Label className="text-xs">Amount (UGX) *</Label><Input type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder="0" /></div>
               <div><Label className="text-xs">Stage</Label>
-                <select value={form.stage} onChange={(e) => setForm({ ...form, stage: e.target.value })} className="w-full h-9 rounded-md border border-border bg-card px-2 text-sm outline-none">{STAGES.map((st) => <option key={st} value={st}>{st}</option>)}</select>
+                <select value={form.stage} onChange={(e) => setForm({ ...form, stage: e.target.value })} className="w-full h-9 rounded-md border border-border bg-card px-2 text-sm outline-none text-foreground">{STAGES.map((st) => <option key={st} value={st} className="text-foreground">{st}</option>)}</select>
               </div>
               <div><Label className="text-xs">Type</Label>
-                <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className="w-full h-9 rounded-md border border-border bg-card px-2 text-sm outline-none"><option value="New">New</option><option value="Existing">Existing</option></select>
+                <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className="w-full h-9 rounded-md border border-border bg-card px-2 text-sm outline-none text-foreground"><option value="New" className="text-foreground">New</option><option value="Existing" className="text-foreground">Existing</option></select>
               </div>
               <div><Label className="text-xs">Probability</Label><Input value={`${getProbability(form.stage)}%`} disabled className="bg-background/50" /></div>
               <div className="col-span-2"><Label className="text-xs">Notes</Label><Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Notes..." /></div>
@@ -614,10 +642,10 @@ function handleAction(actionType: string, sale: any) {
                 </div>
                 <div>
                   <label className="text-xs font-medium">Event Type</label>
-                  <select value={eventType} onChange={(e) => setEventType(e.target.value)} className="w-full h-9 px-3 rounded-lg bg-background border border-border text-sm outline-none focus:ring-2 focus:ring-primary/40">
-                    <option value="meeting">Meeting</option>
-                    <option value="call">Call</option>
-                    <option value="follow-up">Follow-up</option>
+                  <select value={eventType} onChange={(e) => setEventType(e.target.value)} className="w-full h-9 px-3 rounded-lg bg-background border border-border text-sm outline-none focus:ring-2 focus:ring-primary/40 text-foreground">
+                    <option value="meeting" className="text-foreground">Meeting</option>
+                    <option value="call" className="text-foreground">Call</option>
+                    <option value="follow-up" className="text-foreground">Follow-up</option>
                   </select>
                 </div>
                 <div>
@@ -643,9 +671,9 @@ function handleAction(actionType: string, sale: any) {
             <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-2xl" onClick={(e) => e.stopPropagation()}>
               <h3 className="text-lg font-semibold mb-4">Forward Sale to Agent</h3>
               <p className="text-sm text-muted-foreground mb-4">Select an agent to forward <strong>{selectedSale?.clientName || selectedSale?.client?.name || "this sale"}</strong> to:</p>
-              <select value={forwardAgent} onChange={(e) => setForwardAgent(e.target.value)} className="w-full h-9 px-3 rounded-lg bg-background border border-border text-sm outline-none focus:ring-2 focus:ring-primary/40 mb-4">
-                <option value="">-- Select Agent --</option>
-                {agents.map((a: any) => (<option key={a._id || a.id} value={a._id || a.id}>{a.name} ({a.email})</option>))}
+              <select value={forwardAgent} onChange={(e) => setForwardAgent(e.target.value)} className="w-full h-9 px-3 rounded-lg bg-background border border-border text-sm outline-none focus:ring-2 focus:ring-primary/40 mb-4 text-foreground">
+                <option value="" className="text-foreground">-- Select Agent --</option>
+                {agents.map((a: any) => (<option key={a._id || a.id} value={a._id || a.id} className="text-foreground">{a.name} ({a.email})</option>))}
               </select>
               {agents.length === 0 && <p className="text-xs text-muted-foreground mb-4">No agents available.</p>}
               <div className="flex gap-2">

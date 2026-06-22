@@ -87,16 +87,16 @@ export function CreateSaleForm({ onClose, onSuccess }: CreateSaleFormProps) {
           placeholder="25000000"
         />
       </div>
-      <div>
+<div>
         <label className="text-xs font-medium">Client *</label>
         <select
           {...saleForm.register("client", { required: true })}
-          className="w-full rounded-md border px-2 py-1 text-sm"
+          className="w-full rounded-md border px-2 py-1 text-sm bg-card text-foreground"
           disabled={isLoading}
         >
-          <option value="">Select client</option>
+          <option value="" className="text-foreground">Select client</option>
           {clients.map((c: any) => (
-            <option key={c._id} value={c._id}>
+            <option key={c._id} value={c._id} className="text-foreground">
               {c.name}
               {c.company ? ` - ${c.company}` : ""}
             </option>
@@ -107,10 +107,10 @@ export function CreateSaleForm({ onClose, onSuccess }: CreateSaleFormProps) {
         <label className="text-xs font-medium">Stage *</label>
         <select
           {...saleForm.register("stage", { required: true })}
-          className="w-full rounded-md border px-2 py-1 text-sm"
+          className="w-full rounded-md border px-2 py-1 text-sm bg-card text-foreground"
         >
           {DEAL_STAGES.map((s) => (
-            <option key={s.value} value={s.value}>{s.label}</option>
+            <option key={s.value} value={s.value} className="text-foreground">{s.label}</option>
           ))}
         </select>
       </div>
@@ -118,10 +118,10 @@ export function CreateSaleForm({ onClose, onSuccess }: CreateSaleFormProps) {
         <label className="text-xs font-medium">Deal Type</label>
         <select
           {...saleForm.register("dealType")}
-          className="w-full rounded-md border px-2 py-1 text-sm"
+          className="w-full rounded-md border px-2 py-1 text-sm bg-card text-foreground"
         >
-          <option value="new">New</option>
-          <option value="existing">Existing</option>
+          <option value="new" className="text-foreground">New</option>
+          <option value="existing" className="text-foreground">Existing</option>
         </select>
       </div>
       <div className="flex gap-2 pt-2">

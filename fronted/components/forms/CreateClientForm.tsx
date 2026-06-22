@@ -147,15 +147,15 @@ export function CreateClientForm({ onClose, onSuccess, client = null }: CreateCl
           placeholder="Job title"
         />
       </div>
-      <div className="grid grid-cols-2 gap-3">
+<div className="grid grid-cols-2 gap-3">
         <div>
           <label className="text-xs font-medium">Sector</label>
           <select
             {...clientForm.register("sector")}
-            className="w-full rounded-md border px-2 py-1 text-sm"
+            className="w-full rounded-md border px-2 py-1 text-sm bg-card text-foreground"
           >
             {SECTORS.map((s) => (
-              <option key={s} value={s}>{s}</option>
+              <option key={s} value={s} className="text-foreground">{s}</option>
             ))}
           </select>
         </div>
@@ -163,10 +163,10 @@ export function CreateClientForm({ onClose, onSuccess, client = null }: CreateCl
           <label className="text-xs font-medium">Status</label>
           <select
             {...clientForm.register("status")}
-            className="w-full rounded-md border px-2 py-1 text-sm"
+            className="w-full rounded-md border px-2 py-1 text-sm bg-card text-foreground"
           >
             {STATUSES.map((s) => (
-              <option key={s.value} value={s.value}>{s.label}</option>
+              <option key={s.value} value={s.value} className="text-foreground">{s.label}</option>
             ))}
           </select>
         </div>

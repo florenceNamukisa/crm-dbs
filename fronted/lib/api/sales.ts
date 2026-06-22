@@ -16,10 +16,11 @@ export const SALES_QUERY_KEYS = {
 export function useSales(params?: Record<string, string>) {
   const qs = params ? "?" + new URLSearchParams(params).toString() : "";
   return useQuery({
-    queryKey: [...SALES_QUERY_KEYS.all, params ?? null],
+    queryKey: ["sales-crm", params],
     queryFn: () => apiFetch<{ sales: any[] }>(`/sales${qs}`),
-    staleTime: 0, // Always re-fetch on focus/mount to keep dashboard cards/graphs fresh
+    staleTime: 0,
     refetchOnWindowFocus: true,
+    refetchOnMount: true,
   });
 }
 

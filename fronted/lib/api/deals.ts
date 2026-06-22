@@ -6,7 +6,9 @@ export function useDeals(params?: Record<string, string>) {
   return useQuery({
     queryKey: ["deals", params],
     queryFn: () => apiFetch<{ deals: any[] }>(`/deals${qs}`),
-    staleTime: 30_000,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchOnMount: true,
   });
 }
 

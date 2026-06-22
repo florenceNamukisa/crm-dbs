@@ -248,8 +248,8 @@ export default function SalesAgentDashboard() {
             <div>
               <Label className="text-xs">Location</Label>
               <select value={meetingForm.location} onChange={(e) => setMeetingForm({ ...meetingForm, location: e.target.value })}
-                className="w-full h-9 rounded-md border border-border bg-card px-2 text-sm outline-none">
-                <option>In Person</option><option>Google Meet</option><option>Phone Call</option>
+                className="w-full h-9 rounded-md border border-border bg-card px-2 text-sm outline-none text-foreground">
+                <option className="text-foreground">In Person</option><option className="text-foreground">Google Meet</option><option className="text-foreground">Phone Call</option>
               </select>
             </div>
             <div>
@@ -335,6 +335,11 @@ export default function SalesAgentDashboard() {
                 }
               });
               const chartData = Object.entries(monthMap)
+                .sort((a, b) => {
+                  const dateA = new Date(`01 ${a[0]}`);
+                  const dateB = new Date(`01 ${b[0]}`);
+                  return dateA.getTime() - dateB.getTime();
+                })
                 .slice(-7)
                 .map(([d, v]) => ({ d, sales: v.sales, leads: v.leads }));
               if (chartData.length === 0) {
@@ -433,12 +438,12 @@ export default function SalesAgentDashboard() {
           <select
             value={clientFilter}
             onChange={(e) => setClientFilter(e.target.value)}
-            className="h-9 px-3 rounded-lg bg-background border border-border text-sm outline-none"
+            className="h-9 px-3 rounded-lg bg-background border border-border text-sm outline-none text-foreground"
           >
-            <option value="All">All Status</option>
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-          </select>
+            <option value="All" className="text-foreground">All Status</option>
+             <option value="active" className="text-foreground">Active</option>
+             <option value="inactive" className="text-foreground">Inactive</option>
+           </select>
           <button
             onClick={() => setShowDateFilter(!showDateFilter)}
             className="h-9 px-3 rounded-lg bg-background border border-border text-sm flex items-center gap-2 hover:bg-accent"
