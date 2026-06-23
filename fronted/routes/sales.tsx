@@ -108,6 +108,7 @@ function SalesPage() {
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [showNotesModal, setShowNotesModal] = useState(false);
   const [showTaskModal, setShowTaskModal] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
   const [showEventModal, setShowEventModal] = useState(false);
   const [showForwardModal, setShowForwardModal] = useState(false);
   const [selectedSale, setSelectedSale] = useState<any>(null);
@@ -460,29 +461,34 @@ const activeCount = displaySales.filter((s: any) => s.stage !== "Lost" && s.stag
           <KpiCard icon={DollarSign} label="Avg Value" value={totalSales > 0 ? fmtUGX(totalAmount / totalSales) : "UGX 0"} trend={2} />
         </div>
 
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="relative w-64">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full sm:w-auto">
+            <div className="relative w-full sm:w-56 md:w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by name, amount, stage..." className="w-full h-9 pl-9 pr-3 rounded-lg bg-background border border-border text-sm outline-none focus:ring-2 focus:ring-primary/40" />
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search..." className="w-full h-9 pl-9 pr-3 rounded-lg bg-background border border-border text-sm outline-none focus:ring-2 focus:ring-primary/40" />
             </div>
             <div className="flex items-center border border-border rounded-md overflow-hidden">
-              <button onClick={() => setView("list")} className={"px-2.5 py-1.5 text-xs flex items-center gap-1 " + (view === "list" ? "gradient-orange text-white" : "hover:bg-accent")}><List className="h-3.5 w-3.5" /> List</button>
-              <button onClick={() => setView("kanban")} className={"px-2.5 py-1.5 text-xs flex items-center gap-1 " + (view === "kanban" ? "gradient-orange text-white" : "hover:bg-accent")}><LayoutGrid className="h-3.5 w-3.5" /> Kanban</button>
+              <button onClick={() => setView("list")} className={"px-2.5 py-1.5 text-xs flex items-center gap-1 " + (view === "list" ? "gradient-orange text-white" : "hover:bg-accent")}><List className="h-3.5 w-3.5" /> <span className="hidden sm:inline">List</span></button>
+              <button onClick={() => setView("kanban")} className={"px-2.5 py-1.5 text-xs flex items-center gap-1 " + (view === "kanban" ? "gradient-orange text-white" : "hover:bg-accept")}><LayoutGrid className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Kanban</span></button>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <input type="file" ref={fileInputRef} onChange={handleImport} accept=".csv,.xlsx,.xls" className="hidden" />
-            <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-md hover:bg-accent"><Upload className="h-3.5 w-3.5" /> Import</button>
-            <div className="relative group">
-              <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-md hover:bg-accent"><Download className="h-3.5 w-3.5" /> Export</button>
-              <div className="absolute right-0 top-full mt-1 bg-card border border-border rounded-lg shadow-xl z-50 hidden group-hover:block min-w-[130px]">
-                <button onClick={() => handleExport("csv")} className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent">CSV</button>
-                <button onClick={() => handleExport("xlsx")} className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent">Excel</button>
-                <button onClick={() => handleExport("pdf")} className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent">PDF</button>
-              </div>
+            <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-1.5 px-2.5 md:px-3 py-1.5 text-xs border border-border rounded-md hover:bg-accent"><Upload className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Import</span></button>
+            <div className="relative">
+              <button onClick={() => setShowExportMenu(!showExportMenu)} className="flex items-center gap-1.5 px-2.5 md:px-3 py-1.5 text-xs border border-border rounded-md hover:bg-accent"><Download className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Export</span></button>
+              {showExportMenu && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowExportMenu(false)} />
+                  <div className="absolute right-0 top-full mt-1 bg-card border border-border rounded-lg shadow-xl z-50 min-w-[130px] py-1">
+                    <button onClick={() => { setShowExportMenu(false); handleExport("csv"); }} className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent">CSV</button>
+                    <button onClick={() => { setShowExportMenu(false); handleExport("xlsx"); }} className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent">Excel</button>
+                    <button onClick={() => { setShowExportMenu(false); handleExport("pdf"); }} className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent">PDF</button>
+                  </div>
+                </>
+              )}
             </div>
-            <button onClick={() => setShowForm(true)} className="flex items-center gap-1.5 px-4 py-1.5 text-xs gradient-orange text-white rounded-md font-medium shadow-lg"><Plus className="h-3.5 w-3.5" /> New Sale</button>
+            <button onClick={() => setShowForm(true)} className="flex items-center gap-1.5 px-3 md:px-4 py-1.5 text-xs gradient-orange text-white rounded-md font-medium shadow-lg"><Plus className="h-3.5 w-3.5" /> New Sale</button>
           </div>
         </div>
 

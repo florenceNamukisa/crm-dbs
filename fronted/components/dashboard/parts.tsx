@@ -8,27 +8,27 @@ export const action = (label: string) => () => toast.success(label, { descriptio
 
 export function PageHeader({ title, subtitle, actions }: { title: string; subtitle?: string; actions?: ReactNode }) {
   return (
-    <div className="flex items-end justify-between mb-4">
-      <div>
-        <h2 className="text-2xl font-bold text-gradient-orange">{title}</h2>
-        {subtitle && <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>}
+    <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2 mb-4">
+      <div className="min-w-0">
+        <h2 className="text-xl md:text-2xl font-bold text-gradient-orange break-words">{title}</h2>
+        {subtitle && <p className="text-xs md:text-sm text-muted-foreground mt-1">{subtitle}</p>}
       </div>
-      {actions && <div className="flex items-center gap-2">{actions}</div>}
+      {actions && <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">{actions}</div>}
     </div>
   );
 }
 
 export function KpiCard({ icon: Icon, label, value, trend, up = true }: { icon: LucideIcon; label: string; value: string; trend: number; up?: boolean }) {
   return (
-    <div className="glass-card rounded-xl p-4">
-      <div className="icon-tile h-10 w-10 rounded-lg grid place-items-center">
-        <Icon className="h-5 w-5 text-orange-400" />
+    <div className="glass-card rounded-xl p-3 md:p-4">
+      <div className="icon-tile h-9 w-9 md:h-10 md:w-10 rounded-lg grid place-items-center">
+        <Icon className="h-4 w-4 md:h-5 md:w-5 text-orange-400" />
       </div>
-      <div className="mt-3 text-xs text-muted-foreground">{label}</div>
-      <div className="text-2xl font-bold mt-0.5">{value}</div>
-      <div className={"text-[11px] mt-1 flex items-center gap-1 " + (up ? "text-emerald-400" : "text-red-400")}>
+      <div className="mt-2 md:mt-3 text-[10px] md:text-xs text-muted-foreground">{label}</div>
+      <div className="text-lg md:text-2xl font-bold mt-0.5 break-all">{value}</div>
+      <div className={"text-[10px] md:text-[11px] mt-1 flex items-center gap-1 " + (up ? "text-emerald-400" : "text-red-400")}>
         {up ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
-        {trend}% <span className="text-muted-foreground">vs last month</span>
+        {trend}% <span className="text-muted-foreground hidden sm:inline">vs last month</span>
       </div>
     </div>
   );
@@ -36,9 +36,9 @@ export function KpiCard({ icon: Icon, label, value, trend, up = true }: { icon: 
 
 export function SectionCard({ title, right, children, className = "" }: { title: string; right?: ReactNode; children: ReactNode; className?: string }) {
   return (
-    <div className={"glass-card rounded-xl p-4 " + className}>
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="font-semibold text-gradient-orange">{title}</h3>
+    <div className={"glass-card rounded-xl p-3 md:p-4 " + className}>
+      <div className="flex items-center justify-between mb-3 gap-2">
+        <h3 className="font-semibold text-gradient-orange text-sm md:text-base">{title}</h3>
         {right}
       </div>
       {children}
@@ -72,55 +72,92 @@ export function TableToolbar({
   hideColumns?: boolean;
 }) {
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
 
   return (
-    <div className="flex flex-wrap items-center gap-2 mb-3">
-      {search !== undefined && onSearch && (
-        <div className="relative flex-1 min-w-[200px] max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-          <input
-            value={search}
-            onChange={(e) => onSearch(e.target.value)}
-            placeholder={`Search ${entity}...`}
-            className="w-full h-9 pl-9 pr-3 rounded-md bg-card border border-border text-sm outline-none focus:ring-2 focus:ring-primary/40"
-          />
+    <div className="flex flex-col gap-2 mb-3">
+      <div className="flex flex-wrap items-center gap-2">
+        {search !== undefined && onSearch && (
+          <div className="relative flex-1 min-w-[140px] max-w-md order-first w-full sm:w-auto sm:order-none">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <input
+              value={search}
+              onChange={(e) => onSearch(e.target.value)}
+              placeholder={`Search ${entity}...`}
+              className="w-full h-9 pl-9 pr-3 rounded-md bg-card border border-border text-sm outline-none focus:ring-2 focus:ring-primary/40"
+            />
+          </div>
+        )}
+        {/* Mobile filter toggle */}
+        <button
+          onClick={() => setShowFilters(!showFilters)}
+          className="sm:hidden flex items-center gap-1 px-2.5 py-1.5 text-xs border border-border rounded-md hover:bg-accent"
+        >
+          <Filter className="h-3.5 w-3.5" /> More
+        </button>
+        {/* Desktop filter actions */}
+        <div className={"hidden sm:flex items-center gap-2 " + (showFilters ? "flex" : "")}>
+          {!hideFilter && (
+            <button onClick={action("Filter applied")} className="flex items-center gap-1 px-2.5 py-1.5 text-xs border border-border rounded-md hover:bg-accent">
+              <Filter className="h-3.5 w-3.5" /> Filter
+            </button>
+          )}
+          {!hideColumns && (
+            <button onClick={action("Columns updated")} className="flex items-center gap-1 px-2.5 py-1.5 text-xs border border-border rounded-md hover:bg-accent">
+              <Columns3 className="h-3.5 w-3.5" /> Columns
+            </button>
+          )}
+          {onView && (
+            <div className="flex items-center border border-border rounded-md overflow-hidden">
+              <button onClick={() => onView("list")} className={"px-2 py-1.5 text-xs flex items-center gap-1 " + (view === "list" ? "gradient-orange text-white" : "hover:bg-accent")}>
+                <List className="h-3.5 w-3.5" /> List
+              </button>
+              <button onClick={() => onView("kanban")} className={"px-2 py-1.5 text-xs flex items-center gap-1 " + (view === "kanban" ? "gradient-orange text-white" : "hover:bg-accent")}>
+                <LayoutGrid className="h-3.5 w-3.5" /> Kanban
+              </button>
+            </div>
+          )}
         </div>
-      )}
-      {!hideFilter && (
-        <button onClick={action("Filter applied")} className="flex items-center gap-1 px-2.5 py-1.5 text-xs border border-border rounded-md hover:bg-accent">
-          <Filter className="h-3.5 w-3.5" /> Filter
-        </button>
-      )}
-      {!hideColumns && (
-        <button onClick={action("Columns updated")} className="flex items-center gap-1 px-2.5 py-1.5 text-xs border border-border rounded-md hover:bg-accent">
-          <Columns3 className="h-3.5 w-3.5" /> Columns
-        </button>
-      )}
-      {onView && (
-        <div className="flex items-center border border-border rounded-md overflow-hidden">
-          <button onClick={() => onView("list")} className={"px-2 py-1.5 text-xs flex items-center gap-1 " + (view === "list" ? "gradient-orange text-white" : "hover:bg-accent")}>
-            <List className="h-3.5 w-3.5" /> List
+        {/* Mobile expanded filter actions */}
+        {showFilters && (
+          <div className="flex flex-wrap items-center gap-2 w-full sm:hidden">
+            {!hideFilter && (
+              <button onClick={action("Filter applied")} className="flex items-center gap-1 px-2.5 py-1.5 text-xs border border-border rounded-md hover:bg-accent">
+                <Filter className="h-3.5 w-3.5" /> Filter
+              </button>
+            )}
+            {!hideColumns && (
+              <button onClick={action("Columns updated")} className="flex items-center gap-1 px-2.5 py-1.5 text-xs border border-border rounded-md hover:bg-accent">
+                <Columns3 className="h-3.5 w-3.5" /> Columns
+              </button>
+            )}
+            {onView && (
+              <div className="flex items-center border border-border rounded-md overflow-hidden">
+                <button onClick={() => onView("list")} className={"px-2 py-1.5 text-xs flex items-center gap-1 " + (view === "list" ? "gradient-orange text-white" : "hover:bg-accent")}>
+                  <List className="h-3.5 w-3.5" /> List
+                </button>
+                <button onClick={() => onView("kanban")} className={"px-2 py-1.5 text-xs flex items-center gap-1 " + (view === "kanban" ? "gradient-orange text-white" : "hover:bg-accent")}>
+                  <LayoutGrid className="h-3.5 w-3.5" /> Kanban
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+        <div className="ml-auto flex items-center gap-2 flex-wrap">
+          <button onClick={onImport} className="flex items-center gap-1 px-2.5 py-1.5 text-xs border border-border rounded-md hover:bg-accent">
+            <Upload className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Import</span>
           </button>
-          <button onClick={() => onView("kanban")} className={"px-2 py-1.5 text-xs flex items-center gap-1 " + (view === "kanban" ? "gradient-orange text-white" : "hover:bg-accent")}>
-            <LayoutGrid className="h-3.5 w-3.5" /> Kanban
-          </button>
-        </div>
-      )}
-      <div className="ml-auto flex items-center gap-2">
-        <button onClick={onImport} className="flex items-center gap-1 px-2.5 py-1.5 text-xs border border-border rounded-md hover:bg-accent">
-          <Upload className="h-3.5 w-3.5" /> Import
-        </button>
-        <div className="relative">
-          <button
-            onClick={() => setShowExportMenu(!showExportMenu)}
-            className="flex items-center gap-1 px-2.5 py-1.5 text-xs border border-border rounded-md hover:bg-accent"
-          >
-            <Download className="h-3.5 w-3.5" /> Export
-          </button>
-          {showExportMenu && (
-            <>
-              <div className="fixed inset-0 z-40" onClick={() => setShowExportMenu(false)} />
-              <div className="absolute right-0 top-full mt-1 bg-card border border-border rounded-lg shadow-xl z-50 min-w-[140px] py-1">
+          <div className="relative">
+            <button
+              onClick={() => setShowExportMenu(!showExportMenu)}
+              className="flex items-center gap-1 px-2.5 py-1.5 text-xs border border-border rounded-md hover:bg-accent"
+            >
+              <Download className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Export</span>
+            </button>
+            {showExportMenu && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowExportMenu(false)} />
+                <div className="absolute right-0 top-full mt-1 bg-card border border-border rounded-lg shadow-xl z-50 min-w-[140px] py-1">
 <button
                    onClick={() => { if (onExportMenu) { onExportMenu("csv"); } else { onExport(); } setShowExportMenu(false); }}
                    className="w-full text-left px-4 py-2 text-xs hover:bg-accent"
@@ -139,13 +176,14 @@ export function TableToolbar({
                 >
                   Export as PDF
                 </button>
-              </div>
-            </>
-          )}
+                </div>
+              </>
+            )}
+          </div>
+          <button onClick={onNew} className="flex items-center gap-1.5 px-3 py-1.5 text-xs gradient-orange text-white rounded-md font-medium shadow whitespace-nowrap">
+            <Plus className="h-3.5 w-3.5" /> <span className="hidden xs:inline">New </span>{entity.replace(/s$/, "")}
+          </button>
         </div>
-        <button onClick={onNew} className="flex items-center gap-1.5 px-3 py-1.5 text-xs gradient-orange text-white rounded-md font-medium shadow">
-          <Plus className="h-3.5 w-3.5" /> New {entity.replace(/s$/, "")}
-        </button>
       </div>
     </div>
   );
@@ -153,15 +191,17 @@ export function TableToolbar({
 
 export function Pagination({ total, perPage = 5, totalPages }: { total: number; perPage?: number; totalPages: number }) {
   return (
-    <div className="flex items-center justify-between text-xs mt-3 text-muted-foreground">
-      <span>Showing 1 to {perPage} of {total.toLocaleString()}</span>
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-2 text-xs mt-3 text-muted-foreground">
+      <span className="text-[10px] sm:text-xs">Showing 1 to {perPage} of {total.toLocaleString()}</span>
       <div className="flex items-center gap-1">
         <button onClick={action("Previous page")} className="h-7 w-7 grid place-items-center border border-border rounded hover:bg-accent"><ChevronLeft className="h-3.5 w-3.5" /></button>
-        {[1, 2, 3, 4, 5].map((n) => (
-          <button key={n} onClick={action(`Page ${n}`)} className={"h-7 min-w-7 px-2 rounded text-xs " + (n === 1 ? "gradient-orange text-white" : "border border-border hover:bg-accent")}>{n}</button>
+        {[1, 2, 3].map((n) => (
+          <button key={n} onClick={action(`Page ${n}`)} className={"h-7 min-w-7 px-1.5 sm:px-2 rounded text-xs " + (n === 1 ? "gradient-orange text-white" : "border border-border hover:bg-accent")}>{n}</button>
         ))}
-        <span className="px-1">…</span>
-        <button onClick={action(`Page ${totalPages}`)} className="h-7 min-w-7 px-2 border border-border rounded hover:bg-accent">{totalPages}</button>
+        {totalPages > 3 && <span className="px-1">…</span>}
+        {totalPages > 3 && (
+          <button onClick={action(`Page ${totalPages}`)} className="h-7 min-w-7 px-1.5 sm:px-2 border border-border rounded hover:bg-accent">{totalPages}</button>
+        )}
         <button onClick={action("Next page")} className="h-7 w-7 grid place-items-center border border-border rounded hover:bg-accent"><ChevronRight className="h-3.5 w-3.5" /></button>
       </div>
     </div>
@@ -249,5 +289,5 @@ export function StatusPill({ value }: { value: string }) {
     waiting: "bg-purple-500/15 text-purple-400 border-purple-500/30",
     deferred: "bg-zinc-500/15 text-zinc-400 border-zinc-500/30",
   };
-  return <span className={"text-[10px] px-2 py-0.5 rounded border " + (map[value] || "border-border text-muted-foreground")}>{value}</span>;
+  return <span className={"text-[10px] px-2 py-0.5 rounded border whitespace-nowrap " + (map[value] || "border-border text-muted-foreground")}>{value}</span>;
 }

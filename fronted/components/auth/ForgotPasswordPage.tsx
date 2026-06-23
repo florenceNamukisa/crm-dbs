@@ -43,8 +43,8 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <main className="min-h-screen bg-background text-foreground flex items-center justify-center">
-      <div className="w-full max-w-md p-8 rounded-lg bg-card border border-border">
+    <main className="min-h-screen bg-background text-foreground flex items-center justify-center p-4">
+      <div className="w-full max-w-md p-6 md:p-8 rounded-lg bg-card border border-border">
         <div className="mb-6 flex flex-col items-center gap-3">
           <div className="h-12 w-12 grid place-items-center rounded-lg border border-orange-500/30 bg-orange-500/10">
             <Mail className="h-5 w-5 text-orange-400" />

@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Bot, Briefcase, Calendar, CircleDollarSign, Clock, Gauge, Menu, MessageCircle, Search, Ticket, Users, TrendingUp, FileBarChart, LogOut } from "lucide-react";
+import { Bot, Briefcase, Calendar, CircleDollarSign, Clock, Gauge, Menu, MessageCircle, Search, Ticket, Users, TrendingUp, FileBarChart, LogOut, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
@@ -35,10 +35,10 @@ const navSections = [
 
 function Panel({ title, action, children, className = "" }: { title: string; action?: string; children: React.ReactNode; className?: string }) {
   return (
-    <section className={`glass-card rounded-lg p-4 ${className}`}>
+    <section className={`glass-card rounded-lg p-3 md:p-4 ${className}`}>
       <div className="mb-3 flex items-center justify-between gap-3">
-        <h3 className="font-semibold text-gradient-orange">{title}</h3>
-        {action && <span className="text-xs text-orange-400">{action}</span>}
+        <h3 className="font-semibold text-gradient-orange text-sm md:text-base">{title}</h3>
+        {action && <span className="text-[10px] md:text-xs text-orange-400 whitespace-nowrap">{action}</span>}
       </div>
       {children}
     </section>
@@ -47,12 +47,12 @@ function Panel({ title, action, children, className = "" }: { title: string; act
 
 function EmptyState({ icon: Icon, label, hint }: { icon: LucideIcon; label: string; hint?: string }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-2 py-10 text-center text-muted-foreground">
+    <div className="flex flex-col items-center justify-center gap-2 py-8 md:py-10 text-center text-muted-foreground">
       <span className="grid h-10 w-10 place-items-center rounded-full border border-border bg-card/40">
         <Icon className="h-5 w-5 opacity-60" />
       </span>
-      <div className="text-sm font-medium">{label}</div>
-      {hint && <div className="text-xs opacity-80">{hint}</div>}
+      <div className="text-xs md:text-sm font-medium">{label}</div>
+      {hint && <div className="text-[10px] md:text-xs opacity-80">{hint}</div>}
     </div>
   );
 }
@@ -61,13 +61,13 @@ function Kpi({ icon: Icon, label, value, sub, up }: { icon: LucideIcon; label: s
   return (
     <div className="glass-card rounded-lg p-3">
       <div className="flex items-center gap-3">
-        <span className="grid h-11 w-11 place-items-center rounded-full gradient-orange shadow-lg shadow-orange-950/40">
-          <Icon className="h-5 w-5 text-white" />
+        <span className="grid h-10 w-10 md:h-11 md:w-11 place-items-center rounded-full gradient-orange shadow-lg shadow-orange-950/40 shrink-0">
+          <Icon className="h-4 w-4 md:h-5 md:w-5 text-white" />
         </span>
         <div className="min-w-0">
-          <div className="text-[11px] text-muted-foreground">{label}</div>
-          <div className="text-xl font-bold">{value}</div>
-          <div className={`text-[11px] ${up ? "text-emerald-400" : "text-red-400"}`}>{up ? "↑" : "↓"} {sub}</div>
+          <div className="text-[10px] md:text-[11px] text-muted-foreground">{label}</div>
+          <div className="text-base md:text-xl font-bold truncate">{value}</div>
+          <div className={`text-[10px] md:text-[11px] ${up ? "text-emerald-400" : "text-red-400"}`}>{up ? "↑" : "↓"} {sub}</div>
         </div>
       </div>
     </div>
@@ -136,7 +136,7 @@ function ManagerDashboardView({ users, deals, tasks }: { users: any[]; deals: an
   return (
     <div className="space-y-4">
       {/* Top KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
         <Kpi icon={Users} label="Team Size" value={String(teamSize)} sub={`${activeAgents} active`} up={teamSize > 0} />
         <Kpi icon={Briefcase} label="Total Deals" value={String(totalDeals)} sub={`${wonDeals.length} won`} up={totalDeals > 0} />
         <Kpi icon={CircleDollarSign} label="Pipeline Value" value={`UGX ${pipelineValue.toLocaleString()}`} sub={`UGX ${wonValue.toLocaleString()} won`} up={pipelineValue > 0} />
@@ -146,7 +146,7 @@ function ManagerDashboardView({ users, deals, tasks }: { users: any[]; deals: an
       {/* Charts row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <Panel title="Revenue (7 days)" className="lg:col-span-2">
-          <div className="h-64">
+          <div className="h-48 md:h-64">
             {revenue.every((r) => r.v === 0) ? (
               <EmptyState icon={CircleDollarSign} label="No revenue this week" hint="Revenue will appear once your team closes deals." />
             ) : (
@@ -160,7 +160,7 @@ function ManagerDashboardView({ users, deals, tasks }: { users: any[]; deals: an
                   </defs>
                   <CartesianGrid stroke="#ffffff12" />
                   <XAxis dataKey="d" stroke="#888" fontSize={10} />
-                  <YAxis stroke="#888" fontSize={10} tickFormatter={(v) => `UGX ${(v / 1000).toFixed(0)}k`} />
+                  <YAxis stroke="#888" fontSize={10} tickFormatter={(v) => `UGX ${(v / 1000).toFixed(0)}k`} width={60} />
                   <Tooltip contentStyle={{ background: '#111', border: '1px solid #ffffff22', borderRadius: 8 }} />
                   <Area dataKey="v" stroke={ORANGE} fill="url(#mgrRev)" strokeWidth={2} />
                 </AreaChart>
@@ -170,7 +170,7 @@ function ManagerDashboardView({ users, deals, tasks }: { users: any[]; deals: an
         </Panel>
 
         <Panel title="Pipeline by Stage">
-          <div className="h-64">
+          <div className="h-48 md:h-64">
             {stageData.every((s) => s.value === 0) ? (
               <EmptyState icon={Briefcase} label="No pipeline" hint="Deals will populate the funnel here." />
             ) : (
@@ -178,7 +178,7 @@ function ManagerDashboardView({ users, deals, tasks }: { users: any[]; deals: an
                 <BarChart data={stageData} layout="vertical">
                   <CartesianGrid stroke="#ffffff12" />
                   <XAxis type="number" stroke="#888" fontSize={10} />
-                  <YAxis type="category" dataKey="name" stroke="#888" fontSize={10} width={80} />
+                  <YAxis type="category" dataKey="name" stroke="#888" fontSize={10} width={70} />
                   <Tooltip contentStyle={{ background: '#111', border: '1px solid #ffffff22', borderRadius: 8 }} />
                   <Bar dataKey="value" fill={ORANGE} radius={[0, 4, 4, 0]} />
                 </BarChart>
@@ -193,29 +193,31 @@ function ManagerDashboardView({ users, deals, tasks }: { users: any[]; deals: an
         {agentPerf.length === 0 ? (
           <EmptyState icon={Users} label="No team members yet" hint="Performance will appear once you have team members with deals." />
         ) : (
-          <div className="overflow-auto">
-            <table className="w-full min-w-[600px] text-sm">
-              <thead className="text-xs text-muted-foreground">
-                <tr className="text-left">
-                  {["Agent", "Deals", "Won", "Revenue", "Conv. %"].map((h) => <th key={h} className="pb-2 pr-3 font-normal">{h}</th>)}
-                </tr>
-              </thead>
-              <tbody>
-                {agentPerf.map((row, i) => (
-                  <tr key={i} className="border-t border-border/50">
-                    <td className="py-2 pr-3 font-medium">{row.name}</td>
-                    <td className="pr-3 text-muted-foreground">{row.deals}</td>
-                    <td className="pr-3 text-muted-foreground">{row.won}</td>
-                    <td className="pr-3 text-muted-foreground">UGX {row.revenue.toLocaleString()}</td>
-                    <td className="pr-3">
-                      <span className={`text-[11px] ${row.deals > 0 ? 'text-emerald-400' : 'text-muted-foreground'}`}>
-                        {row.deals > 0 ? Math.round((row.won / row.deals) * 100) : 0}%
-                      </span>
-                    </td>
+          <div className="overflow-x-auto -mx-3 md:-mx-4">
+            <div className="min-w-[500px] px-3 md:px-4">
+              <table className="w-full text-sm">
+                <thead className="text-[10px] md:text-xs text-muted-foreground">
+                  <tr className="text-left">
+                    {["Agent", "Deals", "Won", "Revenue", "Conv. %"].map((h) => <th key={h} className="pb-2 pr-3 font-normal whitespace-nowrap">{h}</th>)}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {agentPerf.map((row, i) => (
+                    <tr key={i} className="border-t border-border/50">
+                      <td className="py-2 pr-3 font-medium text-xs md:text-sm">{row.name}</td>
+                      <td className="pr-3 text-muted-foreground text-xs md:text-sm">{row.deals}</td>
+                      <td className="pr-3 text-muted-foreground text-xs md:text-sm">{row.won}</td>
+                      <td className="pr-3 text-muted-foreground text-xs md:text-sm">UGX {row.revenue.toLocaleString()}</td>
+                      <td className="pr-3">
+                        <span className={`text-[10px] md:text-[11px] ${row.deals > 0 ? 'text-emerald-400' : 'text-muted-foreground'}`}>
+                          {row.deals > 0 ? Math.round((row.won / row.deals) * 100) : 0}%
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </Panel>
@@ -227,8 +229,8 @@ function ManagerDashboardView({ users, deals, tasks }: { users: any[]; deals: an
           ) : (
             <div className="space-y-2">
               {tasks.slice(0, 8).map((t: any) => (
-                <div key={t._id} className="grid grid-cols-[1fr_90px_90px] items-center gap-2 rounded border border-border bg-card/35 p-3 text-sm">
-                  <span>{t.title || t.name || '—'}</span>
+                <div key={t._id} className="flex flex-col sm:grid sm:grid-cols-[1fr_90px_90px] gap-1 sm:gap-2 items-start sm:items-center rounded border border-border bg-card/35 p-3 text-xs md:text-sm">
+                  <span className="font-medium">{t.title || t.name || '—'}</span>
                   <span className="text-muted-foreground">{t.priority || '—'}</span>
                   <span className="text-muted-foreground">{t.dueDate ? new Date(t.dueDate).toLocaleDateString() : '—'}</span>
                 </div>
@@ -247,6 +249,7 @@ function ManagerDashboardView({ users, deals, tasks }: { users: any[]; deals: an
 export default function SalesManagerDashboard() {
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const me = getStoredUser();
   const initials = (me?.name || 'SM').split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
 
@@ -267,18 +270,19 @@ export default function SalesManagerDashboard() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <div className="flex min-h-screen">
+        {/* Desktop sidebar */}
         <aside className={`${collapsed ? 'w-20' : 'w-64'} hidden shrink-0 border-r border-sidebar-border bg-sidebar/95 transition-all lg:flex lg:flex-col`}>
           <div className="flex h-16 items-center gap-3 border-b border-sidebar-border px-4">
-            <div className="grid h-10 w-10 place-items-center rounded-lg gradient-orange text-white">
+            <div className="grid h-10 w-10 place-items-center rounded-lg gradient-orange text-white shrink-0">
               <BarChart className="h-5 w-5" />
             </div>
             {!collapsed && (
-              <div>
+              <div className="min-w-0">
                 <div className="font-bold leading-none">Sales Manager</div>
-                <div className="mt-1 text-[10px] uppercase tracking-widest text-orange-400">Team Workspace</div>
+                <div className="mt-1 text-[10px] uppercase tracking-widest text-orange-400 truncate">Team Workspace</div>
               </div>
             )}
-            <button onClick={() => setCollapsed(!collapsed)} className="ml-auto grid h-8 w-8 place-items-center rounded-md hover:bg-accent">
+            <button onClick={() => setCollapsed(!collapsed)} className="ml-auto grid h-8 w-8 place-items-center rounded-md hover:bg-accent shrink-0">
               <Menu className="h-4 w-4" />
             </button>
           </div>
@@ -299,31 +303,87 @@ export default function SalesManagerDashboard() {
             ))}
           </nav>
           <div className="p-3 border-t border-sidebar-border flex items-center gap-3">
-            <div className="h-9 w-9 rounded-full bg-gradient-to-br from-orange-400 to-orange-700 grid place-items-center text-white text-xs font-semibold">
+            <div className="h-9 w-9 rounded-full bg-gradient-to-br from-orange-400 to-orange-700 grid place-items-center text-white text-xs font-semibold shrink-0">
               {initials}
             </div>
             <div className="flex-1 min-w-0">
               <div className="text-sm font-medium truncate text-sidebar-foreground">{me?.name || 'Sales Manager'}</div>
               <div className="text-xs text-muted-foreground">Sales Manager</div>
             </div>
-            <button onClick={handleLogout} className="grid h-8 w-8 place-items-center rounded-md border border-sidebar-border hover:bg-sidebar-accent" aria-label="Sign out">
+            <button onClick={handleLogout} className="grid h-8 w-8 place-items-center rounded-md border border-sidebar-border hover:bg-sidebar-accent shrink-0" aria-label="Sign out">
               <LogOut className="h-4 w-4 text-sidebar-foreground" />
             </button>
           </div>
         </aside>
+
+        {/* Mobile sidebar overlay */}
+        {mobileSidebarOpen && (
+          <div className="fixed inset-0 z-50 lg:hidden">
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setMobileSidebarOpen(false)} />
+            <aside className="fixed top-0 left-0 bottom-0 w-72 bg-sidebar/95 border-r border-sidebar-border flex flex-col z-50 shadow-2xl">
+              <div className="flex h-16 items-center gap-3 border-b border-sidebar-border px-4">
+                <div className="grid h-10 w-10 place-items-center rounded-lg gradient-orange text-white shrink-0">
+                  <BarChart className="h-5 w-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="font-bold leading-none">Sales Manager</div>
+                  <div className="mt-1 text-[10px] uppercase tracking-widest text-orange-400 truncate">Team Workspace</div>
+                </div>
+                <button onClick={() => setMobileSidebarOpen(false)} className="grid h-8 w-8 place-items-center rounded-md hover:bg-accent shrink-0 text-sidebar-foreground" aria-label="Close menu">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <nav className="flex-1 overflow-y-auto px-2 py-3">
+                {navSections.map((section) => (
+                  <div key={section.title} className="mb-3 border-b border-orange-500/20 pb-2 last:border-b-0">
+                    <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-orange-400">{section.title}</div>
+                    {section.items.map((item) => {
+                      const Icon = item.icon;
+                      return (
+                        <button key={item.label} className="mb-0.5 flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs transition text-sidebar-foreground hover:bg-sidebar-accent">
+                          <Icon className="h-4 w-4 shrink-0" />
+                          <span className="flex-1 truncate">{item.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ))}
+              </nav>
+              <div className="p-3 border-t border-sidebar-border flex items-center gap-3">
+                <div className="h-9 w-9 rounded-full bg-gradient-to-br from-orange-400 to-orange-700 grid place-items-center text-white text-xs font-semibold shrink-0">{initials}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium truncate text-sidebar-foreground">{me?.name || 'Sales Manager'}</div>
+                  <div className="text-xs text-muted-foreground">Sales Manager</div>
+                </div>
+                <button onClick={handleLogout} className="grid h-8 w-8 place-items-center rounded-md border border-sidebar-border hover:bg-sidebar-accent shrink-0" aria-label="Sign out">
+                  <LogOut className="h-4 w-4 text-sidebar-foreground" />
+                </button>
+              </div>
+            </aside>
+          </div>
+        )}
+
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="sticky top-0 z-30 flex h-16 flex-wrap items-center gap-3 border-b border-border bg-background/85 px-4 py-2 backdrop-blur xl:flex-nowrap">
-            <div className="min-w-0">
-              <div className="text-xl font-bold">Sales Manager Dashboard</div>
-              <div className="text-xs text-muted-foreground">Team workspace · Sales management</div>
+          <header className="sticky top-0 z-30 flex h-16 flex-wrap items-center gap-2 md:gap-3 border-b border-border bg-background/85 px-3 md:px-4 py-2 backdrop-blur">
+            {/* Mobile hamburger */}
+            <button
+              onClick={() => setMobileSidebarOpen(true)}
+              className="lg:hidden grid h-9 w-9 shrink-0 place-items-center rounded-md hover:bg-accent"
+              aria-label="Open menu"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+            <div className="min-w-0 hidden sm:block">
+              <div className="text-base md:text-xl font-bold truncate">Sales Manager Dashboard</div>
+              <div className="text-[10px] md:text-xs text-muted-foreground">Team workspace · Sales management</div>
             </div>
-            <div className="relative min-w-64 flex-1 xl:max-w-xl">
+            <div className="relative min-w-0 flex-1 lg:max-w-xl">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <input className="h-10 w-full rounded-md border border-border bg-card pl-10 pr-16 text-sm outline-none" placeholder="Search agents, deals, clients..." />
+              <input className="h-9 md:h-10 w-full rounded-md border border-border bg-card pl-10 pr-4 text-xs md:text-sm outline-none" placeholder="Search..." />
             </div>
-            <ThemeToggle />
+            <ThemeToggle className="h-9 w-9 md:h-10 md:w-10 rounded-lg shrink-0" />
           </header>
-          <main className="flex-1 overflow-auto p-6">
+          <main className="flex-1 overflow-auto p-4 md:p-6">
             <ManagerDashboardView users={users} deals={deals} tasks={tasks} />
           </main>
         </div>
